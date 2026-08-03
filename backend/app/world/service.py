@@ -17,6 +17,7 @@
 （阈值 0.9m，否则拒绝并保持 standing/walking）。
 """
 
+import math
 from collections import deque
 
 from app.schemas.snapshot_schema import build_snapshot
@@ -30,7 +31,12 @@ from app.world.colliders import (
     resolve_move,
 )
 from app.world.hall import HallRegistry
-from app.world.tables import ROUNDTABLE_SEATS, WALK_BOUNDS, nearest_seat
+from app.world.tables import (
+    ROUNDTABLE_SEATS,
+    SEATS,
+    SEAT_SNAP_DISTANCE,
+    WALK_BOUNDS,
+)
 
 EVENT_BUFFER_SIZE = 20
 
@@ -73,8 +79,9 @@ class WorldService:
         self.current_meeting: dict | None = None
         # 展位大厅注册表（person_id ↔ booth，幂等；大厅实例使用，咖啡厅实例空置）
         self._hall = HallRegistry()
-        # TODO(座位占用登记)：普通桌位表（seat_node -> agent_id），
-        # 目前 seated 只做锚点吸附，不做一人一座的占用互斥。
+        # 座位占用表（seat_node -> agent_id，M1.8 一座一人）。
+        # 易失状态：不持久化，重启即重建（世界运行时随事件自然恢复一致）。
+        self._seat_owners: dict = {}
 
     # ---------- 展位大厅：人员注册（系统/确认流程驱动，非自进化写入） ----------
 
@@ -176,12 +183,14 @@ class WorldService:
         return resolve_move(agent_id, from_pos, to_pos, others, colliders)
 
     def _apply_state(self, agent_id: str, agent: dict, state: str) -> bool:
-        """应用状态切换。seated 必须吸附最近座位锚点；at-booth 必须有自己的展位
-        （位置吸附展位锚点——壳内合法例外）；都不满足则拒绝并保持原状态。"""
+        """应用状态切换（M1.8 一座一人）。seated 吸附最近的**空闲**座位锚点
+        （阈值内；被占选次近，无空闲拒绝）；at-booth 必须有自己的展位；
+        离开 seated 的任何状态切换都释放座位占用。"""
         if state == "seated":
-            seat = nearest_seat(agent["position"])
+            seat = self._nearest_free_seat(agent_id, agent["position"])
             if seat is None:
                 return False
+            self._occupy_seat(agent_id, seat)
             agent["position"] = {"x": seat["x"], "z": seat["z"], "yaw": seat["yaw"]}
             agent["state"] = "seated"
             return True
@@ -191,11 +200,40 @@ class WorldService:
                          None)
             if booth is None:
                 return False
+            self._release_seat(agent_id)
             agent["position"] = dict(booth["position"])
             agent["state"] = "at-booth"
             return True
+        if agent.get("state") == "seated":
+            self._release_seat(agent_id)  # walking/talking/in-meeting…：离座释放
         agent["state"] = state
         return True
+
+    # ---------- 座位占用（seat_node -> agent_id，易失不持久化） ----------
+
+    def _occupy_seat(self, agent_id: str, seat: dict) -> None:
+        self._release_seat(agent_id)  # 先释放旧座（一人一座）
+        self._seat_owners[seat["node"]] = agent_id
+
+    def _release_seat(self, agent_id: str) -> None:
+        for node in [node for node, owner in self._seat_owners.items()
+                     if owner == agent_id]:
+            del self._seat_owners[node]
+
+    def _nearest_free_seat(self, agent_id: str, position: dict) -> dict | None:
+        """阈值内最近的空闲座位；目标座位被他人占用时取次近空闲，无空闲返回 None。"""
+        candidates = sorted(
+            SEATS,
+            key=lambda s: math.hypot(position["x"] - s["x"], position["z"] - s["z"]),
+        )
+        for seat in candidates:
+            distance = math.hypot(position["x"] - seat["x"], position["z"] - seat["z"])
+            if distance > SEAT_SNAP_DISTANCE:
+                break  # 已按距离排序，后面更远
+            owner = self._seat_owners.get(seat["node"])
+            if owner is None or owner == agent_id:  # 空闲或本就是自己的座
+                return seat
+        return None
 
     def _on_agent_talk(self, event: dict) -> None:
         speaker = self._agents.get(event.get("agent_id"))
@@ -210,22 +248,33 @@ class WorldService:
         )
 
     def _on_meeting_start(self, event: dict) -> None:
-        """发起圆桌会议：参与者入座圆桌坐标，状态 in-meeting。"""
+        """发起圆桌会议：参与者按占用分配入座圆桌锚点（6 座不重复，
+        座位已满的候选人无法入座；不足 2 人则会议流产并回退）。"""
         if self.current_meeting is not None:
             return  # 圆桌同时只容纳一场会议
-        participants = [
+        candidates = [
             pid for pid in (event.get("participants") or [])
             if pid in self._agents and self._agents[pid]["state"] != "in-meeting"
         ]
-        if len(participants) < 2:
-            return
         meeting_id = str(event.get("meeting_id") or f"meeting_{self.tick}")
-        for index, pid in enumerate(participants):
+        participants = []
+        for pid in candidates:
+            seat = next((s for s in ROUNDTABLE_SEATS
+                         if self._seat_owners.get(s["node"]) is None), None)
+            if seat is None:
+                continue  # 圆桌满员：该候选人无法入座
+            self._release_seat(pid)  # 离开原座位（若原本 seated）
+            self._seat_owners[seat["node"]] = pid
             agent = self._agents[pid]
-            # 入座圆桌真实锚点（与前端 CafeLayout.roundtable.seats 同源）
-            seat = ROUNDTABLE_SEATS[index % len(ROUNDTABLE_SEATS)]
             agent["position"] = {"x": seat["x"], "z": seat["z"], "yaw": seat["yaw"]}
             agent["state"] = "in-meeting"
+            participants.append(pid)
+        if len(participants) < 2:
+            # 会议流产：回退已入座者的状态与座位占用
+            for pid in participants:
+                self._release_seat(pid)
+                self._agents[pid]["state"] = "walking"
+            return
         self.current_meeting = {
             "id": meeting_id, "participants": participants, "started_tick": self.tick,
         }

@@ -67,7 +67,7 @@
 
 - [x] M1.6 新人入库进世界（1.C.3 的真正完成）：confirm → World Service 注册新 agent → 快照出现该人（调色板/占位模型）→ 世界中可点开其资料包（confirm 响应含 booth_id，大厅长出展位实测通过；3D 人物模型生成属角色管线后续）
 - [x] M1.7 PackagePanel `<img>` onerror 降级（破图防护，在面板模块内修）（另：头像防破图已推广至 CafeShell 全部头像位——HUD 头像排/会议座位图/会议消息/人物卡，`person.portrait` 直出已清零）
-- [ ] M1.8 座位占用互斥（一座一人，backend world/service.py TODO）
+- [x] M1.8 座位占用互斥（一座一人，backend world/service.py TODO）
 - [ ] M1.9 storybook（v3）场景布局锚点导出（否则活的世界只能锁 v1）
 - [x] M1.10 uvicorn 常驻方式升级：nohup → systemd unit（含开机自启与崩溃重启）（echoworld-backend.service，Restart=always）
 - [ ] M1.11 视频抽帧（ffmpeg/cv2）与 dashscope ASR 转写接入（1.A.3/1.A.4 的剩余部分）
@@ -148,3 +148,4 @@
 - 2026-08-03 | 集市街道高保真复刻（参考图：石板路/红白条纹篷摊位/粉帐篷/彩旗串/路灯/布匹卷/低多边形树木，Blender 程序化生成 street 1.29MB + stall 108KB，校验全绿）+ 碰撞体积体系（后端 colliders.py 注册表 + 分离解算（95 测试绿，快照位置权威无穿模）+ 前端 ColliderRegistry + 玩家↔NPC 切线滑行，manifest COLLIDER_* 桩预留）+ MVP1 扫尾（ffmpeg 抽帧、qwen-audio 转写、sha256 完整性自检、新人动态实体、HUD 世界联动、头像防破图清零）；入口改集市（intro 文案 + index.html no-cache 修复） | AI
 - 2026-08-03 | 对话质量优化（INTERACTION-DESIGN §3 前两项）：dialogue.py 共享层——共同上下文驱动（共同 tags/关系备注/最近互动时间入 prompt）+ 信息量闸门（informative=false 不进事件缓冲，世界保持安静；自评异常默认放行）；咖啡厅与集市双 runtime 接入；102 backend tests 绿；公网实测：12 tick 仅 2 条有内容对话（闸门生效，寒暄被拦） | AI
 - 2026-08-03 | 关系沉淀（INTERACTION-DESIGN §4 机械部分）：互动注册表持久化到 relations.md（行尾 last:/count: 字段，双向行内更新，重启恢复，旧格式兼容）；配对优先级可解释化（旧识层优先于破冰层，score=10-3·近期-min(count,5)，深聊优先于复读）；108 backend tests 绿；公网实测对话带共同上下文且 relations.md 落盘 | AI
+- 2026-08-03 | M1.8 座位占用互斥：一座一人（次近空闲/无座拒绝、离座释放、圆桌 6 座占用分配且满员无法入座、散会保座），易失占用表不持久化；114 backend tests 绿 | AI

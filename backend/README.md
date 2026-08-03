@@ -39,7 +39,8 @@ app/
     service.py            World Service：事件消费（move/state/talk/meeting-*）、tick、
                           最近 20 条事件滚动缓冲、圆桌会议入座真实锚点、
                           register_person 展位注册（幂等，大厅/confirm 调用）、
-                          agent-move 统一走 resolve_move 服务端权威解算（缓冲含最终位置）
+                          agent-move 统一走 resolve_move 服务端权威解算（缓冲含最终位置）、
+                          座位占用表（M1.8 一座一人：次近分配、离座释放、圆桌满员拒入）
     colliders.py          碰撞注册表（frozen dataclass：Bounds/Circle/WorldColliders）+
                           resolve_move 分离解算（静态壳钳制 → agent 圆形分离 0.6m → 再钳制）；
                           cafe 静态壳同源 tables.py，大厅摊位壳由 booth modules 动态派生
