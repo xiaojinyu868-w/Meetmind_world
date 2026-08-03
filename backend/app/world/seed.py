@@ -14,7 +14,7 @@
 SEED_AGENTS = [
     {
         "id": "lin-che",
-        "name": "林澈",
+        "name": "谢淯琪",
         "position": {"x": -4.0, "z": -2.0, "yaw": 0.8},
         "state": "seated",
         "met_at": "2025 年秋 · 科技展咖啡摊",
@@ -27,7 +27,7 @@ SEED_AGENTS = [
     },
     {
         "id": "zhou-ning",
-        "name": "周宁",
+        "name": "曾英杰",
         "position": {"x": 4.2, "z": -2.5, "yaw": -0.6},
         "state": "walking",
         "met_at": "2019 年夏 · 校园旧礼堂",
@@ -40,7 +40,7 @@ SEED_AGENTS = [
     },
     {
         "id": "chen-mo",
-        "name": "陈默",
+        "name": "黄月胜",
         "position": {"x": -4.5, "z": 3.0, "yaw": 2.2},
         "state": "seated",
         "met_at": "2022 年冬 · 第一次项目评审",
@@ -53,7 +53,7 @@ SEED_AGENTS = [
     },
     {
         "id": "xu-an",
-        "name": "许安",
+        "name": "李浩",
         "position": {"x": 4.0, "z": 3.2, "yaw": -2.0},
         "state": "walking",
         "met_at": "2024 年春 · 海边公交站",
@@ -66,7 +66,7 @@ SEED_AGENTS = [
     },
     {
         "id": "su-he",
-        "name": "苏禾",
+        "name": "刘璐",
         "position": {"x": 0.5, "z": -4.5, "yaw": 0.1},
         "state": "talking",
         "met_at": "2023 年夏 · 楼下修车棚",
@@ -79,7 +79,7 @@ SEED_AGENTS = [
     },
     {
         "id": "tang-ke",
-        "name": "唐可",
+        "name": "洪选婷",
         "position": {"x": -0.8, "z": 4.6, "yaw": 3.0},
         "state": "walking",
         "met_at": "2008 年夏 · 河堤篮球场",
@@ -128,6 +128,21 @@ def seed_world() -> dict:
     return {"agents": agents, "modules": modules}
 
 
+_VOXEL_PORTRAIT_BY_PERSON = {
+    "person-self": "host.png",
+    "lin-che": "person_01.png",
+    "zhou-ning": "person_02.png",
+    "chen-mo": "person_03.png",
+    "xu-an": "person_04.png",
+    "su-he": "person_05.png",
+    "tang-ke": "person_06.png",
+}
+
+
+def _voxel_portrait_for(person_id: str) -> str:
+    return _VOXEL_PORTRAIT_BY_PERSON.get(person_id, "host.png")
+
+
 def _copy_portrait_fact(store, source_name: str, person_id: str, target_name: str) -> str | None:
     """把前端仓库的肖像 PNG 登记为种子事实文件（幂等：已存在则跳过）。
 
@@ -161,7 +176,7 @@ def seed_demo_packages(store) -> int:
             continue
         note_ref = store.write_fact("seed", person_id, "note.v1.md",
                                     agent["bio"].encode("utf-8"))
-        face_ref = _copy_portrait_fact(store, f"{person_id}.png", person_id, "face.png")
+        face_ref = _copy_portrait_fact(store, f"photo-derived/voxel/{_voxel_portrait_for(person_id)}", person_id, "face.png")
         # 现场照占位：复用下一位（循环）agent 的肖像。TODO：待真实物理输入替换
         neighbor = SEED_AGENTS[(index + 1) % len(SEED_AGENTS)]
         scene_ref = _copy_portrait_fact(store, f"{neighbor['id']}.png", person_id,

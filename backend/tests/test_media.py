@@ -18,7 +18,7 @@ def test_media_serves_seed_face_with_correct_type(client):
     assert resp.status_code == 200
     assert resp.headers["content-type"] == "image/png"
     # 内容与前端仓库肖像逐字节一致
-    assert resp.content == (REPO_ROOT / "public" / "portraits" / "lin-che.png").read_bytes()
+    assert resp.content == (REPO_ROOT / "public" / "portraits" / "photo-derived" / "voxel" / "person_01.png").read_bytes()
 
 
 def test_media_404_for_missing_ref(client):

@@ -15,21 +15,21 @@ def client(tmp_path, monkeypatch):
 
 
 def test_search_by_name_hits_seed(client):
-    resp = client.post("/api/v0/search", json={"by": "name", "query": "林澈"})
+    resp = client.post("/api/v0/search", json={"by": "name", "query": "谢淯琪"})
     assert resp.status_code == 200, resp.text
     results = resp.json()["results"]
     assert results, "种子数据应命中"
     top = results[0]
     assert top["person_id"] == "lin-che"
-    assert top["name"] == "林澈"
+    assert top["name"] == "谢淯琪"
     assert top["score"] == 1.0
     assert top["last_encounter"]["place"] == "2025 年秋 · 科技展咖啡摊"
 
 
 def test_search_by_name_substring(client):
-    resp = client.post("/api/v0/search", json={"by": "name", "query": "陈"})
+    resp = client.post("/api/v0/search", json={"by": "name", "query": "黄"})
     names = {r["name"] for r in resp.json()["results"]}
-    assert "陈默" in names
+    assert "黄月胜" in names
 
 
 def test_search_by_keyword(client):

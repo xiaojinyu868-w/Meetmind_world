@@ -87,7 +87,7 @@ def test_hall_snapshot_has_six_booths(client):
     booths = [m for m in snapshot["modules"] if m["type"] == "booth"]
     assert len(booths) == 6
     lin = next(m for m in booths if m["person_id"] == "lin-che")
-    assert lin["display"]["name"] == "林澈"
+    assert lin["display"]["name"] == "谢淯琪"
     assert lin["display"]["headline"].startswith("擅长把混乱的讨论")  # bio 首句
     assert lin["display"]["face_ref"] == "facts/seed/lin-che/face.png"
     assert lin["display"]["photos"]  # 相框有真实现场照指针

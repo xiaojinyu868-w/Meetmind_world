@@ -24,18 +24,31 @@ SAMPLES = 64
 # person-self 固定用 host.glb（任务约定）。person_01..06 与 6 个具名人物之间
 # 仓库中没有显式映射（exports/photo_character_modes_manifest.json 只记录匿名
 # source_alias A-F），因此先渲染到 staging 目检，再按胸像可见的 发型/夹克色
-# 与 src/data/demoPeople.js 的 palette 对齐，结果固化在下表。
+# 与 src/data/demoPeople.js 的 palette 对齐，结果固化在下表：
+#   person_01 淡紫夹克+暗紫内搭 ≈ su-he  #8b4a62（乌梅色，最接近）
+#   person_02 珊瑚粉衬衫+圆眼镜 ≈ zhou-ning #b85f50（珊瑚红夹克，最接近）
+#   person_03 雾蓝灰夹克+方眼镜 ≈ lin-che  #315d83（蓝色系，最接近）
+#   person_04 深炭夹克+青色口袋 ≈ tang-ke  #2f7d7b（青色点缀，最接近）
+#   person_05 白色夹克+长发    → xu-an   #c18b39（无近似色，按排除法；长发自由气质给摄影师）
+#   person_06 深炭夹克+方眼镜  → chen-mo  #667443（无近似色，按排除法；男性角色）
 PORTRAIT_MAP = {
     "host": "person-self",
     "person_01": "su-he",
     "person_02": "zhou-ning",
     "person_03": "lin-che",
-    "person_04": "xu-an",
-    "person_05": "chen-mo",
-    "person_06": "tang-ke",
+    "person_04": "tang-ke",
+    "person_05": "xu-an",
+    "person_06": "chen-mo",
 }
 
 ALL_SUBJECTS = ["host", *(f"person_{index:02d}" for index in range(1, 7))]
+
+# Per-subject bust framing tweaks: (camera_y, camera_z, target_z).
+FRAME_OVERRIDES = {
+    # person_04 的头位置明显偏高，标准机位会切掉头顶。
+    "person_04": (-1.95, 1.62, 1.44),
+}
+DEFAULT_FRAME = (-1.85, 1.52, 1.33)
 
 
 def srgb(hex_value: str) -> tuple[float, float, float, float]:
@@ -57,8 +70,9 @@ def look_at(obj: bpy.types.Object, target: Vector) -> None:
     obj.rotation_euler = (target - obj.location).to_track_quat("-Z", "Y").to_euler()
 
 
-def configure_studio() -> None:
+def configure_studio(subject: str) -> None:
     scene = bpy.context.scene
+    cam_y, cam_z, target_z = FRAME_OVERRIDES.get(subject, DEFAULT_FRAME)
 
     world = bpy.data.worlds.new("PREVIEW_PortraitWorld")
     world.use_nodes = True
@@ -95,10 +109,10 @@ def configure_studio() -> None:
     camera = bpy.data.objects.new("PREVIEW_PortraitCamera", camera_data)
     scene.collection.objects.link(camera)
     # Character faces -Y; camera sits in front at chest-head height.
-    camera.location = (0.0, -1.85, 1.52)
+    camera.location = (0.0, cam_y, cam_z)
     camera_data.lens = 78.0
     camera_data.sensor_width = 36.0
-    look_at(camera, Vector((0.0, 0.0, 1.33)))
+    look_at(camera, Vector((0.0, 0.0, target_z)))
     scene.camera = camera
 
     key_data = bpy.data.lights.new("PREVIEW_KeyTop", type="AREA")
@@ -259,12 +273,12 @@ def quantize_master(subject: str) -> int:
     )
 
 
-def render_all() -> None:
+def render_all(subjects: list[str]) -> None:
     STAGING_DIR.mkdir(parents=True, exist_ok=True)
     report: dict[str, dict[str, int | str]] = {}
-    for subject in ALL_SUBJECTS:
+    for subject in subjects:
         reset_scene()
-        configure_studio()
+        configure_studio(subject)
         imported = import_character(subject)
         scene = bpy.context.scene
         # Keep the RGB master so quantization can be re-run without re-rendering.
@@ -329,6 +343,10 @@ if __name__ == "__main__":
     elif "--requantize" in argv:
         requantize_all()
     else:
-        render_all()
+        subjects = ALL_SUBJECTS
+        if "--subjects" in argv:
+            wanted = argv[argv.index("--subjects") + 1].split(",")
+            subjects = [subject for subject in ALL_SUBJECTS if subject in wanted]
+        render_all(subjects)
         if "--apply" in argv:
             apply_portraits()
