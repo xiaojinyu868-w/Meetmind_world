@@ -1,0 +1,716 @@
+[
+  {
+    "schema": "echo-package.v0",
+    "person_id": "lin-che",
+    "identity": {
+      "confirmed": true,
+      "name": "林澈",
+      "role": "产品策划",
+      "city": "深圳",
+      "face_ref": "portraits/lin-che.png",
+      "voiceprint_ref": null
+    },
+    "encounters": [
+      {
+        "encounter_id": "enc_01",
+        "time": "2025-10-18T16:40:00+08:00",
+        "place": "深圳 · 科技展咖啡摊",
+        "facts": {
+          "media": ["facts/lin-che/enc_01/clip.mp4"],
+          "transcript": "facts/lin-che/enc_01/transcript.v1.md",
+          "photos": ["portraits/lin-che.png"]
+        },
+        "inferences": [
+          {
+            "id": "inf_01",
+            "type": "summary",
+            "value": "在科技展咖啡摊因为借同一支蓝色记号笔聊了半小时；他擅长把混乱的讨论收束成清晰的问题。",
+            "source_facts": ["transcript#L3-L26"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.71,
+            "created_at": "2026-07-30T10:00:00+08:00",
+            "privacy": "agent-usable"
+          },
+          {
+            "id": "inf_02",
+            "type": "interest-tag",
+            "value": "咖啡",
+            "source_facts": ["transcript#L8-L11"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.66,
+            "created_at": "2026-07-30T10:00:00+08:00",
+            "privacy": "agent-usable"
+          },
+          {
+            "id": "inf_03",
+            "type": "interest-tag",
+            "value": "产品设计",
+            "source_facts": ["transcript#L15-L22"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.74,
+            "created_at": "2026-07-30T10:00:00+08:00",
+            "privacy": "agent-usable"
+          },
+          {
+            "id": "inf_04",
+            "type": "memory-highlight",
+            "value": "第一次相遇：在咖啡摊边共用了最后一支蓝色记号笔。",
+            "source_facts": ["transcript#L3-L6", "photos[0]"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.88,
+            "created_at": "2026-07-30T10:00:00+08:00",
+            "privacy": "self-only"
+          }
+        ],
+        "privacy": "agent-usable"
+      },
+      {
+        "encounter_id": "enc_02",
+        "time": "2026-07-31T23:10:00+08:00",
+        "place": "EchoWorld 黑客松 · 通宵区",
+        "facts": {
+          "media": ["facts/lin-che/enc_02/clip.mp4", "facts/lin-che/enc_02/audio.m4a"],
+          "transcript": "facts/lin-che/enc_02/transcript.v1.md",
+          "photos": ["portraits/lin-che.png", "portraits/chen-mo.png"]
+        },
+        "inferences": [
+          {
+            "id": "inf_01",
+            "type": "summary",
+            "value": "凌晨的白板前，一起把 17 个点子压缩成 3 个真正能做的方向；他负责收束讨论。",
+            "source_facts": ["transcript#L31-L58"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.76,
+            "created_at": "2026-08-01T09:20:00+08:00",
+            "privacy": "agent-usable"
+          },
+          {
+            "id": "inf_02",
+            "type": "interest-tag",
+            "value": "协作创作",
+            "source_facts": ["transcript#L31-L44"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.7,
+            "created_at": "2026-08-01T09:20:00+08:00",
+            "privacy": "agent-usable"
+          },
+          {
+            "id": "inf_03",
+            "type": "open-thread",
+            "value": "他想继续聊「关系会继续生长」这个想法，草图一直留着。",
+            "source_facts": ["transcript#L52-L58"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.63,
+            "created_at": "2026-08-01T09:20:00+08:00",
+            "privacy": "self-only"
+          }
+        ],
+        "privacy": "agent-usable"
+      }
+    ],
+    "avatar": {
+      "type": "lowpoly-faceless.v1",
+      "model_asset_id": null,
+      "palette": {
+        "hair": "#252a31",
+        "jacket": "#315d83",
+        "MAT_Jacket_Light": "#527ea2",
+        "shirt": "#f0e7cf",
+        "pants": "#313d4a",
+        "shoes": "#d07444",
+        "skin": "#d79a73"
+      },
+      "real_face_ref": "portraits/lin-che.png"
+    },
+    "relations": [
+      { "to": "person-self", "via": "enc_01", "note": "黑客松队友" },
+      { "to": "chen-mo", "via": "enc_02", "note": "黑客松同组" },
+      { "to": "zhou-ning", "via": "enc_02", "note": "经我介绍认识" }
+    ]
+  },
+  {
+    "schema": "echo-package.v0",
+    "person_id": "zhou-ning",
+    "identity": {
+      "confirmed": true,
+      "name": "周宁",
+      "role": "城市研究者",
+      "city": "杭州",
+      "face_ref": "portraits/zhou-ning.png",
+      "voiceprint_ref": null
+    },
+    "encounters": [
+      {
+        "encounter_id": "enc_01",
+        "time": "2019-07-06T15:30:00+08:00",
+        "place": "校园旧礼堂",
+        "facts": {
+          "media": [],
+          "transcript": "facts/zhou-ning/enc_01/transcript.v1.md",
+          "photos": ["portraits/zhou-ning.png"]
+        },
+        "inferences": [
+          {
+            "id": "inf_01",
+            "type": "summary",
+            "value": "第一次见面时都在找旧礼堂的同一扇侧门；他对城市里的小路和旧建筑格外敏感。",
+            "source_facts": ["transcript#L2-L14"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.7,
+            "created_at": "2026-07-30T10:00:00+08:00",
+            "privacy": "agent-usable"
+          },
+          {
+            "id": "inf_02",
+            "type": "interest-tag",
+            "value": "旧建筑",
+            "source_facts": ["transcript#L7-L12"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.68,
+            "created_at": "2026-07-30T10:00:00+08:00",
+            "privacy": "agent-usable"
+          },
+          {
+            "id": "inf_03",
+            "type": "memory-highlight",
+            "value": "毕业地图：一起给校园里 36 个不起眼的角落写下了名字。",
+            "source_facts": ["transcript#L18-L30"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.83,
+            "created_at": "2026-07-30T10:00:00+08:00",
+            "privacy": "self-only"
+          }
+        ],
+        "privacy": "agent-usable"
+      },
+      {
+        "encounter_id": "enc_02",
+        "time": "2026-05-12T16:00:00+08:00",
+        "place": "杭州 · 老城区河岸",
+        "facts": {
+          "media": ["facts/zhou-ning/enc_02/clip.mp4"],
+          "transcript": "facts/zhou-ning/enc_02/transcript.v1.md",
+          "photos": ["portraits/zhou-ning.png"]
+        },
+        "inferences": [
+          {
+            "id": "inf_01",
+            "type": "summary",
+            "value": "没有目的地沿河散步，最后走到了这座城市最旧的一座桥。",
+            "source_facts": ["transcript#L5-L20"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.72,
+            "created_at": "2026-05-13T08:40:00+08:00",
+            "privacy": "agent-usable"
+          },
+          {
+            "id": "inf_02",
+            "type": "interest-tag",
+            "value": "城市漫步",
+            "source_facts": ["transcript#L5-L9"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.72,
+            "created_at": "2026-05-13T08:40:00+08:00",
+            "privacy": "agent-usable"
+          },
+          {
+            "id": "inf_03",
+            "type": "open-thread",
+            "value": "他最想重访礼堂后的那条小路——第一次把一座城市画成自己版本的地方。",
+            "source_facts": ["transcript#L16-L20"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.6,
+            "created_at": "2026-05-13T08:40:00+08:00",
+            "privacy": "self-only"
+          }
+        ],
+        "privacy": "agent-usable"
+      }
+    ],
+    "avatar": {
+      "type": "lowpoly-faceless.v1",
+      "model_asset_id": null,
+      "palette": {
+        "hair": "#56352b",
+        "jacket": "#b85f50",
+        "MAT_Jacket_Light": "#d27a68",
+        "shirt": "#f0dfc5",
+        "pants": "#344957",
+        "shoes": "#d0a95d",
+        "skin": "#d79a73"
+      },
+      "real_face_ref": "portraits/zhou-ning.png"
+    },
+    "relations": [
+      { "to": "person-self", "via": "enc_01", "note": "大学同学" },
+      { "to": "lin-che", "via": "enc_02", "note": "经我介绍认识" },
+      { "to": "xu-an", "via": "enc_02", "note": "都喜欢记录城市" }
+    ]
+  },
+  {
+    "schema": "echo-package.v0",
+    "person_id": "chen-mo",
+    "identity": {
+      "confirmed": true,
+      "name": "陈默",
+      "role": "交互工程师",
+      "city": "北京",
+      "face_ref": "portraits/chen-mo.png",
+      "voiceprint_ref": null
+    },
+    "encounters": [
+      {
+        "encounter_id": "enc_01",
+        "time": "2022-12-16T19:00:00+08:00",
+        "place": "公司 · 第一次项目评审",
+        "facts": {
+          "media": [],
+          "transcript": "facts/chen-mo/enc_01/transcript.v1.md",
+          "photos": ["portraits/chen-mo.png"]
+        },
+        "inferences": [
+          {
+            "id": "inf_01",
+            "type": "summary",
+            "value": "第一次评审他只说了三句话，随后交出一个可以直接操作的版本。",
+            "source_facts": ["transcript#L4-L17"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.73,
+            "created_at": "2026-07-30T10:00:00+08:00",
+            "privacy": "agent-usable"
+          },
+          {
+            "id": "inf_02",
+            "type": "interest-tag",
+            "value": "交互原型",
+            "source_facts": ["transcript#L9-L15"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.78,
+            "created_at": "2026-07-30T10:00:00+08:00",
+            "privacy": "agent-usable"
+          },
+          {
+            "id": "inf_03",
+            "type": "memory-highlight",
+            "value": "一次失败评审后，在无人会议室重新搭起了能被理解的原型。",
+            "source_facts": ["transcript#L20-L29"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.81,
+            "created_at": "2026-07-30T10:00:00+08:00",
+            "privacy": "self-only"
+          }
+        ],
+        "privacy": "agent-usable"
+      },
+      {
+        "encounter_id": "enc_02",
+        "time": "2025-01-24T02:30:00+08:00",
+        "place": "工作室 · 上线夜",
+        "facts": {
+          "media": ["facts/chen-mo/enc_02/clip.mp4"],
+          "transcript": "facts/chen-mo/enc_02/transcript.v1.md",
+          "photos": ["portraits/chen-mo.png"]
+        },
+        "inferences": [
+          {
+            "id": "inf_01",
+            "type": "summary",
+            "value": "离职前的上线夜，一起把没有排期的小功能偷偷做完了。",
+            "source_facts": ["transcript#L6-L24"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.75,
+            "created_at": "2026-07-30T10:00:00+08:00",
+            "privacy": "agent-usable"
+          },
+          {
+            "id": "inf_02",
+            "type": "open-thread",
+            "value": "他在做一个不需要说明书的空间界面，说能跑的时候把入口发给我。",
+            "source_facts": ["transcript#L19-L24"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.66,
+            "created_at": "2026-07-30T10:00:00+08:00",
+            "privacy": "agent-usable"
+          }
+        ],
+        "privacy": "agent-usable"
+      }
+    ],
+    "avatar": {
+      "type": "lowpoly-faceless.v1",
+      "model_asset_id": null,
+      "palette": {
+        "hair": "#242829",
+        "jacket": "#667443",
+        "MAT_Jacket_Light": "#89965c",
+        "shirt": "#e4dec8",
+        "pants": "#3d4442",
+        "shoes": "#a45d3c",
+        "skin": "#d79a73"
+      },
+      "real_face_ref": "portraits/chen-mo.png"
+    },
+    "relations": [
+      { "to": "person-self", "via": "enc_01", "note": "前同事" },
+      { "to": "lin-che", "via": "enc_02", "note": "黑客松同组" },
+      { "to": "su-he", "via": "enc_02", "note": "社区活动认识" }
+    ]
+  },
+  {
+    "schema": "echo-package.v0",
+    "person_id": "xu-an",
+    "identity": {
+      "confirmed": true,
+      "name": "许安",
+      "role": "独立摄影师",
+      "city": "成都",
+      "face_ref": "portraits/xu-an.png",
+      "voiceprint_ref": null
+    },
+    "encounters": [
+      {
+        "encounter_id": "enc_01",
+        "time": "2024-04-13T18:50:00+08:00",
+        "place": "海边公交站（末班车）",
+        "facts": {
+          "media": ["facts/xu-an/enc_01/clip.mp4"],
+          "transcript": "facts/xu-an/enc_01/transcript.v1.md",
+          "photos": ["portraits/xu-an.png"]
+        },
+        "inferences": [
+          {
+            "id": "inf_01",
+            "type": "summary",
+            "value": "因为错过同一班公交，在海边多停留了一个黄昏；他总能记住光线变化的时刻。",
+            "source_facts": ["transcript#L3-L22"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.74,
+            "created_at": "2026-07-30T10:00:00+08:00",
+            "privacy": "agent-usable"
+          },
+          {
+            "id": "inf_02",
+            "type": "interest-tag",
+            "value": "摄影",
+            "source_facts": ["transcript#L10-L16"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.8,
+            "created_at": "2026-07-30T10:00:00+08:00",
+            "privacy": "agent-usable"
+          },
+          {
+            "id": "inf_03",
+            "type": "interest-tag",
+            "value": "海边",
+            "source_facts": ["transcript#L3-L6"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.62,
+            "created_at": "2026-07-30T10:00:00+08:00",
+            "privacy": "agent-usable"
+          },
+          {
+            "id": "inf_04",
+            "type": "memory-highlight",
+            "value": "末班车来了，只是我们都没上车，下一班又等了四十分钟。",
+            "source_facts": ["transcript#L17-L22"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.85,
+            "created_at": "2026-07-30T10:00:00+08:00",
+            "privacy": "self-only"
+          }
+        ],
+        "privacy": "agent-usable"
+      },
+      {
+        "encounter_id": "enc_02",
+        "time": "2026-07-28T11:00:00+08:00",
+        "place": "成都 · 独立摄影展",
+        "facts": {
+          "media": ["facts/xu-an/enc_02/clip.mp4"],
+          "transcript": "facts/xu-an/enc_02/transcript.v1.md",
+          "photos": ["portraits/xu-an.png"]
+        },
+        "inferences": [
+          {
+            "id": "inf_01",
+            "type": "summary",
+            "value": "他的展位只有一条长椅和十二张没有人像的照片；他说空位比背影更像一段记忆。",
+            "source_facts": ["transcript#L4-L18"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.71,
+            "created_at": "2026-07-29T09:10:00+08:00",
+            "privacy": "agent-usable"
+          },
+          {
+            "id": "inf_02",
+            "type": "memory-highlight",
+            "value": "寄来一张没有人物的海边长椅照片，背面只写了日期。",
+            "source_facts": ["photos[0]", "transcript#L11-L14"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.79,
+            "created_at": "2026-07-29T09:10:00+08:00",
+            "privacy": "self-only"
+          }
+        ],
+        "privacy": "agent-usable"
+      }
+    ],
+    "avatar": {
+      "type": "lowpoly-faceless.v1",
+      "model_asset_id": null,
+      "palette": {
+        "hair": "#67392e",
+        "jacket": "#c18b39",
+        "MAT_Jacket_Light": "#d4a85d",
+        "shirt": "#f0e5c9",
+        "pants": "#315d59",
+        "shoes": "#715040",
+        "skin": "#d79a73"
+      },
+      "real_face_ref": "portraits/xu-an.png"
+    },
+    "relations": [
+      { "to": "person-self", "via": "enc_01", "note": "旅行中认识的朋友" },
+      { "to": "zhou-ning", "via": "enc_02", "note": "都喜欢记录城市" },
+      { "to": "tang-ke", "via": "enc_02", "note": "歌单里互推过环境声录音" }
+    ]
+  },
+  {
+    "schema": "echo-package.v0",
+    "person_id": "su-he",
+    "identity": {
+      "confirmed": true,
+      "name": "苏禾",
+      "role": "社区运营者",
+      "city": "上海",
+      "face_ref": "portraits/su-he.png",
+      "voiceprint_ref": null
+    },
+    "encounters": [
+      {
+        "encounter_id": "enc_01",
+        "time": "2023-07-22T17:00:00+08:00",
+        "place": "楼下修车棚",
+        "facts": {
+          "media": [],
+          "transcript": "facts/su-he/enc_01/transcript.v1.md",
+          "photos": ["portraits/su-he.png"]
+        },
+        "inferences": [
+          {
+            "id": "inf_01",
+            "type": "summary",
+            "value": "为了修车去借六角扳手，她顺手把松掉的车灯也修好了；她认识附近每一家小店。",
+            "source_facts": ["transcript#L3-L19"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.72,
+            "created_at": "2026-07-30T10:00:00+08:00",
+            "privacy": "agent-usable"
+          },
+          {
+            "id": "inf_02",
+            "type": "interest-tag",
+            "value": "社区",
+            "source_facts": ["transcript#L9-L14"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.75,
+            "created_at": "2026-07-30T10:00:00+08:00",
+            "privacy": "agent-usable"
+          },
+          {
+            "id": "inf_03",
+            "type": "memory-highlight",
+            "value": "一只旧铁盒成了整栋楼都知道的共享工具箱。",
+            "source_facts": ["transcript#L15-L19"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.8,
+            "created_at": "2026-07-30T10:00:00+08:00",
+            "privacy": "self-only"
+          }
+        ],
+        "privacy": "agent-usable"
+      },
+      {
+        "encounter_id": "enc_02",
+        "time": "2026-08-02T21:30:00+08:00",
+        "place": "楼下 · 停电的晚上",
+        "facts": {
+          "media": ["facts/su-he/enc_02/audio.m4a"],
+          "transcript": "facts/su-he/enc_02/transcript.v1.md",
+          "photos": ["portraits/su-he.png"]
+        },
+        "inferences": [
+          {
+            "id": "inf_01",
+            "type": "summary",
+            "value": "停电的晚上，大家把折叠椅搬到楼下，第一次聊到很晚。",
+            "source_facts": ["transcript#L2-L26"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.77,
+            "created_at": "2026-08-03T08:00:00+08:00",
+            "privacy": "agent-usable"
+          },
+          {
+            "id": "inf_02",
+            "type": "interest-tag",
+            "value": "花市",
+            "source_facts": ["transcript#L12-L16"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.64,
+            "created_at": "2026-08-03T08:00:00+08:00",
+            "privacy": "agent-usable"
+          },
+          {
+            "id": "inf_03",
+            "type": "open-thread",
+            "value": "她记得我上次选的洋桔梗颜色，周末花市替我留了一小束。",
+            "source_facts": ["transcript#L20-L26"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.7,
+            "created_at": "2026-08-03T08:00:00+08:00",
+            "privacy": "self-only"
+          }
+        ],
+        "privacy": "agent-usable"
+      }
+    ],
+    "avatar": {
+      "type": "lowpoly-faceless.v1",
+      "model_asset_id": null,
+      "palette": {
+        "hair": "#29282b",
+        "jacket": "#8b4a62",
+        "MAT_Jacket_Light": "#af6680",
+        "shirt": "#dce8e5",
+        "pants": "#3d4552",
+        "shoes": "#b98945",
+        "skin": "#d79a73"
+      },
+      "real_face_ref": "portraits/su-he.png"
+    },
+    "relations": [
+      { "to": "person-self", "via": "enc_01", "note": "邻居" },
+      { "to": "chen-mo", "via": "enc_02", "note": "社区活动认识" },
+      { "to": "tang-ke", "via": "enc_02", "note": "停电夜一起聊到很晚" }
+    ]
+  },
+  {
+    "schema": "echo-package.v0",
+    "person_id": "tang-ke",
+    "identity": {
+      "confirmed": true,
+      "name": "唐可",
+      "role": "音乐编辑",
+      "city": "南京",
+      "face_ref": "portraits/tang-ke.png",
+      "voiceprint_ref": null
+    },
+    "encounters": [
+      {
+        "encounter_id": "enc_01",
+        "time": "2008-07-19T19:00:00+08:00",
+        "place": "河堤篮球场",
+        "facts": {
+          "media": [],
+          "transcript": "facts/tang-ke/enc_01/transcript.v1.md",
+          "photos": ["portraits/tang-ke.png"]
+        },
+        "inferences": [
+          {
+            "id": "inf_01",
+            "type": "summary",
+            "value": "共同记忆最长的人；第一次组队时谁都不会投篮，却坚持报了同一支队。",
+            "source_facts": ["transcript#L2-L16"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.69,
+            "created_at": "2026-07-30T10:00:00+08:00",
+            "privacy": "agent-usable"
+          },
+          {
+            "id": "inf_02",
+            "type": "interest-tag",
+            "value": "篮球",
+            "source_facts": ["transcript#L2-L8"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.6,
+            "created_at": "2026-07-30T10:00:00+08:00",
+            "privacy": "agent-usable"
+          },
+          {
+            "id": "inf_03",
+            "type": "memory-highlight",
+            "value": "看台第三排那道刻痕，十几年了一点都没淡。",
+            "source_facts": ["transcript#L11-L16"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.86,
+            "created_at": "2026-07-30T10:00:00+08:00",
+            "privacy": "self-only"
+          }
+        ],
+        "privacy": "agent-usable"
+      },
+      {
+        "encounter_id": "enc_02",
+        "time": "2026-04-04T20:00:00+08:00",
+        "place": "南京 · 河堤边的旧篮球场",
+        "facts": {
+          "media": ["facts/tang-ke/enc_02/clip.mp4"],
+          "transcript": "facts/tang-ke/enc_02/transcript.v1.md",
+          "photos": ["portraits/tang-ke.png"]
+        },
+        "inferences": [
+          {
+            "id": "inf_01",
+            "type": "summary",
+            "value": "夏夜重访旧球场：篮筐重新刷过漆，火车还是从远处驶过。",
+            "source_facts": ["transcript#L3-L18"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.73,
+            "created_at": "2026-04-05T09:30:00+08:00",
+            "privacy": "agent-usable"
+          },
+          {
+            "id": "inf_02",
+            "type": "interest-tag",
+            "value": "环境声音乐",
+            "source_facts": ["transcript#L9-L14"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.73,
+            "created_at": "2026-04-05T09:30:00+08:00",
+            "privacy": "agent-usable"
+          },
+          {
+            "id": "inf_03",
+            "type": "open-thread",
+            "value": "歌单还差最后一首，他坚持留给我来填——要像重新见面的声音。",
+            "source_facts": ["transcript#L15-L18"],
+            "model": "qwen3.7plus@2026-07",
+            "confidence": 0.82,
+            "created_at": "2026-04-05T09:30:00+08:00",
+            "privacy": "agent-usable"
+          }
+        ],
+        "privacy": "agent-usable"
+      }
+    ],
+    "avatar": {
+      "type": "lowpoly-faceless.v1",
+      "model_asset_id": null,
+      "palette": {
+        "hair": "#4a352d",
+        "jacket": "#2f7d7b",
+        "MAT_Jacket_Light": "#52a09b",
+        "shirt": "#efe5ca",
+        "pants": "#383e48",
+        "shoes": "#cc7548",
+        "skin": "#d79a73"
+      },
+      "real_face_ref": "portraits/tang-ke.png"
+    },
+    "relations": [
+      { "to": "person-self", "via": "enc_01", "note": "童年好友" },
+      { "to": "su-he", "via": "enc_02", "note": "停电夜一起聊到很晚" },
+      { "to": "xu-an", "via": "enc_02", "note": "歌单里互推过环境声录音" }
+    ]
+  }
+]

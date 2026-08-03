@@ -3,11 +3,14 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { currentUser, people, relationships } from "./data/demoPeople.js";
 import { AssetCatalog } from "./runtime/AssetCatalog.js";
 import { AssetStore } from "./runtime/AssetStore.js";
-import { CAFE_LAYOUT } from "./runtime/CafeLayout.js";
+import { CAFE_LAYOUT, tableById } from "./runtime/CafeLayout.js";
 import { CharacterSystem } from "./runtime/CharacterSystem.js";
+import { LiveWorld } from "./runtime/LiveWorld.js";
 import { NpcAgentSystem } from "./runtime/NpcAgentSystem.js";
+import { adaptSnapshot, normalizeEvent } from "./runtime/SnapshotAdapter.js";
 import { loadWorldSpec, publicUrl } from "./runtime/WorldSpec.js";
 import { createCafeShell } from "./ui/CafeShell.js";
+import { mountIntegrations } from "./bootstrap/integrations.js";
 import "./cafe.css";
 
 
@@ -34,6 +37,41 @@ const NPC_ENTRY_SPAWNS = Object.freeze([
   { x: 1.75, z: 4.25, yaw: Math.PI },
   { x: 2.55, z: 4.05, yaw: Math.PI },
 ]);
+const LIVE_WALK_SPEED = 1.5;
+const LIVE_BUBBLE_DURATION = 4;
+
+// 运行时注入（window.__ECHOWORLD_OPTIONS__）：api / onPersonSelected / live / snapshotPollMs
+const runtimeOptions = globalThis.__ECHOWORLD_OPTIONS__ ?? {};
+// 注入的 api 必须覆盖录入流程三方法，否则回退内置 MockApi 适配层（避免集成模块挂载抛错导致白屏）
+const injectedApi = runtimeOptions.api ?? null;
+const usableApi =
+  injectedApi &&
+  ["ingest", "pipelineStream", "confirm"].every((method) => typeof injectedApi[method] === "function")
+    ? injectedApi
+    : null;
+if (injectedApi && !usableApi) {
+  console.warn("[EchoWorld] 注入的 api 缺少 ingest/pipelineStream/confirm，回退为内置 MockApi 适配层");
+}
+// 统一集成：资料包面板 / 检索条 / 相遇录入流程 + 各模块共享的统一 api 适配层
+const integrations = mountIntegrations({
+  api: usableApi,
+  onPersonSelectedHook: (personId) => selectPersonInWorld(personId),
+  onPackagesChangedHook: (packages) => fillPackageNames(packages),
+  onToastHook: (message) => pushLiveToast(message),
+});
+const api = integrations.api;
+// 点击世界中的小人：保留现有侧栏行为，资料包面板浮于其上（外部可用 onPersonSelected 覆盖）
+const onPersonSelected =
+  typeof runtimeOptions.onPersonSelected === "function"
+    ? runtimeOptions.onPersonSelected
+    : (personId) => {
+        if (personId) integrations.panel.openPerson(personId);
+      };
+const liveEnabled = runtimeOptions.live !== false;
+const snapshotPollMs =
+  Number.isFinite(runtimeOptions.snapshotPollMs) && runtimeOptions.snapshotPollMs >= 250
+    ? runtimeOptions.snapshotPollMs
+    : 2000;
 
 const canvas = document.querySelector("#world");
 const loading = document.querySelector("#loading");
@@ -131,6 +169,15 @@ let roundtableNearby = false;
 let elapsed = 0;
 let diagnosticFrame = 0;
 
+const packageNames = new Map();
+const liveTargets = new Map();
+const liveMeetingOverrides = new Map();
+const liveBubbles = new Map();
+const liveFacing = new THREE.Vector3();
+let liveMeetingSeatIndices = [];
+let liveWorld = null;
+let liveWorldTick = null;
+
 const appShell = createCafeShell({
   root: document.querySelector("#ui-root"),
   currentUser,
@@ -145,6 +192,23 @@ const appShell = createCafeShell({
 canvas.dataset.ready = "false";
 canvas.dataset.appView = experienceMode;
 canvas.dataset.roundtableReserved = "true";
+
+// Live overlay：气泡复用 CafeShell 的 world-speech-layer 与气泡样式，Toast/tick 为轻量内联样式
+const speechLayer = document.querySelector("#world-speech-layer");
+
+const toastStack = document.createElement("div");
+toastStack.style.cssText =
+  "position:fixed;top:88px;right:18px;z-index:60;display:flex;flex-direction:column;" +
+  "gap:8px;align-items:flex-end;pointer-events:none;";
+document.body.append(toastStack);
+
+const tickBadge = document.createElement("div");
+tickBadge.style.cssText =
+  "position:fixed;right:18px;bottom:18px;z-index:60;display:none;align-items:center;gap:7px;" +
+  "padding:7px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.4);" +
+  "background:rgba(20,54,47,.72);backdrop-filter:blur(14px);color:#fffdf4;" +
+  "font-size:10px;font-weight:700;letter-spacing:.08em;";
+document.body.append(tickBadge);
 
 
 function resizeRenderer() {
@@ -270,7 +334,8 @@ async function spawnCharacters() {
     );
     npcSystem.register(people[index], entity);
   }
-  npcSystem.initializeCafe();
+  // live 模式下本地随机调度关闭：座位分配与对话全部由世界快照驱动
+  if (!liveEnabled) npcSystem.initializeCafe();
 
   playerMarker = makeGroundMarker("#f2c55f", 0.32, 0.42, 0.42);
   playerMarker.name = "PLAYER_GroundMarker";
@@ -319,6 +384,7 @@ async function configureWorld(root) {
   canvas.dataset.environment = "echo-world-lowpoly-cafe";
   setProgress(1, "Echo Cafe 已准备好");
   appShell.setWorldReady(true);
+  startLiveWorld();
   requestAnimationFrame(() => loading.classList.add("is-hidden"));
 }
 
@@ -331,6 +397,7 @@ function setExperienceMode(mode) {
   touchKnob.style.transform = "translate(0, 0)";
   if (playerMarker) playerMarker.visible = mode === "cafe" && !meetingMode;
   if (mode !== "cafe") playerLabel.style.opacity = "0";
+  tickBadge.style.display = mode === "cafe" ? "flex" : "none";
   if (mode === "cafe") canvas.focus({ preventScroll: true });
 }
 
@@ -340,6 +407,7 @@ function selectWorldPerson(personId) {
   selectedPersonId = person?.id ?? null;
   appShell.selectWorldPerson(selectedPersonId);
   canvas.dataset.selectedPerson = selectedPersonId ?? "";
+  onPersonSelected(selectedPersonId);
   if (!selectionMarker) return person;
   selectionMarker.visible = Boolean(person);
   updateSelectionMarker();
@@ -365,8 +433,39 @@ function updateSelectionMarker() {
 
 function startMeeting(personIds) {
   if (!worldReady || meetingMode) return [];
-  const accepted = npcSystem.startMeeting(personIds);
+  let accepted = [];
+  if (liveEnabled) {
+    // live 模式：不走 NpcAgentSystem 本地调度，改为快照驱动层上的会议覆盖目标
+    accepted = [...new Set(personIds)]
+      .filter((personId) => npcSystem.getEntity(personId))
+      .slice(0, 5);
+    accepted.forEach((personId, index) => {
+      const seat = CAFE_LAYOUT.roundtable.seats[index + 1];
+      liveMeetingOverrides.set(personId, {
+        x: seat.x,
+        z: seat.z,
+        yaw: seat.yaw,
+        state: "in-meeting",
+        seat: {
+          tableId: CAFE_LAYOUT.roundtable.id,
+          tableLabel: CAFE_LAYOUT.roundtable.label,
+          seatIndex: index + 1,
+        },
+      });
+      appShell.updateAgentState({
+        personId,
+        status: "joining-meeting",
+        tableId: CAFE_LAYOUT.roundtable.id,
+        tableLabel: CAFE_LAYOUT.roundtable.label,
+        seatIndex: index + 1,
+        meeting: true,
+      });
+    });
+  } else {
+    accepted = npcSystem.startMeeting(personIds);
+  }
   if (accepted.length === 0) return [];
+  liveMeetingSeatIndices = [0, ...accepted.map((_, index) => index + 1)];
   meetingMode = true;
   const playerSeat = CAFE_LAYOUT.roundtable.seats[0];
   actorAt(playerEntity, playerSeat.x, playerSeat.z, playerSeat.yaw, SEATED_ROOT_Y);
@@ -392,9 +491,253 @@ function endMeeting() {
   playerGroundY = playerEntity.baseY;
   updatePlayerMarker();
   currentHeading.set(0, 0, -1);
-  npcSystem.endMeeting();
+  if (liveEnabled) {
+    liveMeetingOverrides.clear();
+  } else {
+    npcSystem.endMeeting();
+  }
+  liveMeetingSeatIndices = [];
   canvas.dataset.meetingActive = "false";
   canvas.dataset.meetingInvited = "";
+}
+
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+
+function nameOf(personId) {
+  if (typeof personId !== "string" || personId === "") return "神秘访客";
+  return packageNames.get(personId) ?? people.find((person) => person.id === personId)?.name ?? personId;
+}
+
+
+function fillPackageNames(packages) {
+  packageNames.clear();
+  for (const pkg of Array.isArray(packages) ? packages : []) {
+    const id = pkg?.person_id ?? pkg?.id;
+    const name = pkg?.name ?? pkg?.identity?.name ?? pkg?.display_name ?? pkg?.displayName;
+    if (typeof id === "string" && typeof name === "string") packageNames.set(id, name);
+  }
+}
+
+
+// 在 3D 世界中选中/定位人物；不在世界中（如刚确认的新人）返回 false 且不影响当前选中
+function selectPersonInWorld(personId) {
+  if (typeof personId !== "string" || personId === "") return false;
+  if (!people.some((person) => person.id === personId)) return false;
+  selectWorldPerson(personId);
+  return true;
+}
+
+
+function pushLiveToast(message) {
+  const toast = document.createElement("div");
+  toast.style.cssText =
+    "max-width:min(320px,calc(100vw - 36px));padding:9px 14px;border-radius:14px;" +
+    "border:1px solid rgba(255,255,255,.38);background:rgba(21,58,50,.86);color:#fffdf4;" +
+    "box-shadow:0 10px 26px rgba(18,45,39,.2);backdrop-filter:blur(14px);" +
+    "font-size:10px;font-weight:600;letter-spacing:.04em;line-height:1.5;" +
+    "opacity:0;transform:translateY(-6px);transition:opacity .24s ease,transform .24s ease;";
+  toast.textContent = message;
+  toastStack.append(toast);
+  while (toastStack.children.length > 4) toastStack.firstElementChild.remove();
+  requestAnimationFrame(() => {
+    toast.style.opacity = "1";
+    toast.style.transform = "translateY(0)";
+  });
+  window.setTimeout(() => {
+    toast.style.opacity = "0";
+    window.setTimeout(() => toast.remove(), 280);
+  }, 3600);
+}
+
+
+const TICK_SOURCE_STYLE = {
+  live: { color: "#7fe0a8", label: "实时快照" },
+  mock: { color: "#f2c55f", label: "本地 mock" },
+  fallback: { color: "#d36f59", label: "内置兜底" },
+};
+
+function setTickBadge(tick, source) {
+  const style = TICK_SOURCE_STYLE[source] ?? { color: "#9fb4ad", label: "离线" };
+  tickBadge.innerHTML =
+    `<span style="width:7px;height:7px;border-radius:50%;background:${style.color}"></span>` +
+    `<span>世界时刻 #${tick ?? "—"} · ${style.label}</span>`;
+}
+
+
+function showLiveTalk(personId, text, duration = LIVE_BUBBLE_DURATION) {
+  if (!speechLayer) return;
+  let entry = liveBubbles.get(personId);
+  if (!entry) {
+    const element = document.createElement("div");
+    element.className = "world-speech-bubble";
+    element.dataset.liveSpeech = personId;
+    speechLayer.append(element);
+    entry = { element, timer: 0, active: false };
+    liveBubbles.set(personId, entry);
+  }
+  entry.element.innerHTML = `<span>${escapeHtml(nameOf(personId))}</span><p>${escapeHtml(text)}</p>`;
+  entry.element.classList.add("is-visible");
+  entry.active = true;
+  window.clearTimeout(entry.timer);
+  entry.timer = window.setTimeout(() => {
+    entry.element.classList.remove("is-visible");
+    entry.active = false;
+  }, duration * 1000);
+}
+
+
+function updateLiveBubbles() {
+  for (const [personId, entry] of liveBubbles) {
+    if (!entry.active) continue;
+    const entity = npcSystem?.getEntity(personId);
+    if (!entity) {
+      entry.element.style.visibility = "hidden";
+      continue;
+    }
+    projected.copy(entity.root.position);
+    projected.y += 1.55 * entity.root.scale.y;
+    projected.project(camera);
+    const visible =
+      experienceMode === "cafe" &&
+      projected.z > -1 && projected.z < 1 &&
+      Math.abs(projected.x) < 1.15 &&
+      Math.abs(projected.y) < 1.15;
+    entry.element.style.left = `${(projected.x * 0.5 + 0.5) * window.innerWidth}px`;
+    entry.element.style.top = `${(-projected.y * 0.5 + 0.5) * window.innerHeight}px`;
+    entry.element.style.visibility = visible ? "visible" : "hidden";
+  }
+}
+
+
+function applyLiveSnapshot(rawSnapshot) {
+  const adapted = adaptSnapshot(rawSnapshot, {
+    people,
+    reservedRoundtableSeats: meetingMode ? liveMeetingSeatIndices : [],
+  });
+  liveWorldTick = adapted.tick;
+  setTickBadge(adapted.tick, liveWorld?.source);
+  canvas.dataset.liveSource = liveWorld?.source ?? "unknown";
+  canvas.dataset.worldTick = String(adapted.tick);
+
+  for (const agent of adapted.agents) {
+    if (agent.id === currentUser.id || liveMeetingOverrides.has(agent.id)) continue;
+    const entity = npcSystem?.getEntity(agent.id);
+    if (!entity) continue;
+    if (agent.position) {
+      liveTargets.set(agent.id, {
+        x: agent.seat?.x ?? agent.position.x,
+        z: agent.seat?.z ?? agent.position.z,
+        yaw: agent.seat?.yaw ?? agent.position.yaw,
+        state: agent.state,
+        seat: agent.seat,
+      });
+    }
+    entity.root.userData.agentState = agent.state;
+    appShell.updateAgentState({
+      personId: agent.id,
+      status: agent.state === "talking" ? "seated" : agent.state,
+      tableId: agent.seat?.tableId ?? null,
+      tableLabel: agent.seat?.tableLabel ?? "咖啡厅大厅",
+      seatIndex: agent.seat?.seatIndex ?? null,
+      meeting: agent.state === "in-meeting",
+    });
+  }
+}
+
+
+function handleLiveEvent(rawEvent) {
+  // LiveWorld 发出的是快照里的原始事件，这里统一归一化（snake_case → camelCase）
+  const event = normalizeEvent(rawEvent);
+  if (!event) return;
+  if (event.type === "agent-talk") {
+    if (!event.agentId || !event.text) return;
+    showLiveTalk(event.agentId, event.text);
+    pushLiveToast(`${nameOf(event.agentId)} 和 ${nameOf(event.toAgentId)} 聊了起来`);
+    return;
+  }
+  if (event.type === "meeting-started") {
+    const names = event.participants.map(nameOf).join("、");
+    pushLiveToast(names ? `圆桌会议开始：${names}` : "圆桌会议开始了");
+    return;
+  }
+  if (event.type === "meeting-ended") {
+    pushLiveToast("圆桌会议结束，大家回到各自的座位");
+  }
+}
+
+
+function updateLiveAgents(delta) {
+  if (!npcSystem) return;
+  for (const personId of new Set([...liveTargets.keys(), ...liveMeetingOverrides.keys()])) {
+    const target = liveMeetingOverrides.get(personId) ?? liveTargets.get(personId);
+    const entity = npcSystem.getEntity(personId);
+    if (!target || !entity) continue;
+    const root = entity.root;
+    const dx = target.x - root.position.x;
+    const dz = target.z - root.position.z;
+    const distance = Math.hypot(dx, dz);
+    const moving = distance > 0.05;
+    const seated = !moving && target.state !== "walking";
+
+    if (moving) {
+      // 匀速逼近快照目标：轮询节拍之间保持连续走动，而不是脉冲式追赶
+      const stepLength = Math.min(distance, LIVE_WALK_SPEED * delta);
+      root.position.x += (dx / distance) * stepLength;
+      root.position.z += (dz / distance) * stepLength;
+      liveFacing.set(dx / distance, 0, dz / distance);
+    } else {
+      root.position.x = target.x;
+      root.position.z = target.z;
+      liveFacing.set(Math.sin(target.yaw), 0, Math.cos(target.yaw));
+    }
+    targetQuaternion.setFromUnitVectors(MODEL_FORWARD, liveFacing);
+    root.quaternion.slerp(targetQuaternion, 1 - Math.exp(-10 * delta));
+
+    const targetScaleY = seated ? SEATED_SCALE_Y : 1;
+    root.scale.y += (targetScaleY - root.scale.y) * (1 - Math.exp(-7 * delta));
+    entity.baseY = seated ? SEATED_ROOT_Y : 0;
+  }
+}
+
+
+function worldAgentState(personId) {
+  if (liveEnabled) {
+    const override = liveMeetingOverrides.get(personId);
+    const target = override ?? liveTargets.get(personId);
+    if (target) {
+      const table = target.seat ? tableById(target.seat.tableId) : null;
+      return {
+        personId,
+        status: override ? "in-meeting" : target.state,
+        tableId: target.seat?.tableId ?? null,
+        tableLabel: table?.label ?? "咖啡厅",
+        seatIndex: target.seat?.seatIndex ?? null,
+        meeting: target.state === "in-meeting" || Boolean(override),
+      };
+    }
+  }
+  return npcSystem.getState(personId);
+}
+
+
+function startLiveWorld() {
+  if (!liveEnabled || liveWorld) return;
+  liveWorld = new LiveWorld({
+    intervalMs: snapshotPollMs,
+    mockUrl: publicUrl("data/mock/snapshot.demo.json"),
+  });
+  liveWorld.onSnapshot(applyLiveSnapshot);
+  liveWorld.onEvent(handleLiveEvent);
+  liveWorld.start();
 }
 
 
@@ -571,7 +914,7 @@ function updateRoundtablePrompt() {
 
 
 function refreshDiagnostics() {
-  const states = people.map((person) => npcSystem.getState(person.id));
+  const states = people.map((person) => worldAgentState(person.id));
   const centralCount = states.filter((state) => state?.meeting).length;
   canvas.dataset.playerPosition = [player.position.x, player.position.y, player.position.z]
     .map((value) => value.toFixed(4))
@@ -598,7 +941,8 @@ function animate(timestamp) {
 
   if (worldReady) {
     characterSystem.update(delta, elapsed);
-    npcSystem.update(delta, elapsed);
+    if (liveEnabled) updateLiveAgents(delta);
+    else npcSystem.update(delta, elapsed);
     if (experienceMode === "cafe") {
       updatePlayer(delta);
       if (meetingMode) updateMeetingCamera(delta);
@@ -610,6 +954,7 @@ function animate(timestamp) {
     }
     updateSelectionMarker();
     updateSpeechPositions();
+    updateLiveBubbles();
   }
 
   renderer.render(scene, camera);
@@ -735,6 +1080,10 @@ const loader = new GLTFLoader();
 
 async function boot() {
   setProgress(0.04, "正在读取 Echo Cafe");
+  // 人名映射只拉一次：气泡与 Toast 优先使用资料包里的名字（与 integrations 共享 getPackages 缓存）
+  api.getPackages().then(fillPackageNames).catch((error) => {
+    console.warn("[EchoWorld] api.getPackages() 失败，气泡人名回退为本地数据", error);
+  });
   worldSpec = await loadWorldSpec(assetStore, WORLD_SPEC_URL);
   const assetCatalog = await AssetCatalog.load(
     assetStore,
@@ -784,6 +1133,9 @@ window.__echoWorld = {
   },
   get appView() { return experienceMode; },
   get meetingActive() { return meetingMode; },
+  get liveSource() { return liveWorld?.source ?? null; },
+  get worldTick() { return liveWorldTick; },
+  get integrations() { return integrations; },
   selectPerson: selectWorldPerson,
   startMeeting,
   endMeeting,

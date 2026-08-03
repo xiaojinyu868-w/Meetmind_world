@@ -1,0 +1,40 @@
+{
+  "results": [
+    {
+      "person_id": "lin-che",
+      "name": "林澈",
+      "score": 0.93,
+      "last_encounter": { "time": "2026-07-31T23:10:00+08:00", "place": "EchoWorld 黑客松 · 通宵区" }
+    },
+    {
+      "person_id": "su-he",
+      "name": "苏禾",
+      "score": 0.88,
+      "last_encounter": { "time": "2026-08-02T21:30:00+08:00", "place": "楼下 · 停电的晚上" }
+    },
+    {
+      "person_id": "tang-ke",
+      "name": "唐可",
+      "score": 0.84,
+      "last_encounter": { "time": "2026-04-04T20:00:00+08:00", "place": "南京 · 河堤边的旧篮球场" }
+    },
+    {
+      "person_id": "chen-mo",
+      "name": "陈默",
+      "score": 0.79,
+      "last_encounter": { "time": "2025-01-24T02:30:00+08:00", "place": "工作室 · 上线夜" }
+    },
+    {
+      "person_id": "xu-an",
+      "name": "许安",
+      "score": 0.74,
+      "last_encounter": { "time": "2026-07-28T11:00:00+08:00", "place": "成都 · 独立摄影展" }
+    },
+    {
+      "person_id": "zhou-ning",
+      "name": "周宁",
+      "score": 0.69,
+      "last_encounter": { "time": "2026-05-12T16:00:00+08:00", "place": "杭州 · 老城区河岸" }
+    }
+  ]
+}
