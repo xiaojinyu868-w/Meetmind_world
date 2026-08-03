@@ -2,15 +2,15 @@
 
 ## 版本入口
 
-三套版本共用同一套玩法、桌位、Agent 和碰撞契约，只替换环境资产、人物资产和渲染配置。
+三套版本共用同一套玩法、桌位、Agent 和碰撞契约，只替换环境资产和渲染配置。人物资产现在由独立的人物方案参数决定。
 
-| 版本 | 地址参数 | 环境 | 人物 | 视觉目标 |
-| --- | --- | --- | --- | --- |
-| V1 原始 | `?scene=v1` | `echo_world_lowpoly_cafe.glb` | `echo_world_faceless_person.glb` | 保留此前粉彩咖啡厅 |
-| V2 几何 | `?scene=v2` | `echo_world_cafe_reference-lowpoly-v2.glb` | `echo_world_faceless_reference.glb` | 对齐 `examples/scence` 的硬切面微缩景观 |
-| V3 绘本 | `?scene=v3` | `echo_world_storybook_cafe.glb` | `echo_world_faceless_painterly.glb` | 原创手绘幻想冒险氛围 |
+| 版本 | 地址参数 | 环境 | 视觉目标 |
+| --- | --- | --- | --- |
+| V1 原始 | `?scene=v1` | `echo_world_lowpoly_cafe.glb` | 保留此前粉彩咖啡厅 |
+| V2 几何（归档） | 前端隐藏 | `echo_world_cafe_reference-lowpoly-v2.glb` | 对齐 `examples/scence` 的硬切面微缩景观 |
+| V3 绘本 | `?scene=v3` | `echo_world_storybook_cafe.glb` | 原创手绘幻想冒险氛围 |
 
-未提供参数时默认进入 V2。界面顶部的分段控制可以切换版本；切换会刷新页面，避免旧场景的地面射线、NPC、灯光和材质缓存残留。
+未提供参数时默认进入 V3。界面顶部只提供 V1 与 V3；旧 `?scene=v2` 地址会规范为 V3。切换会刷新页面，避免旧场景的地面射线、NPC、灯光和材质缓存残留。人物生成方案当前只启用 `?character=voxel`，详见 [`PHOTO_CHARACTER_PIPELINES.md`](PHOTO_CHARACTER_PIPELINES.md)。
 
 ## 视觉策略
 

@@ -61,6 +61,7 @@ function paletteMatch(palette, materialName) {
 
 
 function resolveMaterialColor(characterSpec, profile, materialName) {
+  if (characterSpec.lock_texture_colors) return undefined;
   const sources = [
     characterSpec.material_overrides,
     characterSpec.palette?.material_overrides,
@@ -88,12 +89,23 @@ export class CharacterSystem {
   }
 
   async spawn(characterSpec) {
-    const asset = this.assetCatalog.resolve(characterSpec.asset_id, "character");
     const profilePromise = this.#resolveProfile(characterSpec);
-    const [sourceScene, profile] = await Promise.all([
-      this.assetStore.loadScene(asset.resolvedUrl),
-      profilePromise,
-    ]);
+    const profile = await profilePromise;
+    let resolvedAssetId = characterSpec.asset_id;
+    let sourceScene;
+    try {
+      const asset = this.assetCatalog.resolve(resolvedAssetId, "character");
+      sourceScene = await this.assetStore.loadScene(asset.resolvedUrl);
+    } catch (error) {
+      if (!characterSpec.fallback_asset_id) throw error;
+      console.warn(
+        `Character asset ${resolvedAssetId} failed; using ${characterSpec.fallback_asset_id}`,
+        error,
+      );
+      resolvedAssetId = characterSpec.fallback_asset_id;
+      const fallbackAsset = this.assetCatalog.resolve(resolvedAssetId, "character");
+      sourceScene = await this.assetStore.loadScene(fallbackAsset.resolvedUrl);
+    }
 
     if (
       profile?.person_id &&
@@ -124,6 +136,7 @@ export class CharacterSystem {
       }
 
       const instanceMaterial = sourceMaterial.clone();
+      this.#configureTexture(instanceMaterial.map, characterSpec.texture_filter);
       const color = resolveMaterialColor(
         characterSpec,
         profile,
@@ -168,6 +181,7 @@ export class CharacterSystem {
       model,
       profile,
       spec: characterSpec,
+      resolvedAssetId,
       instanceId: characterSpec.instance_id,
       materials,
       baseY: root.position.y,
@@ -175,6 +189,17 @@ export class CharacterSystem {
     };
     this.entities.push(entity);
     return entity;
+  }
+
+  #configureTexture(texture, filterMode) {
+    if (!texture) return;
+    texture.colorSpace = THREE.SRGBColorSpace;
+    if (filterMode === "nearest") {
+      texture.magFilter = THREE.NearestFilter;
+      texture.minFilter = THREE.NearestMipmapNearestFilter;
+      texture.generateMipmaps = true;
+      texture.needsUpdate = true;
+    }
   }
 
   async spawnAll(characterSpecs) {

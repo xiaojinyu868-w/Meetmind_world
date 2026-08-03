@@ -218,11 +218,15 @@ svg {
   gap: 14px;
 }
 
-.scene-variant-switcher {
+.variant-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.variant-switcher {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 3px;
-  width: 214px;
   padding: 4px;
   border: 1px solid rgb(255 255 255 / 52%);
   border-radius: 16px;
@@ -231,7 +235,27 @@ svg {
   backdrop-filter: blur(20px) saturate(1.12);
 }
 
-.scene-variant-switcher button {
+.variant-switcher--scene {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 214px;
+}
+
+.variant-switcher--character {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 166px;
+}
+
+.variant-switcher--scene[data-option-count="2"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 148px;
+}
+
+.variant-switcher--character[data-option-count="1"] {
+  grid-template-columns: 1fr;
+  width: 88px;
+}
+
+.variant-switcher button {
   min-width: 0;
   height: 32px;
   padding: 0 9px;
@@ -244,22 +268,22 @@ svg {
   transition: color 160ms ease, background 160ms ease, box-shadow 160ms ease;
 }
 
-.scene-variant-switcher button:hover {
+.variant-switcher button:hover {
   color: var(--ink);
   background: rgb(255 255 255 / 56%);
 }
 
-.scene-variant-switcher button[aria-pressed="true"] {
+.variant-switcher button[aria-pressed="true"] {
   color: #fffdf4;
   background: var(--green);
   box-shadow: 0 5px 14px rgb(25 82 69 / 20%);
 }
 
-.scene-variant-switcher--intro {
+.variant-controls--intro {
   color: var(--ink);
 }
 
-.scene-variant-switcher--cafe {
+.variant-controls--cafe {
   position: absolute;
   z-index: 11;
   top: max(92px, calc(env(safe-area-inset-top) + 74px));
@@ -1597,17 +1621,34 @@ body:not([data-view="cafe"]) .touch-stick {
     gap: 0;
   }
 
-  .scene-variant-switcher {
+  .variant-controls--intro,
+  .variant-controls--cafe {
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .variant-switcher--scene {
     width: 174px;
   }
 
-  .scene-variant-switcher button {
+  .variant-switcher--character {
+    width: 150px;
+  }
+
+  .variant-switcher button {
     height: 30px;
     padding: 0 6px;
     font-size: 9px;
   }
 
-  .scene-variant-switcher--cafe {
+  .variant-controls--intro {
+    position: absolute;
+    top: max(70px, calc(env(safe-area-inset-top) + 60px));
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .variant-controls--cafe {
     top: max(72px, calc(env(safe-area-inset-top) + 62px));
   }
 

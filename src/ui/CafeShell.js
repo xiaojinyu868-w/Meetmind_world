@@ -68,17 +68,49 @@ function hydrateIcons(root) {
 }
 
 
-function sceneVariantSwitcherMarkup(sceneVariants, activeSceneVariant, context) {
+function variantSwitcherMarkup({ variants, activeVariant, context, kind, label }) {
   return `
-    <div class="scene-variant-switcher scene-variant-switcher--${context}" role="group" aria-label="场景风格">
-      ${sceneVariants.map((variant) => `
+    <div
+      class="variant-switcher variant-switcher--${kind}"
+      data-option-count="${variants.length}"
+      role="group"
+      aria-label="${escapeHtml(label)}"
+    >
+      ${variants.map((variant) => `
         <button
           type="button"
-          data-scene-variant="${escapeHtml(variant.id)}"
-          aria-pressed="${variant.id === activeSceneVariant.id}"
+          data-${kind}-variant="${escapeHtml(variant.id)}"
+          aria-pressed="${variant.id === activeVariant.id}"
           title="${escapeHtml(variant.title)}"
         >${escapeHtml(variant.label)}</button>
       `).join("")}
+    </div>`;
+}
+
+
+function variantControlsMarkup({
+  sceneVariants,
+  activeSceneVariant,
+  characterVariants,
+  activeCharacterVariant,
+  context,
+}) {
+  return `
+    <div class="variant-controls variant-controls--${context}">
+      ${variantSwitcherMarkup({
+        variants: sceneVariants,
+        activeVariant: activeSceneVariant,
+        context,
+        kind: "scene",
+        label: "场景风格",
+      })}
+      ${variantSwitcherMarkup({
+        variants: characterVariants,
+        activeVariant: activeCharacterVariant,
+        context,
+        kind: "character",
+        label: "人物生成方案",
+      })}
     </div>`;
 }
 
@@ -121,8 +153,11 @@ export function createCafeShell({
   relationships,
   sceneVariants = [],
   activeSceneVariant = null,
+  characterVariants = [],
+  activeCharacterVariant = null,
   onViewChange = () => {},
   onSceneVariantChange = () => {},
+  onCharacterVariantChange = () => {},
   onLocatePerson = () => {},
   onMeetingStart = async () => {},
   onMeetingEnd = async () => {},
@@ -151,7 +186,13 @@ export function createCafeShell({
             <span><strong>EchoWorld</strong><small>AGENT RELATIONSHIP CAFE</small></span>
           </div>
           <div class="intro-actions">
-            ${activeSceneVariant ? sceneVariantSwitcherMarkup(sceneVariants, activeSceneVariant, "intro") : ""}
+            ${activeSceneVariant && activeCharacterVariant ? variantControlsMarkup({
+              sceneVariants,
+              activeSceneVariant,
+              characterVariants,
+              activeCharacterVariant,
+              context: "intro",
+            }) : ""}
             <div class="intro-live"><span></span>6 个 Agent 已抵达</div>
           </div>
         </header>
@@ -188,7 +229,13 @@ export function createCafeShell({
           </button>
         </header>
 
-        ${activeSceneVariant ? sceneVariantSwitcherMarkup(sceneVariants, activeSceneVariant, "cafe") : ""}
+        ${activeSceneVariant && activeCharacterVariant ? variantControlsMarkup({
+          sceneVariants,
+          activeSceneVariant,
+          characterVariants,
+          activeCharacterVariant,
+          context: "cafe",
+        }) : ""}
 
         <div id="world-speech-layer" class="world-speech-layer" aria-live="polite"></div>
 
@@ -408,6 +455,11 @@ export function createCafeShell({
       return;
     }
 
+    if (target.dataset.characterVariant) {
+      onCharacterVariantChange(target.dataset.characterVariant);
+      return;
+    }
+
     if (target.dataset.action === "enter-cafe") {
       setView("cafe");
       return;
@@ -563,8 +615,18 @@ export function createCafeShell({
     positionSpeech(personId, x, y, visible) {
       const bubble = speechLayer.querySelector(`[data-speech-person="${personId}"]`);
       if (!bubble) return;
-      bubble.style.left = `${x}px`;
-      bubble.style.top = `${y}px`;
+      const compact = window.innerWidth <= 700;
+      const bubbleWidth = compact
+        ? Math.min(190, window.innerWidth * 0.52)
+        : Math.min(230, window.innerWidth * 0.42);
+      const horizontalMargin = bubbleWidth * 0.5 + 12;
+      const safeX = Math.min(
+        Math.max(x, horizontalMargin),
+        window.innerWidth - horizontalMargin,
+      );
+      const safeY = Math.max(y, compact ? 252 : 244);
+      bubble.style.left = `${safeX}px`;
+      bubble.style.top = `${safeY}px`;
       bubble.style.visibility = visible ? "visible" : "hidden";
     },
     showToast,

@@ -4,7 +4,6 @@ export const SCENE_VARIANTS = Object.freeze([
     label: "原始",
     title: "原始咖啡厅",
     environmentAssetId: "environment.cafe.v1",
-    characterAssetId: "character.faceless-prototype.v1",
     visualProfile: "current",
   }),
   Object.freeze({
@@ -12,7 +11,6 @@ export const SCENE_VARIANTS = Object.freeze([
     label: "几何",
     title: "几何 Low-poly",
     environmentAssetId: "environment.cafe.reference.v1",
-    characterAssetId: "character.faceless-reference-lowpoly.v1",
     visualProfile: "referenceLowpoly",
   }),
   Object.freeze({
@@ -20,12 +18,15 @@ export const SCENE_VARIANTS = Object.freeze([
     label: "绘本",
     title: "绘本冒险",
     environmentAssetId: "environment.cafe.painterly.v1",
-    characterAssetId: "character.faceless-painterly-adventure.v1",
     visualProfile: "painterlyAdventure",
   }),
 ]);
 
-export const DEFAULT_SCENE_VARIANT_ID = "v2";
+export const SCENE_VARIANT_OPTIONS = Object.freeze(
+  SCENE_VARIANTS.filter((variant) => variant.id !== "v2"),
+);
+
+export const DEFAULT_SCENE_VARIANT_ID = "v3";
 
 
 export function sceneVariantById(value) {
@@ -36,14 +37,14 @@ export function sceneVariantById(value) {
 export function sceneVariantFromLocation(location = window.location) {
   const requested = new URLSearchParams(location.search).get("scene");
   return (
-    sceneVariantById(requested) ??
-    sceneVariantById(DEFAULT_SCENE_VARIANT_ID)
+    SCENE_VARIANT_OPTIONS.find((variant) => variant.id === requested) ??
+    SCENE_VARIANT_OPTIONS.find((variant) => variant.id === DEFAULT_SCENE_VARIANT_ID)
   );
 }
 
 
 export function navigateToSceneVariant(variantId, location = window.location) {
-  const variant = sceneVariantById(variantId);
+  const variant = SCENE_VARIANT_OPTIONS.find((candidate) => candidate.id === variantId);
   if (!variant) return false;
   const nextUrl = new URL(location.href);
   nextUrl.searchParams.set("scene", variant.id);

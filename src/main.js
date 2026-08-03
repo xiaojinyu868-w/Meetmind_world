@@ -6,7 +6,13 @@ import { CAFE_LAYOUT } from "./runtime/CafeLayout.js";
 import { CharacterSystem } from "./runtime/CharacterSystem.js";
 import { NpcAgentSystem } from "./runtime/NpcAgentSystem.js";
 import {
-  SCENE_VARIANTS,
+  CHARACTER_VARIANT_OPTIONS,
+  characterAssetId,
+  characterVariantFromLocation,
+  navigateToCharacterVariant,
+} from "./runtime/CharacterVariants.js";
+import {
+  SCENE_VARIANT_OPTIONS,
   navigateToSceneVariant,
   sceneVariantFromLocation,
 } from "./runtime/SceneVariants.js";
@@ -22,7 +28,26 @@ import "./cafe.css";
 
 const WORLD_SPEC_URL = publicUrl("data/world-spec.json");
 const activeSceneVariant = sceneVariantFromLocation();
-const CHARACTER_ASSET_ID = activeSceneVariant.characterAssetId;
+const activeCharacterVariant = characterVariantFromLocation();
+const canonicalUrl = new URL(window.location.href);
+let replaceCanonicalUrl = false;
+if (
+  canonicalUrl.searchParams.has("scene") &&
+  canonicalUrl.searchParams.get("scene") !== activeSceneVariant.id
+) {
+  canonicalUrl.searchParams.set("scene", activeSceneVariant.id);
+  replaceCanonicalUrl = true;
+}
+if (
+  canonicalUrl.searchParams.has("character") &&
+  canonicalUrl.searchParams.get("character") !== activeCharacterVariant.id
+) {
+  canonicalUrl.searchParams.set("character", activeCharacterVariant.id);
+  replaceCanonicalUrl = true;
+}
+if (replaceCanonicalUrl) {
+  window.history.replaceState(window.history.state, "", canonicalUrl);
+}
 const MOVE_SPEED = 2.7;
 const PLAYER_FOOT_OFFSET = 0.018;
 const SEATED_SCALE_Y = 0.82;
@@ -118,11 +143,16 @@ const appShell = createCafeShell({
   currentUser,
   people,
   relationships,
-  sceneVariants: SCENE_VARIANTS,
+  sceneVariants: SCENE_VARIANT_OPTIONS,
   activeSceneVariant,
+  characterVariants: CHARACTER_VARIANT_OPTIONS,
+  activeCharacterVariant,
   onViewChange: setExperienceMode,
   onSceneVariantChange: (variantId) => {
     if (variantId !== activeSceneVariant.id) navigateToSceneVariant(variantId);
+  },
+  onCharacterVariantChange: (variantId) => {
+    if (variantId !== activeCharacterVariant.id) navigateToCharacterVariant(variantId);
   },
   onLocatePerson: (person) => selectWorldPerson(person.id),
   onMeetingStart: startMeeting,
@@ -132,6 +162,7 @@ const appShell = createCafeShell({
 canvas.dataset.ready = "false";
 canvas.dataset.appView = experienceMode;
 canvas.dataset.roundtableReserved = "true";
+canvas.dataset.characterVariant = activeCharacterVariant.id;
 
 
 function resizeRenderer() {
@@ -182,7 +213,10 @@ function characterSpec(person, instanceId, spawn, idleBob = 0.005) {
   return {
     instance_id: instanceId,
     person_id: person.id,
-    asset_id: CHARACTER_ASSET_ID,
+    asset_id: characterAssetId(activeCharacterVariant, person.id),
+    fallback_asset_id: activeCharacterVariant.fallbackAssetId,
+    texture_filter: activeCharacterVariant.textureFilter,
+    lock_texture_colors: true,
     profile: {
       person_id: person.id,
       display_name: person.displayName ?? person.name,
@@ -756,6 +790,7 @@ window.__echoWorld = {
   get camera() { return camera; },
   get worldSpec() { return worldSpec; },
   get sceneVariant() { return activeSceneVariant; },
+  get characterVariant() { return activeCharacterVariant; },
   get characters() { return characterSystem?.entities ?? []; },
   get agentStates() {
     return people.map((person) => npcSystem?.getState(person.id)).filter(Boolean);
