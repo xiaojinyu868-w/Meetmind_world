@@ -19,7 +19,12 @@ import logging
 import math
 import random
 
-from app.agents.utils.jsonish import extract_json
+from app.agents.dialogue import (
+    build_pair_context,
+    llm_dialogue,
+    tag_set as _tag_set,
+    template_dialogue,
+)
 from app.harness.permissions.guard import DEFAULT_GUARD
 
 logger = logging.getLogger(__name__)
@@ -28,19 +33,6 @@ VISIT_PROBABILITY = 1 / 8      # 每 tick 触发串门的概率（10s 轮询 ≈
 VISIT_COOLDOWN_TICKS = 2       # 一场结束后的冷却
 MEET_POINT_OFFSET = 0.9        # 展位前方站位点距离（米）
 TALK_LINE_GAP_TICKS = 1        # 两句对话之间的 tick 间隔
-
-_TAG_SEPARATORS = ("、", ",", "，", " ", "/", "；")
-
-
-def _tag_set(view: dict | None) -> set:
-    """把授权视图的 tags（可能是 "a、b、c" 连写）拆成单个标签集合。"""
-    tags = set()
-    for value in (view or {}).get("tags") or []:
-        piece = str(value)
-        for sep in _TAG_SEPARATORS:
-            piece = piece.replace(sep, " ")
-        tags.update(token for token in piece.split() if token)
-    return tags
 
 
 class HallRuntime:
@@ -125,6 +117,12 @@ class HallRuntime:
             "yaw": host_booth["yaw"] + math.pi,
         }
         lines = self._dialogue(visitor_id, host_id, common_tags)
+        if not lines:
+            # 信息量闸门拦下：本次串门取消，世界保持安静（不进任何事件）
+            self._cooldown = VISIT_COOLDOWN_TICKS
+            return
+        if self._memory is not None:
+            self._memory.record_interaction(visitor_id, host_id)
         self._visit = {
             "visitor": visitor_id, "host": host_id, "common_tags": common_tags,
             "meet": meet, "anchor": dict(booths[visitor_id]["position"]),
@@ -167,69 +165,37 @@ class HallRuntime:
         self._emit({"type": "agent-talk", "agent_id": speaker,
                     "to_agent_id": listener, "text": text})
 
-    # ---------- 对话生成（围绕共同标签，只用授权上下文） ----------
+    # ---------- 对话生成（共同上下文驱动 + 信息量闸门，INTERACTION-DESIGN §3） ----------
 
     def _dialogue(self, visitor_id: str, host_id: str, common_tags: list) -> list:
-        view_v = self._authorized_view(visitor_id)
-        view_h = self._authorized_view(host_id)
+        """生成串门对话，返回 [(speaker_id, listener_id, text)]；被信息量闸门
+        拦下（informative=false）时返回 []（调用方取消本次串门，保持安静）。"""
+        pair = build_pair_context(self._memory, visitor_id, host_id)
+        raw_lines = None
         if self._chat is not None and self._chat.config.get("configured"):
-            lines = self._dialogue_with_llm(visitor_id, host_id, view_v, view_h,
-                                            common_tags)
-            if lines:
-                return lines
-        return self._dialogue_with_rules(visitor_id, host_id, view_v, view_h,
-                                         common_tags)
+            result = llm_dialogue(self._chat, pair, max_lines=2)
+            if result is not None:
+                if not result["informative"]:
+                    logger.info("大厅对话被信息量闸门拦下：%s ↔ %s", visitor_id, host_id)
+                    return []
+                raw_lines = result["lines"]
+        if not raw_lines:
+            raw_lines = template_dialogue(pair, visitor_id, host_id)  # 兜底视为 informative=true
+        return self._map_lines(raw_lines, visitor_id, host_id)
 
-    def _dialogue_with_llm(self, visitor_id, host_id, view_v, view_h,
-                           common_tags) -> list:
-        import json as _json
-
-        context = {
-            "A": view_v or {"name": visitor_id, "tags": []},
-            "B": view_h or {"name": host_id, "tags": []},
-            "common_tags": common_tags,
-        }
-        messages = [
-            {"role": "system", "content": (
-                "你在为展厅里两个 Agent 写串门对话。规则：1-2 句简短中文，围绕给定的"
-                "共同标签，自然克制；只能使用授权上下文里的信息，禁止编造对方的未授权"
-                "信息。只输出 JSON：{\"lines\": [{\"speaker\": \"A|B\", \"text\": \"...\"}]}。"
-            )},
-            {"role": "user", "content": "授权上下文（≥ agent-usable）："
-             + _json.dumps(context, ensure_ascii=False)},
-        ]
-        response = self._chat.chat(messages, response_format={"type": "json_object"})
-        if response.mock:
-            return []
-        data = extract_json(response.text)
-        if not data or not isinstance(data.get("lines"), list):
-            logger.warning("大厅对话生成解析失败，回退模板：%.80s", response.text)
-            return []
-        ids = {"A": (visitor_id, host_id), "B": (host_id, visitor_id)}
-        lines = []
-        for item in data["lines"][:2]:
-            if not isinstance(item, dict):
+    @staticmethod
+    def _map_lines(raw_lines: list, id_a: str, id_b: str) -> list:
+        """把 ("A"|"B", text) 或 (speaker_id, listener_id, text) 统一成三元组。"""
+        ids = {"A": (id_a, id_b), "B": (id_b, id_a)}
+        mapped = []
+        for item in raw_lines:
+            if len(item) == 3:  # 模板兜底已带 id 三元组
+                mapped.append(item)
                 continue
-            speaker = ids.get(item.get("speaker"))
-            text = str(item.get("text") or "").strip()
-            if speaker and text:
-                lines.append((speaker[0], speaker[1], text[:120]))
-        return lines
-
-    def _dialogue_with_rules(self, visitor_id, host_id, view_v, view_h,
-                             common_tags) -> list:
-        name_v = (view_v or {}).get("name") or visitor_id
-        name_h = (view_h or {}).get("name") or host_id
-        if common_tags:
-            tag = common_tags[0]
-            return [
-                (visitor_id, host_id, f"{name_h}，原来你也在关注{tag}？找时间得跟你请教。"),
-                (host_id, visitor_id, f"客气了，{name_v}。咱们回头细聊。"),
-            ]
-        return [
-            (visitor_id, host_id, f"{name_h}，好久不见，过来跟你打个招呼。"),
-            (host_id, visitor_id, f"欢迎，{name_v}，最近怎么样？"),
-        ]
+            speaker, text = item
+            if speaker in ids:
+                mapped.append((ids[speaker][0], ids[speaker][1], text))
+        return mapped
 
     # ---------- 工具 ----------
 

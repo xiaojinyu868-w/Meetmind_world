@@ -19,7 +19,7 @@ import logging
 import math
 import random
 
-from app.agents.llm.base import LLMResponse
+from app.agents.dialogue import build_pair_context, llm_dialogue, template_dialogue
 from app.agents.skills import load_skill
 from app.agents.utils.jsonish import extract_json
 from app.harness.permissions.guard import DEFAULT_GUARD
@@ -230,18 +230,19 @@ class AgentRuntime:
             "state": "walking",
         })
 
-    # ---------- 对话生成（授权上下文 ≥ L2，绝不携带 self-only） ----------
+    # ---------- 对话生成（共同上下文驱动 + 信息量闸门，INTERACTION-DESIGN §3） ----------
 
     def _talk(self, tick_no: int, agent: dict, target: dict) -> None:
         last = max(self._last_talk_tick.get(agent["id"], -99),
                    self._last_talk_tick.get(target["id"], -99))
         if tick_no - last < TALK_COOLDOWN_TICKS:
             return
-        view_a = self._authorized_view(agent["id"])
-        view_b = self._authorized_view(target["id"])
-        lines = self._generate_dialogue(agent, target, view_a, view_b)
+        pair = build_pair_context(self._memory, agent["id"], target["id"])
+        lines = self._generate_dialogue(agent, target, pair)
         if not lines:
-            return
+            return  # 信息量闸门拦下：世界保持安静，不发任何事件
+        if self._memory is not None:
+            self._memory.record_interaction(agent["id"], target["id"])
         self._last_talk_tick[agent["id"]] = tick_no
         self._last_talk_tick[target["id"]] = tick_no
         for speaker_id, listener_id, text in lines:
@@ -250,71 +251,29 @@ class AgentRuntime:
         self._emit({"type": "agent-state", "agent_id": agent["id"], "state": "talking"})
         self._emit({"type": "agent-state", "agent_id": target["id"], "state": "talking"})
 
-    def _authorized_view(self, person_id: str) -> dict | None:
-        if self._memory is None:
-            return None
-        return self._memory.authorized_agent_view(person_id)
-
-    def _generate_dialogue(self, agent: dict, target: dict,
-                           view_a: dict | None, view_b: dict | None) -> list:
-        """生成 1-3 句简短中文对话，返回 [(speaker_id, listener_id, text)]。
-
-        LLM 路径：prompt 只含授权视图（name/tags/places/memory_lines）；
-        兜底路径：模板拼装，同样只用授权视图里的字段。
-        """
+    def _generate_dialogue(self, agent: dict, target: dict, pair: dict) -> list:
+        """LLM 生成（含 informative 自评）；被拦返回 []；兜底模板视为 informative=true。"""
+        raw_lines = None
         if self._chat is not None and self._chat.config.get("configured"):
-            lines = self._dialogue_with_llm(agent, target, view_a, view_b)
-            if lines:
-                return lines
-        return self._dialogue_with_rules(agent, target, view_a, view_b)
-
-    def _dialogue_with_llm(self, agent, target, view_a, view_b) -> list:
-        context = {
-            "A": view_a or {"name": agent["id"], "tags": []},
-            "B": view_b or {"name": target["id"], "tags": []},
-        }
-        messages = [
-            {"role": "system", "content": (
-                "你在为咖啡厅里的两个 Agent 写偶遇对话。规则：1-3 句简短中文，自然、克制；"
-                "只能使用给定授权上下文里的信息，禁止编造对方的未授权信息；"
-                "不知道就聊咖啡/天气/咖啡厅。只输出 JSON："
-                "{\"lines\": [{\"speaker\": \"A|B\", \"text\": \"...\"}]}。"
-            )},
-            {"role": "user", "content": "授权上下文（≥ agent-usable）："
-             + json.dumps(context, ensure_ascii=False)},
-        ]
-        response = self._chat.chat(messages, response_format={"type": "json_object"})
-        if response.mock:
-            return []
-        data = extract_json(response.text)
-        if not data or not isinstance(data.get("lines"), list):
-            logger.warning("对话生成解析失败，回退模板：%.80s", response.text)
-            return []
+            result = llm_dialogue(self._chat, pair, max_lines=3)
+            if result is not None:
+                if not result["informative"]:
+                    logger.info("咖啡厅对话被信息量闸门拦下：%s ↔ %s",
+                                agent["id"], target["id"])
+                    return []
+                raw_lines = result["lines"]
+        if not raw_lines:
+            raw_lines = template_dialogue(pair, agent["id"], target["id"])
         ids = {"A": (agent["id"], target["id"]), "B": (target["id"], agent["id"])}
-        lines = []
-        for item in data["lines"][:3]:
-            if not isinstance(item, dict):
+        mapped = []
+        for item in raw_lines:
+            if len(item) == 3:  # 模板兜底已带 id 三元组
+                mapped.append(item)
                 continue
-            speaker = ids.get(item.get("speaker"))
-            text = str(item.get("text") or "").strip()
-            if speaker and text:
-                lines.append((speaker[0], speaker[1], text[:120]))
-        return lines
-
-    def _dialogue_with_rules(self, agent, target, view_a, view_b) -> list:
-        tags_a = (view_a or {}).get("tags") or []
-        tags_b = (view_b or {}).get("tags") or []
-        name_a = (view_a or {}).get("name") or agent["id"]
-        name_b = (view_b or {}).get("name") or target["id"]
-        if tags_a and tags_b:
-            return [
-                (agent["id"], target["id"], f"{name_b}，最近还在忙{tags_b[0]}的事吗？"),
-                (target["id"], agent["id"], f"是啊。你呢，{tags_a[0]}那边有什么新动静？"),
-            ]
-        return [
-            (agent["id"], target["id"], "今天咖啡厅人不少。"),
-            (target["id"], agent["id"], f"是啊，{name_a}，坐会儿吗？"),
-        ]
+            speaker, text = item
+            if speaker in ids:
+                mapped.append((ids[speaker][0], ids[speaker][1], text))
+        return mapped
 
     # ---------- 工具 ----------
 

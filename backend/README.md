@@ -55,11 +55,14 @@ app/
   agents/
     runtime.py            Agent Runtime：每 tick 读 skill + 快照调 chat provider 决策
                           （JSON 约束 move/visit/sit/talk），失败回退规则驱动；
-                          对话生成只用授权视图（≥ L2）；圆桌会议周期调度；
-                          一切输出只发事件且先过 guard 事件白名单
+                          圆桌会议周期调度；一切输出只发事件且先过 guard 事件白名单
     hall_runtime.py       大厅串门调度器：有目的的稀疏活动（默认 1/8 概率），
                           配对由 ≥L2 共同 tags / relations.md 关联驱动，
-                          状态机 going→talking→returning，对话围绕共同标签
+                          状态机 going→talking→returning
+    dialogue.py           对话生成共享层（INTERACTION-DESIGN §3）：pair context
+                          （共同 tags/relations.md 关系备注/最近互动时间）注入 prompt，
+                          LLM 生成 + informative 自评（false 被闸门拦下不入缓冲，
+                          自评异常默认放行），模板兜底带关系备注变体
     llm/base.py           LLMProvider 抽象（OpenAI 兼容模板 + 审计留痕）+ 按角色注册表
     llm/deepseek.py       chat 角色（deepseek-chat，决策/对话/摘要），未配置降级 mock
     llm/qwen.py           vision 角色（qwen-vl 图像理解：人脸候选/场景标签）
