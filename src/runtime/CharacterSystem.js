@@ -78,11 +78,12 @@ function resolveMaterialColor(characterSpec, profile, materialName) {
 
 
 export class CharacterSystem {
-  constructor({ scene, assetStore, assetCatalog, resolveSurfaceY }) {
+  constructor({ scene, assetStore, assetCatalog, resolveSurfaceY, materialAdapter = null }) {
     this.scene = scene;
     this.assetStore = assetStore;
     this.assetCatalog = assetCatalog;
     this.resolveSurfaceY = resolveSurfaceY;
+    this.materialAdapter = materialAdapter;
     this.entities = [];
   }
 
@@ -132,9 +133,13 @@ export class CharacterSystem {
         instanceMaterial.color.set(color);
         instanceMaterial.needsUpdate = true;
       }
-      materialClones.set(sourceMaterial, instanceMaterial);
-      materials.add(instanceMaterial);
-      return instanceMaterial;
+      const finalMaterial = this.materialAdapter
+        ? this.materialAdapter(instanceMaterial)
+        : instanceMaterial;
+      if (finalMaterial !== instanceMaterial) instanceMaterial.dispose();
+      materialClones.set(sourceMaterial, finalMaterial);
+      materials.add(finalMaterial);
+      return finalMaterial;
     };
 
     root.name = `PERSON_${characterSpec.instance_id}`;

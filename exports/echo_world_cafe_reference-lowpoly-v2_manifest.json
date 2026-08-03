@@ -1,0 +1,74 @@
+{
+  "name": "EchoWorld Cafe Reference Lowpoly V2",
+  "version": "reference-lowpoly-v2",
+  "seed": 26080302,
+  "style": "faceted pastoral diorama; grass green, mustard, wood; hard sunlight",
+  "blend": "blender/echo_world_cafe_reference-lowpoly-v2.blend",
+  "glb": "exports/echo_world_cafe_reference-lowpoly-v2.glb",
+  "runtime_glb": "public/models/echo_world_cafe_reference-lowpoly-v2.glb",
+  "preview": "renders/echo_world_cafe_reference-lowpoly-v2_preview.png",
+  "root": "ROOT_Cafe",
+  "ground": "GROUND_CafeFloor",
+  "spawn": "ANCHOR_PlayerSpawn",
+  "central_table": "TABLE_Central6",
+  "interaction": "INTERACT_CentralTable",
+  "tables": {
+    "central": [
+      "TABLE_Central6"
+    ],
+    "two_person": [
+      "TABLE_2_01",
+      "TABLE_2_02"
+    ],
+    "four_person": [
+      "TABLE_4_01",
+      "TABLE_4_02"
+    ]
+  },
+  "seats": {
+    "central": [
+      "SEAT_Central6_01",
+      "SEAT_Central6_02",
+      "SEAT_Central6_03",
+      "SEAT_Central6_04",
+      "SEAT_Central6_05",
+      "SEAT_Central6_06"
+    ],
+    "two_person": [
+      "SEAT_2_01_01",
+      "SEAT_2_01_02",
+      "SEAT_2_02_01",
+      "SEAT_2_02_02"
+    ],
+    "four_person": [
+      "SEAT_4_01_01",
+      "SEAT_4_01_02",
+      "SEAT_4_01_03",
+      "SEAT_4_01_04",
+      "SEAT_4_02_01",
+      "SEAT_4_02_02",
+      "SEAT_4_02_03",
+      "SEAT_4_02_04"
+    ],
+    "total": 18
+  },
+  "contract": {
+    "unit": "meter",
+    "origin": "room center on finished floor",
+    "room_m": [
+      12.0,
+      10.0,
+      3.4
+    ],
+    "floor_top_z": 0.0,
+    "seat_height_m": 0.46,
+    "table_height_m": 0.76,
+    "player_spawn_xyz": [
+      0.0,
+      -4.15,
+      0.0
+    ],
+    "up_axis_export": "+Y via glTF",
+    "anchor_layout": "identical to cafe v1"
+  }
+}

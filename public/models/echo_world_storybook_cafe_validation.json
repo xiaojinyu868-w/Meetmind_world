@@ -1,0 +1,47 @@
+{
+  "schema_version": "echo-storybook-cafe-validation.v1",
+  "file": "public/models/echo_world_storybook_cafe.glb",
+  "import_status": "ok",
+  "root_node": "ROOT_Cafe",
+  "objects": 695,
+  "empty_nodes": 69,
+  "mesh_objects": 626,
+  "vertices": 38684,
+  "triangles": 17786,
+  "degenerate_triangles": 0,
+  "material_count": 54,
+  "glb_bytes": 1740336,
+  "bounds_after_reimport": {
+    "min_xyz": [
+      -8.1434,
+      -5.0,
+      -0.7
+    ],
+    "max_xyz": [
+      7.25,
+      10.0,
+      4.5308
+    ],
+    "size_xyz": [
+      15.3934,
+      15.0,
+      5.2308
+    ]
+  },
+  "contract_checks": {
+    "root_at_origin": true,
+    "ground_mesh_present": true,
+    "floor_top_z_m": 0.0,
+    "all_18_seats_present": true,
+    "all_18_seats_at_expected_coordinates": true,
+    "maximum_anchor_error_m": 0.00034,
+    "player_spawn_present": true,
+    "five_tables_present": true,
+    "central_interaction_present": true,
+    "required_fixtures_present": true,
+    "preview_nodes_excluded": true,
+    "no_degenerate_triangles": true,
+    "triangle_budget_30000": true,
+    "material_budget_56": true
+  }
+}

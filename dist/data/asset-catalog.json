@@ -8,6 +8,20 @@
       "version": 1
     },
     {
+      "asset_id": "environment.cafe.reference.v1",
+      "kind": "environment",
+      "url": "models/echo_world_cafe_reference-lowpoly-v2.glb",
+      "version": 1,
+      "style": "reference-lowpoly"
+    },
+    {
+      "asset_id": "environment.cafe.painterly.v1",
+      "kind": "environment",
+      "url": "models/echo_world_storybook_cafe.glb",
+      "version": 1,
+      "style": "painterly-adventure"
+    },
+    {
       "asset_id": "character.faceless-prototype.v1",
       "kind": "character",
       "url": "models/characters/echo_world_faceless_person.glb",
@@ -15,6 +29,26 @@
       "root_node": "ROOT_FacelessCharacter",
       "height_m": 1.65,
       "face_mode": "featureless"
+    },
+    {
+      "asset_id": "character.faceless-reference-lowpoly.v1",
+      "kind": "character",
+      "url": "models/characters/echo_world_faceless_reference.glb",
+      "version": 1,
+      "root_node": "ROOT_FacelessCharacter",
+      "height_m": 1.65,
+      "face_mode": "featureless",
+      "style": "reference-lowpoly"
+    },
+    {
+      "asset_id": "character.faceless-painterly-adventure.v1",
+      "kind": "character",
+      "url": "models/characters/echo_world_faceless_painterly.glb",
+      "version": 1,
+      "root_node": "ROOT_FacelessCharacter",
+      "height_m": 1.65,
+      "face_mode": "featureless",
+      "style": "painterly-adventure"
     },
     {
       "asset_id": "profile.person-demo-01.v1",

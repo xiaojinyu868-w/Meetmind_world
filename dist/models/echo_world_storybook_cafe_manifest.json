@@ -1,0 +1,77 @@
+{
+  "schema_version": "echo-storybook-cafe.v1",
+  "name": "EchoWorld Storybook Fantasy Cafe",
+  "style": "original warm hand-painted fantasy cafe; faceted silhouettes, layered plants, timber arches, no copied characters or locations",
+  "generator": "blender/build_storybook_cafe.py",
+  "seed": 26080303,
+  "blend": "blender/echo_world_storybook_cafe.blend",
+  "glb": "public/models/echo_world_storybook_cafe.glb",
+  "preview": "renders/echo_world_storybook_cafe_preview.png",
+  "root_node": "ROOT_Cafe",
+  "ground_node": "GROUND_CafeFloor",
+  "spawn_anchor": "ANCHOR_PlayerSpawn",
+  "central_table": "TABLE_Central6",
+  "central_interaction": "INTERACT_CentralTable",
+  "tables": {
+    "central_6": [
+      "TABLE_Central6"
+    ],
+    "two_person": [
+      "TABLE_2_01",
+      "TABLE_2_02"
+    ],
+    "four_person": [
+      "TABLE_4_01",
+      "TABLE_4_02"
+    ]
+  },
+  "seats": {
+    "central_6": [
+      "SEAT_Central6_01",
+      "SEAT_Central6_02",
+      "SEAT_Central6_03",
+      "SEAT_Central6_04",
+      "SEAT_Central6_05",
+      "SEAT_Central6_06"
+    ],
+    "two_person": [
+      "SEAT_2_01_01",
+      "SEAT_2_01_02",
+      "SEAT_2_02_01",
+      "SEAT_2_02_02"
+    ],
+    "four_person": [
+      "SEAT_4_01_01",
+      "SEAT_4_01_02",
+      "SEAT_4_01_03",
+      "SEAT_4_01_04",
+      "SEAT_4_02_01",
+      "SEAT_4_02_02",
+      "SEAT_4_02_03",
+      "SEAT_4_02_04"
+    ],
+    "total": 18,
+    "seat_height_m": 0.46,
+    "seat_forward_axis": "local -Y toward associated table"
+  },
+  "scale_contract": {
+    "unit": "meter",
+    "room_width_m": 12.0,
+    "room_depth_m": 10.0,
+    "wall_height_m": 3.4,
+    "table_height_m": 0.76,
+    "seat_height_m": 0.46,
+    "reference_character_height_m": 1.65,
+    "floor_top_z": 0.0
+  },
+  "coordinate_contract": {
+    "origin": "room center on finished floor",
+    "entry_side": "-Y",
+    "up_axis_export": "+Y via glTF"
+  },
+  "export_excludes": [
+    "STORYBOOK_PreviewOnly collection",
+    "preview camera",
+    "preview lights"
+  ]
+}

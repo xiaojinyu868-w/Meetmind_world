@@ -44,6 +44,18 @@ npm run build
 
 人物生成分工、分支约定和 K3/Agent 跨模块契约见 [`docs/TEAM_WORKSTREAMS.md`](docs/TEAM_WORKSTREAMS.md)。
 
+## 三套场景风格
+
+- `http://127.0.0.1:5173/?scene=v1`：保留原始粉彩咖啡厅。
+- `http://127.0.0.1:5173/?scene=v2`：参考 `examples/scence` 重制的几何 Low-poly 版本，也是默认版本。
+- `http://127.0.0.1:5173/?scene=v3`：原创手绘幻想冒险版本。
+
+三版共用同一套桌位、碰撞、NPC、圆桌会议和人物资料交互。Blender 生成命令、资产统计、GLB 限制和玩法空间契约见 [`docs/SCENE_VARIANTS.md`](docs/SCENE_VARIANTS.md)。
+
+![几何 Low-poly 版本](renders/echo_world_cafe_reference-lowpoly-v2_preview.png)
+
+![绘本冒险版本](renders/echo_world_storybook_cafe_preview.png)
+
 ## 当前限制
 
 - Agent 对话和桌位调度为本地 mock，尚未连接 SSE/WebSocket 服务。

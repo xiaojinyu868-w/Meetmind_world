@@ -1,0 +1,201 @@
+{
+  "version": "reference-lowpoly-v2",
+  "file": "exports/echo_world_cafe_reference-lowpoly-v2.glb",
+  "runtime_file": "public/models/echo_world_cafe_reference-lowpoly-v2.glb",
+  "import_status": "ok",
+  "sha256": "6de49bac88a330ffae0c284a13812df007f4bbd066266d6d3d3852f288f43166",
+  "runtime_copy_byte_identical": true,
+  "anchor_contract": {
+    "status": "compatible with cafe v1",
+    "positions_tolerance_m": 0.0015,
+    "checked_nodes": 26,
+    "seat_anchors": 18,
+    "table_anchors": 5,
+    "positions_xyz": {
+      "ROOT_Cafe": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "ANCHOR_PlayerSpawn": [
+        0.0,
+        -4.15,
+        0.0
+      ],
+      "TABLE_Central6": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "INTERACT_CentralTable": [
+        0.0,
+        -1.18,
+        0.92
+      ],
+      "TABLE_2_01": [
+        -3.65,
+        1.55,
+        0.0
+      ],
+      "TABLE_2_02": [
+        -3.65,
+        -1.55,
+        0.0
+      ],
+      "TABLE_4_01": [
+        3.28,
+        1.35,
+        0.0
+      ],
+      "TABLE_4_02": [
+        3.28,
+        -1.65,
+        0.0
+      ],
+      "SEAT_Central6_01": [
+        0.0,
+        1.57,
+        0.46
+      ],
+      "SEAT_Central6_02": [
+        1.3597,
+        0.785,
+        0.46
+      ],
+      "SEAT_Central6_03": [
+        1.3597,
+        -0.785,
+        0.46
+      ],
+      "SEAT_Central6_04": [
+        0.0,
+        -1.57,
+        0.46
+      ],
+      "SEAT_Central6_05": [
+        -1.3597,
+        -0.785,
+        0.46
+      ],
+      "SEAT_Central6_06": [
+        -1.3597,
+        0.785,
+        0.46
+      ],
+      "SEAT_2_01_01": [
+        -4.53,
+        1.55,
+        0.46
+      ],
+      "SEAT_2_01_02": [
+        -2.77,
+        1.55,
+        0.46
+      ],
+      "SEAT_2_02_01": [
+        -4.53,
+        -1.55,
+        0.46
+      ],
+      "SEAT_2_02_02": [
+        -2.77,
+        -1.55,
+        0.46
+      ],
+      "SEAT_4_01_01": [
+        2.89,
+        0.53,
+        0.46
+      ],
+      "SEAT_4_01_02": [
+        3.67,
+        0.53,
+        0.46
+      ],
+      "SEAT_4_01_03": [
+        2.89,
+        2.17,
+        0.46
+      ],
+      "SEAT_4_01_04": [
+        3.67,
+        2.17,
+        0.46
+      ],
+      "SEAT_4_02_01": [
+        2.89,
+        -2.47,
+        0.46
+      ],
+      "SEAT_4_02_02": [
+        3.67,
+        -2.47,
+        0.46
+      ],
+      "SEAT_4_02_03": [
+        2.89,
+        -0.83,
+        0.46
+      ],
+      "SEAT_4_02_04": [
+        3.67,
+        -0.83,
+        0.46
+      ]
+    }
+  },
+  "objects": 252,
+  "mesh_objects": 212,
+  "materials": [
+    "MAT_V2_Blue",
+    "MAT_V2_Charcoal",
+    "MAT_V2_Cream",
+    "MAT_V2_DioramaEarth",
+    "MAT_V2_Grass",
+    "MAT_V2_GrassDark",
+    "MAT_V2_GrassLight",
+    "MAT_V2_GrassMid",
+    "MAT_V2_GrassWallFacet",
+    "MAT_V2_Lamp",
+    "MAT_V2_Metal",
+    "MAT_V2_Mustard",
+    "MAT_V2_MustardDark",
+    "MAT_V2_MustardWallFacet",
+    "MAT_V2_Orange",
+    "MAT_V2_WindowBlue",
+    "MAT_V2_Wood",
+    "MAT_V2_WoodDark",
+    "MAT_V2_WoodLight"
+  ],
+  "material_count": 19,
+  "vertices": 6416,
+  "triangles": 3157,
+  "bounds_blender_after_reimport": {
+    "min_xyz": [
+      -6.0,
+      -5.0,
+      -0.46
+    ],
+    "max_xyz": [
+      6.0,
+      5.0,
+      3.4
+    ],
+    "size_xyz": [
+      12.0,
+      10.0,
+      3.86
+    ]
+  },
+  "checks": {
+    "ground_mesh_present": true,
+    "player_spawn_compatible": true,
+    "table_and_seat_names_compatible": true,
+    "table_and_seat_positions_compatible": true,
+    "seat_height_m": 0.46,
+    "table_height_m": 0.76,
+    "reference_palette_present": true,
+    "preview_nodes_excluded": true,
+    "runtime_copy_verified": true
+  }
+}

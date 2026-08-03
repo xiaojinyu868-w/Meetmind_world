@@ -67,6 +67,21 @@ function hydrateIcons(root) {
   createIcons({ icons: ICONS, root, attrs: { "stroke-width": 1.8 } });
 }
 
+
+function sceneVariantSwitcherMarkup(sceneVariants, activeSceneVariant, context) {
+  return `
+    <div class="scene-variant-switcher scene-variant-switcher--${context}" role="group" aria-label="场景风格">
+      ${sceneVariants.map((variant) => `
+        <button
+          type="button"
+          data-scene-variant="${escapeHtml(variant.id)}"
+          aria-pressed="${variant.id === activeSceneVariant.id}"
+          title="${escapeHtml(variant.title)}"
+        >${escapeHtml(variant.label)}</button>
+      `).join("")}
+    </div>`;
+}
+
 function inspectorMarkup(person, state, context = "world") {
   const status = STATUS_LABELS[state?.status] ?? "在 Echo Cafe";
   const place = state?.tableLabel ?? "咖啡厅大厅";
@@ -104,7 +119,10 @@ export function createCafeShell({
   currentUser,
   people,
   relationships,
+  sceneVariants = [],
+  activeSceneVariant = null,
   onViewChange = () => {},
+  onSceneVariantChange = () => {},
   onLocatePerson = () => {},
   onMeetingStart = async () => {},
   onMeetingEnd = async () => {},
@@ -132,7 +150,10 @@ export function createCafeShell({
             <span class="cafe-brand-mark">EW</span>
             <span><strong>EchoWorld</strong><small>AGENT RELATIONSHIP CAFE</small></span>
           </div>
-          <div class="intro-live"><span></span>6 个 Agent 已抵达</div>
+          <div class="intro-actions">
+            ${activeSceneVariant ? sceneVariantSwitcherMarkup(sceneVariants, activeSceneVariant, "intro") : ""}
+            <div class="intro-live"><span></span>6 个 Agent 已抵达</div>
+          </div>
         </header>
         <div class="intro-copy">
           <p>YOUR RELATIONSHIPS, IN ONE PLACE</p>
@@ -166,6 +187,8 @@ export function createCafeShell({
             <span><small>人物关系</small><strong>关系 Map</strong></span>
           </button>
         </header>
+
+        ${activeSceneVariant ? sceneVariantSwitcherMarkup(sceneVariants, activeSceneVariant, "cafe") : ""}
 
         <div id="world-speech-layer" class="world-speech-layer" aria-live="polite"></div>
 
@@ -379,6 +402,11 @@ export function createCafeShell({
   root.addEventListener("click", async (event) => {
     const target = event.target.closest("button, a");
     if (!target) return;
+
+    if (target.dataset.sceneVariant) {
+      onSceneVariantChange(target.dataset.sceneVariant);
+      return;
+    }
 
     if (target.dataset.action === "enter-cafe") {
       setView("cafe");
