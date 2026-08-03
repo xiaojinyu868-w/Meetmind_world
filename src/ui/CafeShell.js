@@ -1,12 +1,14 @@
 import {
   ArrowLeft,
   ArrowRight,
+  Activity,
   Armchair,
   Check,
   Clock3,
   Circle,
   Coffee,
   Info,
+  Heart,
   LocateFixed,
   MapPin,
   MessageCircle,
@@ -20,6 +22,8 @@ import {
   Sparkles,
   UserRound,
   Users,
+  Wind,
+  Thermometer,
   X,
   createIcons,
 } from "lucide";
@@ -30,12 +34,14 @@ import { createProfileStore } from "../runtime/ProfileStore.js";
 const ICONS = {
   ArrowLeft,
   ArrowRight,
+  Activity,
   Armchair,
   Check,
   Clock3,
   Circle,
   Coffee,
   Info,
+  Heart,
   LocateFixed,
   MapPin,
   MessageCircle,
@@ -49,6 +55,8 @@ const ICONS = {
   Sparkles,
   UserRound,
   Users,
+  Wind,
+  Thermometer,
   X,
 };
 
@@ -84,6 +92,149 @@ function icon(name, className = "") {
 
 function hydrateIcons(root) {
   createIcons({ icons: ICONS, root, attrs: { "stroke-width": 1.8 } });
+}
+
+function finiteNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function formatSignalValue(value, digits = 0) {
+  const number = finiteNumber(value);
+  return number === null ? "--" : number.toFixed(digits);
+}
+
+function formatSignalTime(value, includeDate = false) {
+  if (!value) return "等待时间戳";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat("zh-CN", {
+    ...(includeDate ? { month: "numeric", day: "numeric" } : {}),
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
+function formatConfidence(value) {
+  const number = finiteNumber(value);
+  if (number === null) return "--";
+  const percent = number <= 1 ? number * 100 : number;
+  return `${Math.round(Math.max(0, Math.min(100, percent)))}%`;
+}
+
+function signalMetricMarkup({ iconName, label, metric, fallbackUnit, fallbackExplanation, digits = 0 }) {
+  const value = metric?.value ?? metric;
+  const unit = metric?.unit ?? fallbackUnit;
+  const status = metric?.status ?? (value === null || value === undefined ? "待接入" : "最近记录");
+  const explanation = metric?.explanation ?? fallbackExplanation ?? "AI 会结合个人基线解释这个指标。";
+  return `
+    <div class="signal-metric">
+      <div class="signal-metric-heading">
+        ${icon(iconName)}
+        <span>${escapeHtml(label)}</span>
+        <small>${escapeHtml(status)}</small>
+      </div>
+      <strong>${formatSignalValue(value, digits)}<small>${escapeHtml(unit ?? "")}</small></strong>
+      <p>${escapeHtml(explanation)}</p>
+    </div>`;
+}
+
+function formatHeartTrend(value) {
+  return ({
+    rising: "上升",
+    steady: "平稳",
+    stable: "稳定",
+    falling: "回落",
+    settling: "趋稳",
+    unknown: "待建立基线",
+  })[value] ?? value ?? "待建立基线";
+}
+
+function formatReliability(value) {
+  const label = ({ high: "高", medium: "中", low: "低", pending: "待评估" })[value];
+  return label ?? formatConfidence(value);
+}
+
+function personSignalMarkup(person, snapshot, context) {
+  const heart = snapshot?.heart ?? {};
+  const metrics = snapshot?.metrics ?? {};
+  const interpretation = snapshot?.interpretation ?? snapshot?.inference ?? {};
+  const iceBreak = snapshot?.iceBreak ?? {};
+  const score = finiteNumber(heart.score ?? heart.heartScore);
+  const bpm = finiteNumber(heart.bpm ?? heart.currentBpm);
+  const baselineBpm = finiteNumber(heart.baselineBpm);
+  const peakBpm = finiteNumber(heart.peakBpm);
+  const beatDuration = score === null ? 0.9 : Math.max(0.42, Math.min(1.35, 1.35 - (score / 100) * 0.93));
+  const beatScale = score === null ? 1.08 : 1.06 + Math.max(0, Math.min(100, score)) * 0.0014;
+  const status = String(snapshot?.status ?? "waiting").toLowerCase();
+  const isLive = ["live", "active", "streaming", "realtime"].includes(status);
+  const isDemo = Object.values(snapshot?.sourceRefs ?? {}).some((value) => String(value).startsWith("demo-"));
+  const statusLabel = isDemo ? "演示数据" : isLive ? "实时" : snapshot ? "历史记录" : "等待数据";
+  const isInactive = ["stale", "unavailable", "offline", "error"].includes(status);
+  const caveat = interpretation.caveat || "推测，不是情感事实";
+  const heartExplanation = heart.explanation
+    ?? "心动值会结合个人静息基线与当前心率变化计算，不等同于喜欢程度。";
+  const capturedAt = snapshot?.capturedAt ?? snapshot?.timestamp;
+  const accessibleSummary = `${person.name} 的心动值 ${score ?? "暂无"}，当前心率 ${bpm ?? "暂无"} BPM`;
+
+  return `
+    <section class="person-signal" data-signal-person="${escapeHtml(person.id)}" data-signal-context="${escapeHtml(context)}" aria-label="${escapeHtml(person.name)} 的生理信号" aria-live="polite">
+      <header class="signal-section-heading">
+        <span>生理信号</span>
+        <span class="signal-capture-status${isLive ? " is-live" : ""}">
+          <i aria-hidden="true"></i>${statusLabel} · ${escapeHtml(formatSignalTime(capturedAt, !isLive))}
+        </span>
+      </header>
+
+      <div class="heart-signal${score === null || isInactive ? " is-waiting" : ""}" style="--heart-beat-duration: ${beatDuration.toFixed(2)}s; --heart-beat-scale: ${beatScale.toFixed(2)}">
+        <span class="heart-signal-icon" aria-hidden="true">${icon("heart")}</span>
+        <div class="heart-score">
+          <small>心动值</small>
+          <strong>${score === null ? "--" : Math.round(score)}<span>/100</span></strong>
+        </div>
+        <div class="heart-bpm">
+          <small>当前心率</small>
+          <strong>${bpm === null ? "--" : Math.round(bpm)}<span>BPM</span></strong>
+          <p>基线 ${baselineBpm === null ? "--" : Math.round(baselineBpm)} · 峰值 ${peakBpm === null ? "--" : Math.round(peakBpm)}</p>
+        </div>
+        <span class="sr-only">${escapeHtml(accessibleSummary)}</span>
+      </div>
+      <p class="heart-signal-explanation">${escapeHtml(heartExplanation)}</p>
+      <div class="heart-signal-meta">
+        <span>${icon("activity")}趋势 ${escapeHtml(formatHeartTrend(heart.trend))}</span>
+        <span>置信度 ${formatConfidence(heart.confidence ?? interpretation.confidence)}</span>
+      </div>
+
+      <div class="signal-metrics" aria-label="其他生理指标">
+        ${signalMetricMarkup({ iconName: "wind", label: "呼吸", metric: metrics.breathingRate, fallbackUnit: "次/分", fallbackExplanation: "反映当时的生理唤起与交流节奏。", digits: 0 })}
+        ${signalMetricMarkup({ iconName: "activity", label: "压力", metric: metrics.stressIndex ?? metrics.stress, fallbackUnit: "%", fallbackExplanation: "多信号融合估计，不代表负面情绪。", digits: 0 })}
+        ${signalMetricMarkup({ iconName: "thermometer", label: "体表温度", metric: metrics.skinTemperature, fallbackUnit: "°C", fallbackExplanation: "容易受到环境与佩戴状态影响。", digits: 1 })}
+        ${signalMetricMarkup({ iconName: "sparkles", label: "HRV", metric: metrics.hrv, fallbackUnit: "ms", fallbackExplanation: "反映心搏间变化，需对照个人历史基线。", digits: 0 })}
+      </div>
+
+      <div class="signal-interpretation">
+        <div class="signal-interpretation-heading">
+          ${icon("sparkles")}
+          <span><small>AI 综合解释</small><strong>${escapeHtml(interpretation.label ?? "等待形成判断")}</strong></span>
+          <em>${formatConfidence(interpretation.confidence)}</em>
+        </div>
+        <p>${escapeHtml(interpretation.summary ?? "照片、对话和可穿戴数据接入后，这里会说明当前数值相对个人基线意味着什么。")}</p>
+        <small class="signal-caveat">${icon("info")}${escapeHtml(caveat.includes("推测，不是情感事实") ? caveat : `推测，不是情感事实 · ${caveat}`)}</small>
+      </div>
+
+      <div class="ice-break-signal" data-detected="${Boolean(iceBreak.detected)}">
+        <span>${icon("sparkles")}</span>
+        <div>
+          <small>破冰瞬间</small>
+          <strong>${iceBreak.detected ? `在 ${formatSignalTime(iceBreak.at)} 捕捉到互动转折` : "尚未识别到明确转折"}</strong>
+          <p>${iceBreak.detected
+            ? `用时 ${formatSignalValue(iceBreak.breakSeconds)} 秒 · 可靠度 ${formatReliability(iceBreak.reliability)}`
+            : "持续记录后，将在这里标记关系开始自然升温的时刻。"}</p>
+        </div>
+      </div>
+    </section>`;
 }
 
 
@@ -133,7 +284,7 @@ function variantControlsMarkup({
     </div>`;
 }
 
-function inspectorMarkup(person, state, context = "world") {
+function inspectorMarkup(person, state, context = "world", signal = null) {
   const status = STATUS_LABELS[state?.status] ?? "在 Echo Cafe";
   const place = state?.tableLabel ?? "咖啡厅大厅";
   return `
@@ -151,6 +302,7 @@ function inspectorMarkup(person, state, context = "world") {
       <div><small>Agent 状态</small><strong>${status}</strong></div>
       <span>${place}</span>
     </div>
+    ${personSignalMarkup(person, signal, context)}
     <p class="inspector-bio">${person.bio}</p>
     <div class="inspector-facts">
       <div>${icon("map-pin")}<span><small>所在城市</small><strong>${person.city}</strong></span></div>
@@ -212,8 +364,8 @@ function inspectorEditMarkup(person, context) {
     </form>`;
 }
 
-function personInspectorMarkup(person, state, context, mode, expression) {
-  const baseMarkup = inspectorMarkup(person, state, context);
+function personInspectorMarkup(person, state, context, mode, expression, signal) {
+  const baseMarkup = inspectorMarkup(person, state, context, signal);
   const headerEnd = baseMarkup.indexOf("</header>") + "</header>".length;
   const header = baseMarkup.slice(0, headerEnd);
   const controls = inspectorControlsMarkup(person, context, mode, expression);
@@ -241,6 +393,8 @@ export function createCafeShell({
   onMeetingEnd = async () => {},
   onExpressionChange = () => {},
   onProfileChange = () => {},
+  signalStore = null,
+  signalByPersonId = null,
 }) {
   let currentView = "intro";
   let worldReady = false;
@@ -257,10 +411,17 @@ export function createCafeShell({
   const activeSpeechIds = new Set();
   const expressionTimers = new Map();
   const personExpressions = new Map();
+  const personSignals = new Map();
   const inspectorModes = { world: "profile", map: "profile" };
   const profileStore = createProfileStore();
   const storedProfiles = profileStore.getAll();
   people = people.map((person) => ({ ...person, ...(storedProfiles[person.id] ?? {}) }));
+
+  if (signalByPersonId instanceof Map) {
+    for (const [personId, snapshot] of signalByPersonId) personSignals.set(personId, snapshot);
+  } else if (signalByPersonId && typeof signalByPersonId === "object") {
+    for (const [personId, snapshot] of Object.entries(signalByPersonId)) personSignals.set(personId, snapshot);
+  }
 
   root.innerHTML = `
     <div class="cafe-shell" data-view="intro">
@@ -385,6 +546,51 @@ export function createCafeShell({
     toastTimer = window.setTimeout(() => toast.classList.remove("is-visible"), 2200);
   }
 
+  function getPersonSignal(personId) {
+    if (personSignals.has(personId)) return personSignals.get(personId);
+    if (typeof signalStore?.getSnapshot !== "function") return null;
+    try {
+      const snapshot = signalStore.getSnapshot(personId);
+      if (snapshot) personSignals.set(personId, snapshot);
+      return snapshot ?? null;
+    } catch (error) {
+      console.warn(`Unable to read physiological signal for ${personId}`, error);
+      return null;
+    }
+  }
+
+  function applyPersonSignal(snapshot, fallbackPersonId = null) {
+    const personId = snapshot?.personId ?? fallbackPersonId;
+    if (!personId || !snapshot) return false;
+    personSignals.set(personId, { ...snapshot, personId });
+    if (selectedWorldPerson?.id === personId) renderWorldInspector();
+    if (selectedMapPerson?.id === personId) renderMapInspector();
+    return true;
+  }
+
+  function clearPersonSignal(personId) {
+    if (!personId || !personSignals.delete(personId)) return false;
+    if (selectedWorldPerson?.id === personId) renderWorldInspector();
+    if (selectedMapPerson?.id === personId) renderMapInspector();
+    return true;
+  }
+
+  function setPersonSignal(personIdOrSnapshot, nextSnapshot = null) {
+    const snapshot = typeof personIdOrSnapshot === "string"
+      ? { ...nextSnapshot, personId: personIdOrSnapshot }
+      : personIdOrSnapshot;
+    if (!snapshot?.personId) return false;
+    if (typeof signalStore?.upsert === "function") {
+      try {
+        const result = signalStore.upsert(snapshot);
+        return applyPersonSignal(result?.snapshot ?? snapshot);
+      } catch (error) {
+        console.warn(`Unable to persist physiological signal for ${snapshot.personId}`, error);
+      }
+    }
+    return applyPersonSignal(snapshot);
+  }
+
   function expressionForText(text) {
     if (/[!！]/.test(text)) return "surprised";
     if (/[?？]/.test(text)) return "thinking";
@@ -471,6 +677,7 @@ export function createCafeShell({
       "world",
       inspectorModes.world,
       personExpressions.get(selectedWorldPerson.id) ?? "neutral",
+      getPersonSignal(selectedWorldPerson.id),
     );
     worldInspector.setAttribute("aria-hidden", "false");
     shell.classList.add("has-world-inspector");
@@ -491,6 +698,7 @@ export function createCafeShell({
         "map",
         inspectorModes.map,
         personExpressions.get(selectedMapPerson.id) ?? "neutral",
+        getPersonSignal(selectedMapPerson.id),
       )}
       <button class="locate-person-button" type="button" data-action="locate-person">
         ${icon("locate-fixed")}<span>在咖啡厅中定位</span>
@@ -778,6 +986,18 @@ export function createCafeShell({
   refreshGraph();
   hydrateIcons(root);
 
+  let unsubscribeSignalStore = () => {};
+  if (typeof signalStore?.subscribe === "function") {
+    const subscription = signalStore.subscribe((event, metadata = {}) => {
+      if (!event && metadata.removed) {
+        clearPersonSignal(metadata.personId);
+        return;
+      }
+      applyPersonSignal(event?.snapshot ?? event?.signal ?? event);
+    });
+    if (typeof subscription === "function") unsubscribeSignalStore = subscription;
+  }
+
   return {
     setWorldReady(ready) {
       worldReady = Boolean(ready);
@@ -845,6 +1065,8 @@ export function createCafeShell({
     },
     showToast,
     setPersonExpression,
+    setPersonSignal,
+    getPersonSignal,
     getPersonExpression(personId) {
       return personExpressions.get(personId) ?? "neutral";
     },
@@ -859,6 +1081,9 @@ export function createCafeShell({
     },
     get isWorldReady() {
       return worldReady;
+    },
+    destroy() {
+      unsubscribeSignalStore();
     },
   };
 }

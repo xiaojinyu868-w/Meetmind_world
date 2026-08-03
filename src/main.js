@@ -1,11 +1,14 @@
 import * as THREE from "three";
 import { currentUser, people, relationships } from "./data/demoPeople.js";
+import { personSignals } from "./data/demoSignals.js";
 import { AssetCatalog } from "./runtime/AssetCatalog.js";
 import { AssetStore } from "./runtime/AssetStore.js";
 import { CAFE_LAYOUT } from "./runtime/CafeLayout.js";
 import { CharacterExpressionSystem } from "./runtime/CharacterExpressionSystem.js";
 import { CharacterSystem } from "./runtime/CharacterSystem.js";
+import { HeartSignalSystem } from "./runtime/HeartSignalSystem.js";
 import { NpcAgentSystem } from "./runtime/NpcAgentSystem.js";
+import { PersonSignalStore } from "./runtime/PersonSignalStore.js";
 import {
   CHARACTER_VARIANT_OPTIONS,
   characterAssetId,
@@ -138,6 +141,9 @@ let roundtableNearby = false;
 let elapsed = 0;
 let diagnosticFrame = 0;
 const expressionSystem = new CharacterExpressionSystem();
+const heartSignalSystem = new HeartSignalSystem();
+const personSignalStore = new PersonSignalStore(personSignals);
+heartSignalSystem.setVisible(false);
 
 const appShell = createCafeShell({
   root: document.querySelector("#ui-root"),
@@ -148,6 +154,7 @@ const appShell = createCafeShell({
   activeSceneVariant,
   characterVariants: CHARACTER_VARIANT_OPTIONS,
   activeCharacterVariant,
+  signalStore: personSignalStore,
   onViewChange: setExperienceMode,
   onSceneVariantChange: (variantId) => {
     if (variantId !== activeSceneVariant.id) navigateToSceneVariant(variantId);
@@ -162,6 +169,13 @@ const appShell = createCafeShell({
     void setCharacterExpression(personId, expression, metadata);
   },
   onProfileChange: updateRuntimeProfile,
+});
+
+const unsubscribePersonSignals = personSignalStore.subscribe((snapshot, metadata) => {
+  if (snapshot) heartSignalSystem.setSignal(snapshot.personId, snapshot);
+  else if (metadata.removed) heartSignalSystem.unregister(metadata.personId);
+  canvas.dataset.lastSignalUpdate = metadata.personId;
+  canvas.dataset.signalUpdateSource = metadata.source;
 });
 
 canvas.dataset.ready = "false";
@@ -297,6 +311,11 @@ async function spawnCharacters() {
       ),
     );
     expressionSystem.register(entity, people[index].id, activeCharacterVariant.id);
+    heartSignalSystem.register(
+      entity,
+      people[index].id,
+      personSignalStore.getSnapshot(people[index].id),
+    );
     npcSystem.register(people[index], entity);
   }
   npcSystem.initializeCafe();
@@ -362,6 +381,7 @@ function setExperienceMode(mode) {
   touchKnob.style.transform = "translate(0, 0)";
   if (playerMarker) playerMarker.visible = mode === "cafe" && !meetingMode;
   if (mode !== "cafe") playerLabel.style.opacity = "0";
+  heartSignalSystem.setVisible(mode === "cafe");
   if (mode === "cafe") canvas.focus({ preventScroll: true });
 }
 
@@ -614,6 +634,16 @@ function refreshDiagnostics() {
   canvas.dataset.expressions = [currentUser, ...people]
     .map((person) => `${person.id}:${expressionSystem.getExpression(person.id) ?? "unregistered"}`)
     .join("|");
+  const heartSignals = heartSignalSystem.getDiagnostics();
+  canvas.dataset.heartSignalCount = String(heartSignals.length);
+  canvas.dataset.heartSignals = heartSignals
+    .map((signal) => {
+      const score = Number.isFinite(signal.heart.heartScore)
+        ? Math.round(signal.heart.heartScore)
+        : "na";
+      return `${signal.personId}:${score}:${signal.animation.beatBpm.toFixed(1)}`;
+    })
+    .join("|");
   canvas.dataset.renderCalls = String(renderer.info.render.calls);
   canvas.dataset.triangles = String(renderer.info.render.triangles);
   canvas.dataset.centerPixel = sampleCenterPixel().join(",");
@@ -628,6 +658,7 @@ function animate(timestamp) {
   if (worldReady) {
     characterSystem.update(delta, elapsed);
     npcSystem.update(delta, elapsed);
+    heartSignalSystem.update(elapsed);
     if (experienceMode === "cafe") {
       updatePlayer(delta);
       if (meetingMode) updateMeetingCamera(delta);
@@ -756,6 +787,12 @@ for (const eventName of ["pointerup", "pointercancel"]) {
 }
 
 window.addEventListener("resize", resizeRenderer);
+window.addEventListener("beforeunload", () => {
+  appShell.destroy();
+  unsubscribePersonSignals();
+  heartSignalSystem.dispose();
+  expressionSystem.dispose();
+}, { once: true });
 resizeRenderer();
 
 const assetStore = new AssetStore();
@@ -836,6 +873,12 @@ window.__echoWorld = {
       ]),
     );
   },
+  get personSignals() {
+    return Object.fromEntries(
+      personSignalStore.list().map((snapshot) => [snapshot.personId, snapshot]),
+    );
+  },
+  get heartSignals() { return heartSignalSystem.getDiagnostics(); },
   get agentStates() {
     return people.map((person) => npcSystem?.getState(person.id)).filter(Boolean);
   },
@@ -843,6 +886,8 @@ window.__echoWorld = {
   get meetingActive() { return meetingMode; },
   selectPerson: selectWorldPerson,
   setExpression: setCharacterExpression,
+  ingestPersonSignal: (event) => personSignalStore.ingestEvent(event),
+  setPersonSignal: (snapshot) => personSignalStore.upsert(snapshot),
   startMeeting,
   endMeeting,
   sampleCenterPixel,
