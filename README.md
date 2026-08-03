@@ -42,7 +42,7 @@ npm run build
 
 原始照片、声音、embedding、内部记忆和安全存储地址不得复制到 `public/`。前端只消费授权过滤后的 DTO、`CharacterAsset` 和实时 `AgentEvent`。
 
-完整人物生成与 K3/Agent 数据契约见 [`../docs/README.md`](../docs/README.md)。
+人物生成分工、分支约定和 K3/Agent 跨模块契约见 [`docs/TEAM_WORKSTREAMS.md`](docs/TEAM_WORKSTREAMS.md)。
 
 ## 当前限制
 
