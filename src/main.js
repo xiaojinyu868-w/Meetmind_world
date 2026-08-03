@@ -34,6 +34,7 @@ import {
 } from "./runtime/VisualProfiles.js";
 import { loadWorldSpec, publicUrl } from "./runtime/WorldSpec.js";
 import { createCafeShell } from "./ui/CafeShell.js";
+import { mountFieldExperience } from "./ui/field/FieldExperience.js";
 import { mountIntegrations, resolveMediaUrl } from "./bootstrap/integrations.js";
 import "./cafe.css";
 
@@ -120,11 +121,22 @@ if (injectedApi && !usableApi) {
   console.warn("[EchoWorld] 注入的 api 缺少 ingest/pipelineStream/confirm，回退为内置 MockApi 适配层");
 }
 // 统一集成：资料包面板 / 检索条 / 相遇录入流程 + 各模块共享的统一 api 适配层
+const fieldExperience = mountFieldExperience(document.body, {
+  onClose: () => document.querySelector("#world")?.focus({ preventScroll: true }),
+});
 const integrations = mountIntegrations({
   api: usableApi,
   onPersonSelectedHook: (personId) => selectPersonInWorld(personId),
   onPackagesChangedHook: (packages) => fillPackageNames(packages),
   onToastHook: (message) => pushLiveToast(message),
+  onSceneAppOpenHook: (entry, pkg) => {
+    const personId = entry?.target?.personId ?? pkg?.person_id;
+    const person = personLikeFor(personId);
+    const name = pkg?.identity?.name ?? person?.name ?? person?.displayName ?? "TA";
+    if (!fieldExperience.open({ field: entry?.field, personId, name })) {
+      pushLiveToast("关系场域还没有准备好");
+    }
+  },
   presenceProvider: (personId) => worldAgentState(personId),
 });
 const api = integrations.api;
@@ -768,7 +780,8 @@ function updateHallHover() {
     canvas.style.cursor = hoverBooth ? "pointer" : "";
   }
   if (hoverBooth) {
-    hoverTooltip.textContent = `${hoverBooth.displayName ?? "展位"} · 查看资料包`;
+    const action = hoverBooth.appEntry?.status === "ready" ? "打开展位应用" : "查看资料包";
+    hoverTooltip.textContent = `${hoverBooth.displayName ?? "展位"} · ${action}`;
     hoverTooltip.style.left = `${hoverClientX}px`;
     hoverTooltip.style.top = `${hoverClientY}px`;
     hoverTooltip.style.display = "block";
@@ -1478,6 +1491,7 @@ for (const eventName of ["pointerup", "pointercancel"]) {
 
 window.addEventListener("resize", resizeRenderer);
 window.addEventListener("beforeunload", () => {
+  fieldExperience.destroy();
   appShell.destroy();
   unsubscribePersonSignals();
   heartSignalSystem.dispose();

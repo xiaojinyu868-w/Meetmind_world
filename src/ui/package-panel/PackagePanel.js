@@ -1,5 +1,6 @@
 import {
   Clock3,
+  DoorOpen,
   Film,
   Info,
   Lightbulb,
@@ -12,6 +13,7 @@ import {
   X,
   createIcons,
 } from "lucide";
+import { fieldEntryFromPackage } from "../../runtime/SceneAppEntry.js";
 import "./panel.css";
 
 // 资料包面板：IF-5「GET /api/v0/packages/{person_id}」的消费端。
@@ -19,6 +21,7 @@ import "./panel.css";
 
 const ICONS = {
   Clock3,
+  DoorOpen,
   Film,
   Info,
   Lightbulb,
@@ -108,9 +111,11 @@ function mediaFileName(ref) {
  *   - api.getPackage(personId) => Promise<echo-package.v0>  单个资料包（事实指针 + 推断视图）
  *   - api.resolveMediaUrl?(ref) => string  可选，把事实层指针解析为可展示的 URL；
  *     缺省时原样使用 ref（mock 阶段可直接给静态路径）
+ * @param {object} [options]
+ * @param {(entry: object, pkg: object) => void} [options.onSceneAppOpen]
  * @returns {{ openPerson(personId: string): Promise<void>, close(): void, isOpen: boolean }}
  */
-export function mountPackagePanel(container, api) {
+export function mountPackagePanel(container, api, { onSceneAppOpen = null } = {}) {
   const layer = document.createElement("div");
   layer.className = "package-panel-layer";
   layer.setAttribute("aria-hidden", "true");
@@ -129,6 +134,7 @@ export function mountPackagePanel(container, api) {
 
   let open = false;
   let activePersonId = null;
+  let activePackage = null;
   let requestSeq = 0;
   let toastTimer = null;
   const cache = new Map();
@@ -183,7 +189,9 @@ export function mountPackagePanel(container, api) {
   const imgFallback = `onerror="this.onerror=null;this.src='${escapeHtml(placeholderImg)}'"`;
 
   function hydrateIcons() {
+    layer.querySelectorAll("svg[data-lucide]").forEach((svg) => svg.removeAttribute("data-lucide"));
     createIcons({ icons: ICONS, root: layer, attrs: { "stroke-width": 1.8 } });
+    layer.querySelectorAll("svg[data-lucide]").forEach((svg) => svg.removeAttribute("data-lucide"));
   }
 
   function showToast(message) {
@@ -351,6 +359,21 @@ export function mountPackagePanel(container, api) {
     ]
       .filter(Boolean)
       .join(" · ");
+    const fieldEntry = fieldEntryFromPackage(pkg);
+    const fieldReady = fieldEntry?.status === "ready" && fieldEntry.field;
+    const fieldMarkup = fieldEntry
+      ? `
+      <section class="pp-field-entry" aria-label="展位应用">
+        <div class="pp-field-copy">
+          <span class="pp-field-eyebrow">${icon("sparkles")}关系场域 · 生成物</span>
+          <strong>${escapeHtml(fieldEntry.field?.scene.title ?? "关系场域正在准备")}</strong>
+          <small>${fieldReady ? "可重算的关系表达" : "等待上游 FieldAsset 就绪"}</small>
+        </div>
+        <button type="button" data-pp-open-field ${fieldReady ? "" : "disabled"}>
+          ${icon("door-open")}<span>${fieldReady ? "进入" : "准备中"}</span>
+        </button>
+      </section>`
+      : "";
 
     return `
       <header class="pp-hero">
@@ -377,6 +400,7 @@ export function mountPackagePanel(container, api) {
           <p class="pp-meta">${escapeHtml(meta)}</p>
         </div>
       </header>
+      ${fieldMarkup}
       <section class="pp-section" aria-label="相遇时间线">
         <div class="pp-section-head">
           <h3>${icon("map-pin")}相遇</h3>
@@ -392,6 +416,7 @@ export function mountPackagePanel(container, api) {
   }
 
   function render(pkg) {
+    activePackage = pkg;
     body.innerHTML = packageMarkup(pkg);
     body.scrollTop = 0;
     hydrateIcons();
@@ -409,6 +434,7 @@ export function mountPackagePanel(container, api) {
     if (!open) return;
     open = false;
     activePersonId = null;
+    activePackage = null;
     requestSeq += 1;
     stopPresenceTimer();
     layer.setAttribute("aria-hidden", "true");
@@ -445,6 +471,16 @@ export function mountPackagePanel(container, api) {
     if (event.target.closest("[data-pp-media]")) {
       // 原始音视频回放占位入口：事实层指针已就位，播放器随正式版开放
       showToast("原始音视频回放将在正式版本开放");
+      return;
+    }
+    if (event.target.closest("[data-pp-open-field]")) {
+      const entry = fieldEntryFromPackage(activePackage);
+      if (entry?.status !== "ready" || !entry.field) {
+        showToast("关系场域还没有准备好");
+        return;
+      }
+      onSceneAppOpen?.(entry, activePackage);
+      close();
       return;
     }
     if (event.target.closest("[data-pp-retry]") && activePersonId) {

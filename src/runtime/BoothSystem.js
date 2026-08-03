@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { normalizeSceneAppEntry } from "./SceneAppEntry.js";
 
 /**
  * BoothSystem —— 展位大厅的展位渲染与增量同步。
@@ -79,6 +80,7 @@ function normalizeBoothModule(raw) {
     personId,
     position: { x, z, yaw: finiteOr(raw.position?.yaw, 0) },
     display: raw.display && typeof raw.display === "object" ? raw.display : {},
+    appEntry: normalizeSceneAppEntry(raw.app_entry),
   };
 }
 
@@ -233,7 +235,7 @@ export class BoothSystem {
 
   async prepare() {
     try {
-      const asset = this.assetCatalog.resolve(this.templateAssetId, "module");
+      const asset = this.assetCatalog.resolve(this.templateAssetId, "environment-module");
       this.template = await this.assetStore.loadScene(asset.resolvedUrl);
     } catch (error) {
       console.warn(`[BoothSystem] 展位模板 ${this.templateAssetId} 未就绪，使用简易占位展位`, error);
@@ -344,6 +346,7 @@ export class BoothSystem {
       ownedTextures: new Map(),
       displaySignature: null,
       displayName: null,
+      appEntry: booth.appEntry,
       hoverRing,
       namePlate: root.getObjectByName("MESH_NamePlate") ?? null,
       entrance: 0,
@@ -360,6 +363,7 @@ export class BoothSystem {
     record.root.position.set(booth.position.x, 0, booth.position.z);
     record.root.rotation.set(0, booth.position.yaw, 0);
     record.root.userData.personId = booth.personId;
+    record.appEntry = booth.appEntry;
     this.#applyDisplay(record, booth.display);
   }
 

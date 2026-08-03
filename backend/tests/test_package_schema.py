@@ -48,6 +48,30 @@ def valid_package() -> dict:
     }
 
 
+def ready_field() -> dict:
+    return {
+        "schema": "echo-field.v1",
+        "status": "ready",
+        "generated": True,
+        "regenerable": True,
+        "generated_from": ["facts/person_01JXXX/enc_01/note.md"],
+        "model": "upstream-field.v1",
+        "created_at": "2026-08-04T00:00:00+08:00",
+        "scene": {
+            "title": "一段共同记忆的庭院",
+            "summary": "这里表达我与 TA 的关系，不复刻现实现场。",
+            "parameters": {
+                "sky": "#89afa5", "ground": "#b9a878", "accent": "#315d83",
+                "fog": "#d7dfd2", "openness": 0.72, "warmth": 0.68,
+            },
+            "entities": [{
+                "id": "memory-1", "type": "memory", "label": "第一次相遇",
+                "detail": "一起借用了最后一支记号笔。", "position": {"x": 1, "z": -2},
+            }],
+        },
+    }
+
+
 def test_valid_package_passes():
     package = valid_package()
     assert validate_package(package) is package
@@ -86,4 +110,26 @@ def test_face_never_public_approved():
     package["identity"]["face_ref"] = "facts/person_01JXXX/enc_01/face.jpg"
     package["encounters"][0]["privacy"] = "public-approved"
     with pytest.raises(PackageSchemaError, match="public-approved"):
+        validate_package(package)
+
+
+def test_ready_field_asset_passes():
+    package = valid_package()
+    package["field"] = ready_field()
+    assert validate_package(package) is package
+
+
+def test_ready_field_requires_generation_provenance():
+    package = valid_package()
+    package["field"] = ready_field()
+    package["field"]["generated_from"] = []
+    with pytest.raises(PackageSchemaError, match="generated_from"):
+        validate_package(package)
+
+
+def test_field_asset_can_never_claim_to_be_a_fact():
+    package = valid_package()
+    package["field"] = ready_field()
+    package["field"]["generated"] = False
+    with pytest.raises(PackageSchemaError, match="generated"):
         validate_package(package)

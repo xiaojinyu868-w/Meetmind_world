@@ -207,6 +207,78 @@
   font-weight: 700;
 }
 
+/* 展位应用入口：只呈现上游已生成 FieldAsset 的挂载状态。 */
+
+.pp-field-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  margin: 0 22px 18px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line, rgb(25 61 54 / 13%));
+  border-bottom: 1px solid var(--line, rgb(25 61 54 / 13%));
+}
+
+.pp-field-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pp-field-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #9a6e19;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.pp-field-eyebrow svg {
+  width: 11px;
+  height: 11px;
+}
+
+.pp-field-copy strong {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 820;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pp-field-copy small {
+  color: var(--ink-muted, #61756e);
+  font-size: 8.5px;
+  font-weight: 680;
+}
+
+.pp-field-entry > button {
+  display: inline-flex;
+  min-width: 76px;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px;
+  border-radius: 8px;
+  color: #fffdf4;
+  background: var(--green, #1f6a59);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.pp-field-entry > button:hover:not(:disabled) {
+  background: var(--green-dark, #174c42);
+}
+
+.pp-field-entry > button svg {
+  width: 15px;
+  height: 15px;
+}
+
 /* 分区标题 */
 
 .pp-section {

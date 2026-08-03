@@ -19,7 +19,11 @@ npm run build
 
 ```text
 标题页
--> 3D Echo Cafe
+-> 3D Echo Expo Hall
+-> 点击人物或展位查看资料包
+-> 从展位应用入口进入"我与 TA"的关系场域
+-> 在场域中行走并触发关系节点
+-> 返回大厅，或前往 3D Echo Cafe
 -> Agent 随机选择普通桌并同桌自主交谈
 -> 点选人物查看资料
 -> 手动编辑人物资料与切换表情
@@ -56,6 +60,8 @@ npm run build
 - `src/runtime/ProfileStore.js`：可编辑人物资料的版本化本地覆盖层。
 - `src/runtime/PersonSignalStore.js`：按 `personId` 接收快照、拒绝过期/乱序事件并通知 UI。
 - `src/runtime/HeartSignalSystem.js`：角色头顶的心动值 Sprite 与随分值变化的双脉冲动画。
+- `src/runtime/SceneAppEntry.js`：`echo-scene-app.v1` 与 `echo-field.v1` 的纯消费端校验和适配。
+- `src/ui/field/FieldExperience.js`：关系场域的全屏 Three.js 运行时、移动与交互；不处理图像或音视频素材。
 - `src/data/demoSignals.js`：6 个 NPC 的 `person-signal.v1` 占位快照，正式接口可直接替换。
 - `src/main.js`：Three.js 场景、第三人称相机、移动、碰撞、射线选择和会议编排。
 - `public/data/asset-catalog.json`：环境、人物和资料资产白名单。
@@ -88,5 +94,6 @@ V2 几何场景资产仍归档保留，但不再出现在前端选择器中，�
 - 世界动态由后端世界快照驱动（`GET /api/v0/world/snapshot`，2s 轮询；后端不可用时降级本地 mock/内置快照）；SSE/WebSocket 尚未启用。
 - 心动值、生理指标和 AI 解释当前是明确标注的演示数据；正式值必须由后端统计与推断服务提供，前端不自行判断喜欢、厌恶或医疗状态。
 - 当前照片输入是合照，技术槽位由主参考图从左到右确定，姓名映射由团队确认；正式链路仍需要上游提供稳定的 `personId + boundingBox`。
+- 关系场域当前消费 `echo-field.v1` 样例产物；照片/音频/视频到 FieldAsset 的生成与贴图链路由独立视觉和音视频工作流交付，本运行时不参与。
 - 人物暂时没有骨骼动画；移动和入座采用刚性模型的轻量表现。
 - 咖啡厅使用运行时圆形桌面碰撞，尚未从 Blender 导出完整碰撞壳。

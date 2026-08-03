@@ -114,9 +114,17 @@ booth module 结构（快照 modules 内，`type: "booth"`）：
 { "id": "booth_lin-che", "type": "booth", "person_id": "lin-che",
   "position": { "x": 0, "z": -4.2, "yaw": 0 },
   "display": { "name": "林澈", "headline": "一句话身份", "face_ref": "facts/.../face.png",
-               "photos": ["facts/.../scene_01.png"], "tags": ["咖啡"] } }
+               "photos": ["facts/.../scene_01.png"], "tags": ["咖啡"] },
+  "app_entry": {
+    "schema": "echo-scene-app.v1", "app_id": "relationship-field", "kind": "field",
+    "label": "进入关系场域", "status": "ready",
+    "target": { "person_id": "lin-che", "field_ref": "people/lin-che/profile.json#field" },
+    "capabilities": ["walk", "interact"]
+  } }
   // display.tags/photos 只取 privacy ≥ agent-usable 的内容（L1 不上墙）
 ```
+
+`app_entry` 是通用场景应用清单，不承载 FieldAsset 或原始媒体。前端按 `app_id` 选择运行时，并通过 `target` 再读取对应 Package；`queued` 入口可展示但不可进入，`ready` 才声明能力。
 
 媒体文件服务（v0.3 加性）：`GET /api/v0/media/{ref}` —— 事实层文件（face_ref/photos 等指针）的 HTTP 出口，路径穿越防护 + 扩展名白名单。
 
@@ -134,6 +142,8 @@ booth module 结构（快照 modules 内，`type: "booth"`）：
 // 响应 200
 { "results": [ { "person_id": "person_01JXXX", "name": "陈某", "score": 0.93, "last_encounter": { "time": "...", "place": "..." } } ] }
 ```
+
+Package 可选包含 `field`。`status: "ready"` 时必须符合 `echo-field.v1`：`generated=true`、`regenerable=true`、非空 `generated_from`、`model`、`created_at`，以及已生成的 `scene.parameters / spawn / entities`。本接口只交付上游产物；浏览器不接收原始图像、音频、视频，也不负责由它们生成场域。
 
 ## IF-6 互动接口（MVP2，详节届时补）
 
@@ -163,3 +173,4 @@ booth module 结构（快照 modules 内，`type: "booth"`）：
 - 2026-08-03 | v0.1：扩展为全量接口地图（IF-1~IF-8，按 MVP 阶段分组），IF-1~IF-5 出详节，IF-6/7/8 先行登记 | 人（指正接口不止两个）+ AI（补全）
 - 2026-08-03 | v0.2：IF-2 接口更名为 `pipeline`（原 paipai 为语音转写错误） | 人 + AI
 - 2026-08-03 | v0.3（加性）：IF-4 增加 `?world=hall|cafe` 参数与 booth module 结构；新增媒体路由 `GET /api/v0/media/{ref}`；IF-3 confirm 响应增加 `booth_id` | AI
+- 2026-08-04 | v0.4（加性）：booth module 增加可选 `echo-scene-app.v1 app_entry`；IF-5 Package 增加 `echo-field.v1` 下游消费约定 | AI

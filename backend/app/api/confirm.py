@@ -27,6 +27,7 @@ from app.schemas.package_schema import (
     validate_encounter_draft,
 )
 from app.world.hall import build_display_from_package
+from app.world.scene_apps import build_field_app_entry
 
 router = APIRouter(prefix="/api/v0", tags=["confirm"])
 
@@ -87,7 +88,11 @@ def confirm(request: Request, body: ConfirmRequest):
     booth_id = None
     hall = getattr(request.app.state, "hall", None)
     if hall is not None:
-        booth = hall.register_person(person_id, build_display_from_package(package, store))
+        booth = hall.register_person(
+            person_id,
+            build_display_from_package(package, store),
+            build_field_app_entry(package),
+        )
         booth_id = booth["id"]
 
     return {

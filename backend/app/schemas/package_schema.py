@@ -13,6 +13,8 @@ SCHEMA_VERSION = "echo-package.v0"
 # 权限圈层（CONTEXT-AND-MEMORY.md §5）：L1~L4，默认 L1 self-only
 PRIVACY_LEVELS = ("self-only", "agent-usable", "org-shared", "public-approved")
 DEFAULT_PRIVACY = "self-only"
+FIELD_SCHEMA_VERSION = "echo-field.v1"
+FIELD_STATUSES = ("none", "queued", "ready", "failed")
 
 
 class PackageSchemaError(ValueError):
@@ -64,6 +66,62 @@ def _validate_encounter(encounter, index: int) -> None:
         )
 
 
+def _validate_field(field) -> None:
+    if not isinstance(field, dict):
+        raise PackageSchemaError("Package field must be an object: field")
+    status = field.get("status")
+    if status not in FIELD_STATUSES:
+        raise PackageSchemaError(f"Package field.status must be one of {FIELD_STATUSES}")
+    if field.get("generated") is not True:
+        raise PackageSchemaError("Package field.generated must be true")
+    if field.get("regenerable") is not True:
+        raise PackageSchemaError("Package field.regenerable must be true")
+    generated_from = field.get("generated_from")
+    if not isinstance(generated_from, list) or not all(
+            isinstance(pointer, str) and pointer.strip() for pointer in generated_from):
+        raise PackageSchemaError("Package field.generated_from must be an array of fact pointers")
+    if status != "ready":
+        return
+    if field.get("schema") != FIELD_SCHEMA_VERSION:
+        raise PackageSchemaError(f"Unsupported field schema: {field.get('schema')}")
+    if not generated_from:
+        raise PackageSchemaError("Ready field requires non-empty generated_from")
+    _require_string(field.get("model"), "field.model")
+    _require_string(field.get("created_at"), "field.created_at")
+    scene = field.get("scene")
+    if not isinstance(scene, dict):
+        raise PackageSchemaError("Ready field requires a scene object: field.scene")
+    _require_string(scene.get("title"), "field.scene.title")
+    _require_string(scene.get("summary"), "field.scene.summary")
+    parameters = scene.get("parameters")
+    if not isinstance(parameters, dict):
+        raise PackageSchemaError("Field scene requires parameters: field.scene.parameters")
+    for key in ("sky", "ground", "accent", "fog"):
+        _require_string(parameters.get(key), f"field.scene.parameters.{key}")
+    for key in ("openness", "warmth"):
+        value = parameters.get(key)
+        if (not isinstance(value, (int, float)) or isinstance(value, bool)
+                or not 0 <= value <= 1):
+            raise PackageSchemaError(
+                f"Field scene parameter must be numeric in [0,1]: field.scene.parameters.{key}")
+    entities = scene.get("entities")
+    if not isinstance(entities, list) or len(entities) > 8:
+        raise PackageSchemaError("Field scene entities must contain at most 8 items")
+    for index, entity in enumerate(entities):
+        prefix = f"field.scene.entities[{index}]"
+        if not isinstance(entity, dict):
+            raise PackageSchemaError(f"Field entity must be an object: {prefix}")
+        for key in ("id", "type", "label", "detail"):
+            _require_string(entity.get(key), f"{prefix}.{key}")
+        position = entity.get("position")
+        if not isinstance(position, dict):
+            raise PackageSchemaError(f"Field entity requires position: {prefix}.position")
+        for axis in ("x", "z"):
+            value = position.get(axis)
+            if not isinstance(value, (int, float)) or isinstance(value, bool):
+                raise PackageSchemaError(f"Field entity position must be numeric: {prefix}.position.{axis}")
+
+
 def validate_encounter_draft(draft) -> dict:
     """校验 IF-2 产出的相遇草稿：encounter 结构合规且 identity.confirmed=false。
 
@@ -100,6 +158,8 @@ def validate_package(package) -> dict:
     avatar = package.get("avatar")
     if not isinstance(avatar, dict) or not isinstance(avatar.get("palette"), dict):
         raise PackageSchemaError("Package avatar requires a palette object: avatar.palette")
+    if package.get("field") is not None:
+        _validate_field(package["field"])
     # 人脸/声纹永不允许 L4（P-8，MVP1/2 直接禁止）
     for i, encounter in enumerate(encounters):
         if encounter.get("privacy") == "public-approved" and identity.get("face_ref"):

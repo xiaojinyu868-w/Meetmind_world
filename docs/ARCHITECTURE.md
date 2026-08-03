@@ -103,6 +103,12 @@ MVP2（2026-08-03 重设后）增加三条线：场景语言（点位交互/播�
 - 资料包内容（人脸照片、谈话记录）**不走快照**，由用户点击后经 API 按权限单独拉取。
 - 场景语言（FR-2.8/2.9）的点位与播报内容：热点定义走 `modules`，播报文本走 `events`，均从快照消费，前端不自行编造。
 
+### 4a. 场景应用挂载协议
+
+摊位/小屋通过可选的 `echo-scene-app.v1 app_entry` 成为应用入口。清单只包含 `app_id / kind / label / status / target / capabilities`，不把应用数据塞进世界快照。用户进入时，运行时根据 `app_id` 选择模块，再按 `target.field_ref` 从 Package API 读取授权后的产物。
+
+首个运行时 `relationship-field` 消费 `echo-field.v1`。边界固定为：上游视觉与音视频工作流负责从素材生成 FieldAsset；World Service 只发布入口；`SceneAppEntry.js` 只做客户端硬校验；`FieldExperience.js` 只负责场景渲染、移动、邻近检测与节点交互。任何一层都不得在缺少 FieldAsset 时分析原始媒体或伪造关系结论。
+
 ## 5. 自进化权限矩阵（harness 圈层管理）
 
 | 允许自进化更新 | 禁止自进化更新 |
@@ -149,7 +155,7 @@ MVP2（2026-08-03 重设后）增加三条线：场景语言（点位交互/播�
 | `texture_gen.py` | `generate(photos: list[Path]) -> TextureSet`（头部五面 + 身体 atlas） | mock：占位贴图 |
 | `voxel_gen.py` | `generate(textures: TextureSet, style: StyleSpec) -> Path(glb)`（体素组装） | 固定体素身体 + 贴图；产物必须过 ART-BRIEF 契约（贴图槽位/根节点/朝向/身高） |
 | `person_builder.py` | `build(encounter_facts) -> avatar + asset_entry` | 编排上述两步并登记白名单（全流程 mock 可跑通） |
-| `field_gen.py` | `generate(person_materials) -> FieldScene`（个人场域，FR-2.11） | mock：模板场景；产物标注生成物、带来源素材指针（P-3） |
+| `field_gen.py` | `generate(person_materials) -> FieldAsset`（个人场域，FR-2.11；由视觉/音视频工作流负责） | 输出 `echo-field.v1`；产物标注生成物、带来源素材指针（P-3）；本仓库运行时只消费 |
 
 注：现有 `three_view.py` / `blender_gen.py` 将随代码同步改语义/重命名为上表形态（文档为准，同步前视为遗留实现）。风格规范（体素分辨率、贴图生成 prompt 模板、调色板提取）由美术在 ART-BRIEF.md 定义，管线读取，不硬编码。
 
@@ -186,3 +192,4 @@ Agent 行为按场景半规则驱动（走动/访问/圆桌），由 Agent Runti
 - 2026-08-03 | 依 8-03 晚决策：§5a 人物管线改为"照片 → AI 图片贴图 → 体素 GLB 组装"（原三视图/lowpoly 方向废弃），新增场域生成线 `field_gen.py`（推断层视觉化）；§3 主流程补 MVP2 重设说明；§4 补场景语言的快照消费约定；新增 ADR-6 与 TBD-ARCH-4（联机） | 人（决策）+ AI（记录）
 - 2026-08-03 | 依 8-03 晚会议纪要：§5a 新增场域生成链路（多模态素材 → 情感/关系特征 → 艺术化环境参数映射，非机械映射）；TBD-ARCH-4 细分为现场联机（MVP2）与云端联机（远期）两档 | 人（会议纪要）+ AI（记录）
 - 2026-08-03 | TBD-F2 决策落档：场域 = "我与 TA 的关系"的表达，输入以双方共同事件与关系状态为主 | 人（决策）+ AI（记录）
+- 2026-08-04 | 新增 §4a `echo-scene-app.v1` 模块挂载约定与 `echo-field.v1` 消费边界；明确多模态生成由视觉/音视频工作流负责，世界与前端运行时不处理原始素材 | 人（分工）+ AI（实现）

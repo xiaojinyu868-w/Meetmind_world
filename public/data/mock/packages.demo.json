@@ -147,6 +147,67 @@
       },
       "real_face_ref": "portraits/photo-derived/voxel/person_01.png"
     },
+    "field": {
+      "schema": "echo-field.v1",
+      "status": "ready",
+      "generated": true,
+      "regenerable": true,
+      "generated_from": [
+        "transcript#L3-L26",
+        "photos[0]"
+      ],
+      "model": "upstream-field-mock.v1",
+      "created_at": "2026-08-04T00:00:00+08:00",
+      "scene": {
+        "title": "关于创作与收束的关系场域",
+        "summary": "从一支蓝色记号笔开始，我们总能把散乱的想法带回一个可以继续的问题。",
+        "parameters": {
+          "sky": "#89afa5",
+          "ground": "#b9a878",
+          "accent": "#315d83",
+          "fog": "#d7dfd2",
+          "openness": 0.72,
+          "warmth": 0.66
+        },
+        "spawn": {
+          "x": 0,
+          "z": 5.2,
+          "yaw": 3.1416
+        },
+        "entities": [
+          {
+            "id": "arrival",
+            "type": "threshold",
+            "label": "关系入口",
+            "detail": "从一支蓝色记号笔开始，我们总能把散乱的想法带回一个可以继续的问题。",
+            "position": {
+              "x": 0,
+              "z": 3.9
+            }
+          },
+          {
+            "id": "first-encounter",
+            "type": "memory",
+            "label": "第一次相遇",
+            "detail": "深圳 · 科技展咖啡摊",
+            "position": {
+              "x": -2.2,
+              "z": -0.8
+            }
+          },
+          {
+            "id": "shared-thread",
+            "type": "thread",
+            "label": "协作创作",
+            "detail": "凌晨的白板前，一起把 17 个点子压缩成 3 个真正能做的方向。",
+            "position": {
+              "x": 2.1,
+              "z": -2.2
+            }
+          }
+        ]
+      }
+    },
     "relations": [
       {
         "to": "person-self",

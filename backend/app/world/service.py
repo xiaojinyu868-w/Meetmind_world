@@ -85,7 +85,8 @@ class WorldService:
 
     # ---------- 展位大厅：人员注册（系统/确认流程驱动，非自进化写入） ----------
 
-    def register_person(self, person_id: str, display: dict) -> dict:
+    def register_person(self, person_id: str, display: dict,
+                        app_entry: dict | None = None) -> dict:
         """把一个人注册进展位大厅（幂等）：分配展位锚点 → agents 增员
         （state="at-booth"，位置=展位锚点，yaw 朝展位前方/大厅中心）→
         modules 增加 booth 条目。重复注册只刷新 display，不重复分配展位。
@@ -102,10 +103,16 @@ class WorldService:
                 "position": dict(anchor["position"]),
                 "display": display,
             }
+            if app_entry is not None:
+                booth["app_entry"] = dict(app_entry)
             self._modules.append(booth)
         else:
             booth = next(m for m in self._modules if m["id"] == booth_id)
             booth["display"] = display
+            if app_entry is None:
+                booth.pop("app_entry", None)
+            else:
+                booth["app_entry"] = dict(app_entry)
         if person_id not in self._agents:
             self._agents[person_id] = {
                 "name": display.get("name") or person_id,

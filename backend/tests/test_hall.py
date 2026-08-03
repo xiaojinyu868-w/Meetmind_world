@@ -92,6 +92,10 @@ def test_hall_snapshot_has_six_booths(client):
     assert lin["display"]["face_ref"] == "facts/seed/lin-che/face.png"
     assert lin["display"]["photos"]  # 相框有真实现场照指针
     assert any("咖啡" in tag for tag in lin["display"]["tags"])  # ≥L2 推断标签
+    assert lin["app_entry"]["schema"] == "echo-scene-app.v1"
+    assert lin["app_entry"]["app_id"] == "relationship-field"
+    assert lin["app_entry"]["status"] == "ready"
+    assert lin["app_entry"]["target"]["person_id"] == "lin-che"
     # 展位位置与该人 agent 站位一致
     agent = next(a for a in snapshot["agents"] if a["id"] == "lin-che")
     assert agent["position"]["x"] == lin["position"]["x"]
@@ -137,6 +141,7 @@ def test_confirm_registers_seventh_booth(client):
     booth = next(m for m in booths if m["person_id"] == person_id)
     assert booth["display"]["name"] == "陈某"
     assert booth["display"]["tags"]  # L2：推断标签上墙
+    assert "app_entry" not in booth  # 新人的场域需等待上游生成，不在本链路伪造
     agent = next(a for a in snapshot["agents"] if a["id"] == person_id)
     assert agent["state"] == "at-booth"
     assert agent["position"]["x"] == booth["position"]["x"]

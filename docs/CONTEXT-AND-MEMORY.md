@@ -84,11 +84,26 @@ Person（人：稳定身份，人脸/声纹/用户确认的身份）
     "real_face_ref": "facts/person_01JXXX/enc_01/face.jpg"  // 资料包内保留真实人脸
   },
   "field": {                           // 个人场域（FR-2.11）：推断层的视觉化产物
-    "status": "none",                  // none | queued | ready
-    "generated_from": [],              // 来源素材指针（facts 引用）
+    "schema": "echo-field.v1",         // ready 时必填；none/queued/failed 可省略
+    "status": "ready",                 // none | queued | ready | failed
+    "generated_from": ["transcript#L12-L18"], // 来源素材指针（facts 引用）
     "generated": true,                 // 恒为 true：场域一律标注为生成物
-    "model": null,                     // 生成模型版本
-    "regenerable": true                // 可随素材更新重算
+    "model": "field-provider@v1",      // 生成模型版本
+    "created_at": "2026-08-04T00:00:00+08:00",
+    "regenerable": true,               // 可随素材更新重算
+    "scene": {                         // 下游运行时输入，不含原始媒体
+      "title": "关于共同创作的关系场域",
+      "summary": "这是我与 TA 关系的生成表达，不是事实陈述。",
+      "parameters": {
+        "sky": "#89afa5", "ground": "#b9a878", "accent": "#315d83", "fog": "#d7dfd2",
+        "openness": 0.7, "warmth": 0.65
+      },
+      "spawn": { "x": 0, "z": 5.2, "yaw": 3.1416 },
+      "entities": [
+        { "id": "first-encounter", "type": "memory", "label": "第一次相遇",
+          "detail": "共同确认过的关系节点文案", "position": { "x": -2.2, "z": -0.8 } }
+      ]
+    }
   },
   "relations": [ { "to": "person_01JYYY", "via": "enc_01", "note": "同展位认识" } ]
 }
@@ -162,3 +177,4 @@ Person（人：稳定身份，人脸/声纹/用户确认的身份）
 - 2026-08-03 | avatar 字段更新：per-person 模型（model_asset_id）为正式方向，无脸为过渡占位 | AI
 - 2026-08-03 | 依 8-03 晚决策：avatar 改为 `voxel-textured.v1`（MC 体素 + AI 图片贴图，原 lowpoly 方向废弃）；新增 `field` 场域字段；§2 补充视觉化生成物归属推断层的规则；§8 量能表更新（场景语言/市集/场域/群体模式入表，价值推送标注暂缓）；§7 加注暂缓说明 | 人（决策）+ AI（记录）
 - 2026-08-03 | 依 8-03 晚会议纪要：§2 推断层内容补充"情绪与关系感受、第一印象"（多模态情感可视化的输入归属推断层，场域生成引用见 ARCHITECTURE.md §5a） | 人（会议纪要）+ AI（记录）
+- 2026-08-04 | `field` 扩展为 `echo-field.v1` 下游运行时契约；ready 产物必须可追溯、可重算并只携带授权后的场景参数/交互节点，不携带原始多媒体 | 人（分工）+ AI（实现）

@@ -22,6 +22,7 @@ from app.api import world as world_api
 from app.harness.permissions.guard import DEFAULT_GUARD, PermissionDenied
 from app.packages.store import PackageStore
 from app.world.hall import HALL_BOUNDS, build_display_from_package
+from app.world.scene_apps import build_field_app_entry
 from app.world.seed import SEED_AGENTS, seed_demo_packages, seed_world
 from app.world.service import WorldService
 
@@ -46,8 +47,11 @@ def create_app() -> FastAPI:
     }, blockers=(), bounds=HALL_BOUNDS)  # 展位不是阻挡体；大厅边界 x∈[-7,7] z∈[-5,5]
     for agent_seed in SEED_AGENTS:
         package = store.load_package(agent_seed["id"])
-        hall_world.register_person(agent_seed["id"],
-                                   build_display_from_package(package, store))
+        hall_world.register_person(
+            agent_seed["id"],
+            build_display_from_package(package, store),
+            build_field_app_entry(package),
+        )
     hall_bus = EventBus()
     hall_bus.subscribe(hall_world.apply_event)
 

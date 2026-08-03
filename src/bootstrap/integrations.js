@@ -180,6 +180,8 @@ function fallbackToast(message) {
  * @param {(packages: object[]) => void} [options.onPackagesChangedHook]
  *   getPackages 刷新后回调（用于同步气泡/Toast 的人名映射）
  * @param {(message: string) => void} [options.onToastHook] Toast 输出（缺省用内置小 Toast）
+ * @param {(entry: object, pkg: object) => void} [options.onSceneAppOpenHook]
+ *   打开展位应用；入口只负责转交已就绪的 SceneAppEntry / FieldAsset
  * @param {(personId: string) => { status?: string, state?: string } | null} [options.presenceProvider]
  *   在场状态提供者（LiveWorld 快照缓存），注入资料包面板的头部状态行
  * @returns {{ api: object, flow: object, panel: object, searchBar: null,
@@ -191,6 +193,7 @@ export function mountIntegrations({
   onPersonSelectedHook = null,
   onPackagesChangedHook = null,
   onToastHook = null,
+  onSceneAppOpenHook = null,
   presenceProvider = null,
 } = {}) {
   const unifiedApi = api ?? createUnifiedApi();
@@ -207,7 +210,9 @@ export function mountIntegrations({
   document.head.append(styleElement);
 
   // 资料包面板（IF-5 单包查看，事实层/推断层分隔）+ 在场状态提供者（LiveWorld 快照缓存）
-  const panel = mountPackagePanel(mountRoot, unifiedApi);
+  const panel = mountPackagePanel(mountRoot, unifiedApi, {
+    onSceneAppOpen: onSceneAppOpenHook,
+  });
   if (typeof presenceProvider === "function") panel.setPresenceProvider(presenceProvider);
 
   // 顶部检索条已下线（2026-08-03 产品决策：检索降级为底层能力，避免"查库"心智与"世界即入口"冲突）。
@@ -274,7 +279,11 @@ export function mountIntegrations({
     `<strong>${navToCafe ? "去咖啡厅坐坐" : "回到我的集市"}</strong></span>`;
   navFab.addEventListener("click", () => navigateToWorld(navToCafe ? "cafe" : "hall"));
   mountRoot.append(navFab);
-  createIcons({ icons: INTEGRATIONS_ICONS, root: mountRoot, attrs: { "stroke-width": 1.8 } });
+  createIcons({ icons: INTEGRATIONS_ICONS, root: fab, attrs: { "stroke-width": 1.8 } });
+  createIcons({ icons: INTEGRATIONS_ICONS, root: navFab, attrs: { "stroke-width": 1.8 } });
+  for (const button of [fab, navFab]) {
+    button.querySelectorAll("svg[data-lucide]").forEach((svg) => svg.removeAttribute("data-lucide"));
+  }
 
   return {
     api: unifiedApi,

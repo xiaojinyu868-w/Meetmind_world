@@ -138,6 +138,58 @@ _VOXEL_PORTRAIT_BY_PERSON = {
     "tang-ke": "person_06.png",
 }
 
+_FIELD_SKIES = ("#89afa5", "#8fa7bb", "#a7b88d", "#99b8c2", "#b4a0ad", "#83aaa5")
+_FIELD_GROUNDS = ("#b9a878", "#929a83", "#a9a17b", "#b8a26f", "#9c9188", "#a8aa7e")
+
+
+def _seed_field(agent: dict, note_ref: str, index: int) -> dict:
+    """上游 FieldAsset 的本地样例；只供契约/运行时联调，不实现生成算法。"""
+    return {
+        "schema": "echo-field.v1",
+        "status": "ready",
+        "generated": True,
+        "regenerable": True,
+        "generated_from": [note_ref],
+        "model": "upstream-field-mock.v1",
+        "created_at": "2026-08-04T00:00:00+08:00",
+        "scene": {
+            "title": f"关于{agent['tags'][0]}与{agent['tags'][1]}的关系场域",
+            "summary": agent["bio"],
+            "parameters": {
+                "sky": _FIELD_SKIES[index % len(_FIELD_SKIES)],
+                "ground": _FIELD_GROUNDS[index % len(_FIELD_GROUNDS)],
+                "accent": agent["palette"]["jacket"],
+                "fog": "#d7dfd2",
+                "openness": round(0.58 + (index % 3) * 0.12, 2),
+                "warmth": round(0.52 + ((index + 1) % 3) * 0.14, 2),
+            },
+            "spawn": {"x": 0.0, "z": 5.2, "yaw": 3.1416},
+            "entities": [
+                {
+                    "id": "arrival",
+                    "type": "threshold",
+                    "label": "关系入口",
+                    "detail": agent["bio"],
+                    "position": {"x": 0.0, "z": 3.9},
+                },
+                {
+                    "id": "first-encounter",
+                    "type": "memory",
+                    "label": "第一次相遇",
+                    "detail": agent["met_at"],
+                    "position": {"x": -2.2, "z": -0.8},
+                },
+                {
+                    "id": "shared-thread",
+                    "type": "thread",
+                    "label": agent["tags"][1],
+                    "detail": agent["bio"],
+                    "position": {"x": 2.1, "z": -2.2},
+                },
+            ],
+        },
+    }
+
 
 def _voxel_portrait_for(person_id: str) -> str:
     return _VOXEL_PORTRAIT_BY_PERSON.get(person_id, "host.png")
@@ -173,6 +225,11 @@ def seed_demo_packages(store) -> int:
     for index, agent in enumerate(SEED_AGENTS):
         person_id = agent["id"]
         if (store.people_dir / person_id / "profile.json").exists():
+            package = store.load_package(person_id)
+            if package.get("field") is None:
+                note_ref = f"facts/seed/{person_id}/note.v1.md"
+                package["field"] = _seed_field(agent, note_ref, index)
+                store.save_package(package)
             continue
         note_ref = store.write_fact("seed", person_id, "note.v1.md",
                                     agent["bio"].encode("utf-8"))
@@ -216,6 +273,7 @@ def seed_demo_packages(store) -> int:
                 "palette": dict(agent["palette"]),
                 "real_face_ref": face_ref,
             },
+            "field": _seed_field(agent, note_ref, index),
             "relations": [],
         }
         store.save_package(package)

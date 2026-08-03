@@ -122,3 +122,27 @@ def _validate_booth_module(module, field: str) -> None:
         if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
             raise SnapshotSchemaError(
                 f"Booth display {key} must be an array of strings: {field}.display.{key}")
+    if module.get("app_entry") is not None:
+        _validate_scene_app_entry(module["app_entry"], f"{field}.app_entry")
+
+
+def _validate_scene_app_entry(entry, field: str) -> None:
+    if not isinstance(entry, dict) or entry.get("schema") != "echo-scene-app.v1":
+        raise SnapshotSchemaError(f"Scene app entry schema is invalid: {field}.schema")
+    for key in ("app_id", "kind", "label"):
+        value = entry.get(key)
+        if not isinstance(value, str) or not value.strip():
+            raise SnapshotSchemaError(f"Scene app entry requires {key}: {field}.{key}")
+    if entry.get("status") not in ("queued", "ready", "unavailable"):
+        raise SnapshotSchemaError(f"Scene app entry status is invalid: {field}.status")
+    target = entry.get("target")
+    if not isinstance(target, dict):
+        raise SnapshotSchemaError(f"Scene app entry requires target: {field}.target")
+    for key in ("person_id", "field_ref"):
+        value = target.get(key)
+        if not isinstance(value, str) or not value.strip():
+            raise SnapshotSchemaError(f"Scene app entry target requires {key}: {field}.target.{key}")
+    capabilities = entry.get("capabilities")
+    if not isinstance(capabilities, list) or not all(
+            isinstance(item, str) and item.strip() for item in capabilities):
+        raise SnapshotSchemaError(f"Scene app entry capabilities must be strings: {field}.capabilities")
