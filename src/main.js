@@ -3,6 +3,7 @@ import { currentUser, people, relationships } from "./data/demoPeople.js";
 import { AssetCatalog } from "./runtime/AssetCatalog.js";
 import { AssetStore } from "./runtime/AssetStore.js";
 import { CAFE_LAYOUT } from "./runtime/CafeLayout.js";
+import { CharacterExpressionSystem } from "./runtime/CharacterExpressionSystem.js";
 import { CharacterSystem } from "./runtime/CharacterSystem.js";
 import { NpcAgentSystem } from "./runtime/NpcAgentSystem.js";
 import {
@@ -136,6 +137,7 @@ let meetingMode = false;
 let roundtableNearby = false;
 let elapsed = 0;
 let diagnosticFrame = 0;
+const expressionSystem = new CharacterExpressionSystem();
 
 const appShell = createCafeShell({
   root: document.querySelector("#ui-root"),
@@ -156,12 +158,17 @@ const appShell = createCafeShell({
   onLocatePerson: (person) => selectWorldPerson(person.id),
   onMeetingStart: startMeeting,
   onMeetingEnd: endMeeting,
+  onExpressionChange: (personId, expression, metadata) => {
+    void setCharacterExpression(personId, expression, metadata);
+  },
+  onProfileChange: updateRuntimeProfile,
 });
 
 canvas.dataset.ready = "false";
 canvas.dataset.appView = experienceMode;
 canvas.dataset.roundtableReserved = "true";
 canvas.dataset.characterVariant = activeCharacterVariant.id;
+canvas.dataset.expressionVariant = activeCharacterVariant.id;
 
 
 function resizeRenderer() {
@@ -272,6 +279,7 @@ async function spawnCharacters() {
   player = playerEntity.root;
   playerGroundY = player.position.y;
   currentHeading.copy(MODEL_FORWARD).applyQuaternion(player.quaternion).setY(0).normalize();
+  expressionSystem.register(playerEntity, currentUser.id, activeCharacterVariant.id);
 
   npcSystem = new NpcAgentSystem({
     people,
@@ -288,6 +296,7 @@ async function spawnCharacters() {
         NPC_ENTRY_SPAWNS[index],
       ),
     );
+    expressionSystem.register(entity, people[index].id, activeCharacterVariant.id);
     npcSystem.register(people[index], entity);
   }
   npcSystem.initializeCafe();
@@ -602,6 +611,9 @@ function refreshDiagnostics() {
   canvas.dataset.centralNpcCount = String(centralCount);
   canvas.dataset.meetingCount = String(meetingMode ? centralCount + 1 : 0);
   canvas.dataset.speechCount = String(appShell.speechPersonIds.length);
+  canvas.dataset.expressions = [currentUser, ...people]
+    .map((person) => `${person.id}:${expressionSystem.getExpression(person.id) ?? "unregistered"}`)
+    .join("|");
   canvas.dataset.renderCalls = String(renderer.info.render.calls);
   canvas.dataset.triangles = String(renderer.info.render.triangles);
   canvas.dataset.centerPixel = sampleCenterPixel().join(",");
@@ -774,6 +786,36 @@ async function boot() {
   await configureWorld(environment);
 }
 
+
+async function setCharacterExpression(personId, expression, metadata = {}) {
+  const applied = await expressionSystem.setExpression(personId, expression);
+  canvas.dataset.lastExpression = `${personId}:${expression}:${applied ? "applied" : "fallback"}`;
+  canvas.dataset.expressionSource = metadata.source ?? "programmatic";
+  return applied;
+}
+
+
+function updateRuntimeProfile(personId, updatedProfile) {
+  const person = people.find((candidate) => candidate.id === personId);
+  if (!person) return false;
+  Object.assign(person, updatedProfile);
+  const entity = npcSystem?.getEntity(personId);
+  if (entity) {
+    entity.profile = {
+      ...entity.profile,
+      display_name: person.name,
+      relation: person.relation,
+      role: person.role,
+      city: person.city,
+      bio: person.bio,
+      tags: [...person.tags],
+    };
+    entity.root.userData.profile = entity.profile;
+  }
+  canvas.dataset.lastProfileUpdate = personId;
+  return true;
+}
+
 boot().catch(showFatalError);
 
 
@@ -786,12 +828,21 @@ window.__echoWorld = {
   get sceneVariant() { return activeSceneVariant; },
   get characterVariant() { return activeCharacterVariant; },
   get characters() { return characterSystem?.entities ?? []; },
+  get expressions() {
+    return Object.fromEntries(
+      [currentUser, ...people].map((person) => [
+        person.id,
+        expressionSystem.getExpression(person.id),
+      ]),
+    );
+  },
   get agentStates() {
     return people.map((person) => npcSystem?.getState(person.id)).filter(Boolean);
   },
   get appView() { return experienceMode; },
   get meetingActive() { return meetingMode; },
   selectPerson: selectWorldPerson,
+  setExpression: setCharacterExpression,
   startMeeting,
   endMeeting,
   sampleCenterPixel,

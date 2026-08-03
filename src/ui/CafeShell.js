@@ -4,6 +4,7 @@ import {
   Armchair,
   Check,
   Clock3,
+  Circle,
   Coffee,
   Info,
   LocateFixed,
@@ -11,7 +12,11 @@ import {
   MessageCircle,
   Network,
   Plus,
+  Pencil,
+  Save,
   Send,
+  Smile,
+  Lightbulb,
   Sparkles,
   UserRound,
   Users,
@@ -19,6 +24,7 @@ import {
   createIcons,
 } from "lucide";
 import { renderRelationshipGraph } from "./RelationshipGraph.js";
+import { createProfileStore } from "../runtime/ProfileStore.js";
 
 
 const ICONS = {
@@ -27,6 +33,7 @@ const ICONS = {
   Armchair,
   Check,
   Clock3,
+  Circle,
   Coffee,
   Info,
   LocateFixed,
@@ -34,12 +41,24 @@ const ICONS = {
   MessageCircle,
   Network,
   Plus,
+  Pencil,
+  Save,
   Send,
+  Smile,
+  Lightbulb,
   Sparkles,
   UserRound,
   Users,
   X,
 };
+
+const EXPRESSIONS = [
+  { id: "neutral", label: "平静", icon: "circle" },
+  { id: "happy", label: "开心", icon: "smile" },
+  { id: "surprised", label: "惊讶", icon: "sparkles" },
+  { id: "thinking", label: "思考", icon: "lightbulb" },
+];
+const EXPRESSION_IDS = new Set(EXPRESSIONS.map(({ id }) => id));
 
 const STATUS_LABELS = {
   arriving: "刚刚抵达",
@@ -104,13 +123,13 @@ function variantControlsMarkup({
         kind: "scene",
         label: "场景风格",
       })}
-      ${variantSwitcherMarkup({
+      ${characterVariants.length > 1 ? variantSwitcherMarkup({
         variants: characterVariants,
         activeVariant: activeCharacterVariant,
         context,
         kind: "character",
         label: "人物生成方案",
-      })}
+      }) : ""}
     </div>`;
 }
 
@@ -145,6 +164,65 @@ function inspectorMarkup(person, state, context = "world") {
     </div>`;
 }
 
+function inspectorControlsMarkup(person, context, mode, expression) {
+  return `
+    <div class="inspector-controls">
+      <div class="inspector-mode-switch" role="group" aria-label="个人资料显示模式">
+        <button type="button" data-inspector-mode="profile" data-inspector-context="${context}" aria-pressed="${mode === "profile"}">
+          ${icon("user-round")}<span>资料</span>
+        </button>
+        <button type="button" data-inspector-mode="edit" data-inspector-context="${context}" aria-pressed="${mode === "edit"}">
+          ${icon("pencil")}<span>编辑</span>
+        </button>
+      </div>
+      <div class="expression-control" role="group" aria-label="切换 ${escapeHtml(person.name)} 的表情">
+        <small>表情</small>
+        <div>
+          ${EXPRESSIONS.map((option) => `
+            <button
+              type="button"
+              data-person-expression="${option.id}"
+              data-expression-person="${escapeHtml(person.id)}"
+              aria-label="${escapeHtml(option.label)}表情"
+              aria-pressed="${expression === option.id}"
+              title="${escapeHtml(option.label)}"
+            >${icon(option.icon)}<span>${escapeHtml(option.label)}</span></button>
+          `).join("")}
+        </div>
+      </div>
+    </div>`;
+}
+
+function inspectorEditMarkup(person, context) {
+  const formId = `profile-form-${context}-${person.id}`;
+  return `
+    <form class="profile-edit-form" id="${escapeHtml(formId)}" data-profile-form data-profile-person="${escapeHtml(person.id)}" data-profile-context="${context}">
+      <div class="profile-edit-grid">
+        <label><span>姓名</span><input name="name" value="${escapeHtml(person.name)}" maxlength="30" required /></label>
+        <label><span>关系</span><input name="relation" value="${escapeHtml(person.relation)}" maxlength="40" /></label>
+        <label><span>角色</span><input name="role" value="${escapeHtml(person.role)}" maxlength="40" /></label>
+        <label><span>城市</span><input name="city" value="${escapeHtml(person.city)}" maxlength="30" /></label>
+      </div>
+      <label class="profile-edit-wide"><span>个人简介</span><textarea name="bio" rows="4" maxlength="320">${escapeHtml(person.bio)}</textarea></label>
+      <label class="profile-edit-wide"><span>标签 <small>用逗号分隔</small></span><input name="tags" value="${escapeHtml((person.tags ?? []).join(", "))}" maxlength="160" /></label>
+      <div class="profile-edit-actions">
+        <button type="button" data-action="cancel-profile-edit" data-inspector-context="${context}">取消</button>
+        <button type="submit">${icon("save")}<span>保存资料</span></button>
+      </div>
+    </form>`;
+}
+
+function personInspectorMarkup(person, state, context, mode, expression) {
+  const baseMarkup = inspectorMarkup(person, state, context);
+  const headerEnd = baseMarkup.indexOf("</header>") + "</header>".length;
+  const header = baseMarkup.slice(0, headerEnd);
+  const controls = inspectorControlsMarkup(person, context, mode, expression);
+  if (mode === "edit") {
+    return `${header}${controls}<div class="inspector-panel-content is-editing">${inspectorEditMarkup(person, context)}</div>`;
+  }
+  return `${header}${controls}<div class="inspector-panel-content">${baseMarkup.slice(headerEnd)}</div>`;
+}
+
 
 export function createCafeShell({
   root,
@@ -161,6 +239,8 @@ export function createCafeShell({
   onLocatePerson = () => {},
   onMeetingStart = async () => {},
   onMeetingEnd = async () => {},
+  onExpressionChange = () => {},
+  onProfileChange = () => {},
 }) {
   let currentView = "intro";
   let worldReady = false;
@@ -175,6 +255,12 @@ export function createCafeShell({
   const meetingMessages = [];
   const speechTimers = new Map();
   const activeSpeechIds = new Set();
+  const expressionTimers = new Map();
+  const personExpressions = new Map();
+  const inspectorModes = { world: "profile", map: "profile" };
+  const profileStore = createProfileStore();
+  const storedProfiles = profileStore.getAll();
+  people = people.map((person) => ({ ...person, ...(storedProfiles[person.id] ?? {}) }));
 
   root.innerHTML = `
     <div class="cafe-shell" data-view="intro">
@@ -299,6 +385,70 @@ export function createCafeShell({
     toastTimer = window.setTimeout(() => toast.classList.remove("is-visible"), 2200);
   }
 
+  function expressionForText(text) {
+    if (/[!！]/.test(text)) return "surprised";
+    if (/[?？]/.test(text)) return "thinking";
+    return "happy";
+  }
+
+  function syncExpressionControls(personId) {
+    const expression = personExpressions.get(personId) ?? "neutral";
+    for (const button of root.querySelectorAll(`[data-expression-person="${CSS.escape(personId)}"]`)) {
+      button.setAttribute("aria-pressed", String(button.dataset.personExpression === expression));
+    }
+  }
+
+  function setPersonExpression(personId, expression = "neutral", metadata = {}) {
+    const person = people.find((candidate) => candidate.id === personId);
+    if (!person || !EXPRESSION_IDS.has(expression)) return false;
+
+    window.clearTimeout(expressionTimers.get(personId));
+    expressionTimers.delete(personId);
+    const previous = personExpressions.get(personId) ?? "neutral";
+    personExpressions.set(personId, expression);
+    syncExpressionControls(personId);
+    onExpressionChange(personId, expression, { ...metadata, previous });
+
+    const duration = Number(metadata.duration ?? 0);
+    if (expression !== "neutral" && duration > 0) {
+      expressionTimers.set(personId, window.setTimeout(() => {
+        setPersonExpression(personId, "neutral", {
+          source: "auto-reset",
+          previousSource: metadata.source ?? "programmatic",
+        });
+      }, duration * 1000));
+    }
+    return true;
+  }
+
+  function savePersonProfile(personId, values, context) {
+    const index = people.findIndex((person) => person.id === personId);
+    if (index < 0) return;
+    const changes = {
+      name: String(values.name ?? "").trim(),
+      relation: String(values.relation ?? "").trim(),
+      role: String(values.role ?? "").trim(),
+      city: String(values.city ?? "").trim(),
+      bio: String(values.bio ?? "").trim(),
+      tags: String(values.tags ?? "")
+        .split(/[,，]/)
+        .map((tag) => tag.trim())
+        .filter(Boolean)
+        .slice(0, 12),
+    };
+    const updated = { ...people[index], ...changes };
+    people = people.map((person) => person.id === personId ? updated : person);
+    profileStore.save(personId, changes);
+    if (selectedWorldPerson?.id === personId) selectedWorldPerson = updated;
+    if (selectedMapPerson?.id === personId) selectedMapPerson = updated;
+    inspectorModes[context] = "profile";
+    refreshGraph();
+    renderWorldInspector();
+    renderMapInspector();
+    onProfileChange(personId, updated, { source: "manual", changes });
+    showToast(`已保存 ${updated.name} 的个人资料`);
+  }
+
   function refreshGraph() {
     renderRelationshipGraph(graph, {
       currentUser,
@@ -315,10 +465,12 @@ export function createCafeShell({
       shell.classList.remove("has-world-inspector");
       return;
     }
-    worldInspector.innerHTML = inspectorMarkup(
+    worldInspector.innerHTML = personInspectorMarkup(
       selectedWorldPerson,
       agentStates.get(selectedWorldPerson.id),
       "world",
+      inspectorModes.world,
+      personExpressions.get(selectedWorldPerson.id) ?? "neutral",
     );
     worldInspector.setAttribute("aria-hidden", "false");
     shell.classList.add("has-world-inspector");
@@ -333,7 +485,13 @@ export function createCafeShell({
       return;
     }
     mapInspector.innerHTML = `
-      ${inspectorMarkup(selectedMapPerson, agentStates.get(selectedMapPerson.id), "map")}
+      ${personInspectorMarkup(
+        selectedMapPerson,
+        agentStates.get(selectedMapPerson.id),
+        "map",
+        inspectorModes.map,
+        personExpressions.get(selectedMapPerson.id) ?? "neutral",
+      )}
       <button class="locate-person-button" type="button" data-action="locate-person">
         ${icon("locate-fixed")}<span>在咖啡厅中定位</span>
       </button>`;
@@ -439,9 +597,18 @@ export function createCafeShell({
     const responder = participants[meetingCursor % participants.length];
     const reply = responder.conversation.replies[meetingCursor % responder.conversation.replies.length];
     meetingCursor += 1;
+    setPersonExpression(responder.id, "thinking", {
+      source: "roundtable-listening",
+      duration: 1,
+    });
     window.setTimeout(() => {
       if (!meetingActive) return;
       meetingMessages.push({ personId: responder.id, text: reply });
+      setPersonExpression(responder.id, expressionForText(reply), {
+        source: "roundtable-reply",
+        text: reply,
+        duration: 4.5,
+      });
       renderMeetingActive();
     }, 620);
   }
@@ -457,6 +624,32 @@ export function createCafeShell({
 
     if (target.dataset.characterVariant) {
       onCharacterVariantChange(target.dataset.characterVariant);
+      return;
+    }
+
+    if (target.dataset.inspectorMode) {
+      const context = target.dataset.inspectorContext;
+      if (context === "world" || context === "map") {
+        inspectorModes[context] = target.dataset.inspectorMode === "edit" ? "edit" : "profile";
+        if (context === "world") renderWorldInspector();
+        else renderMapInspector();
+      }
+      return;
+    }
+
+    if (target.dataset.personExpression) {
+      setPersonExpression(target.dataset.expressionPerson, target.dataset.personExpression, {
+        source: "manual",
+        persistent: true,
+      });
+      return;
+    }
+
+    if (target.dataset.action === "cancel-profile-edit") {
+      const context = target.dataset.inspectorContext;
+      inspectorModes[context] = "profile";
+      if (context === "world") renderWorldInspector();
+      else renderMapInspector();
       return;
     }
 
@@ -537,6 +730,10 @@ export function createCafeShell({
           personId: [...invitedIds][0],
           text: "大家都到了。既然坐在同一张桌边，我们从最近发生的一件事开始吧。",
         });
+        setPersonExpression([...invitedIds][0], "happy", {
+          source: "roundtable-opening",
+          duration: 4.5,
+        });
         renderMeetingActive();
       } catch (error) {
         console.error(error);
@@ -559,6 +756,17 @@ export function createCafeShell({
   });
 
   root.addEventListener("submit", (event) => {
+    const profileForm = event.target.closest("[data-profile-form]");
+    if (profileForm) {
+      event.preventDefault();
+      const values = Object.fromEntries(new FormData(profileForm).entries());
+      savePersonProfile(
+        profileForm.dataset.profilePerson,
+        values,
+        profileForm.dataset.profileContext,
+      );
+      return;
+    }
     const form = event.target.closest("[data-meeting-form]");
     if (!form) return;
     event.preventDefault();
@@ -580,6 +788,7 @@ export function createCafeShell({
     setView,
     selectWorldPerson(personId) {
       selectedWorldPerson = people.find((person) => person.id === personId) ?? null;
+      inspectorModes.world = "profile";
       renderWorldInspector();
     },
     updateAgentState(state) {
@@ -596,6 +805,11 @@ export function createCafeShell({
     showNpcConversation({ speakerId, text, duration = 4.5 }) {
       const person = people.find((candidate) => candidate.id === speakerId);
       if (!person) return;
+      setPersonExpression(speakerId, expressionForText(text), {
+        source: "npc-conversation",
+        text,
+        duration,
+      });
       let bubble = speechLayer.querySelector(`[data-speech-person="${speakerId}"]`);
       if (!bubble) {
         bubble = document.createElement("div");
@@ -630,6 +844,10 @@ export function createCafeShell({
       bubble.style.visibility = visible ? "visible" : "hidden";
     },
     showToast,
+    setPersonExpression,
+    getPersonExpression(personId) {
+      return personExpressions.get(personId) ?? "neutral";
+    },
     get speechPersonIds() {
       return [...activeSpeechIds];
     },

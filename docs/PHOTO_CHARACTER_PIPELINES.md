@@ -1,124 +1,158 @@
-# 照片到角色：两套生产链路
+# 照片到像素角色：方案 1 生产链路
 
-## 目标与边界
+## 当前结论
 
-本实验只验证“照片证据如何稳定变成可运行角色”，不做真实身份确认。三张输入均为多人合照；当前用站立六人照从左到右定义 `person_01..06` 六个匿名视觉槽位，并映射到六名演示 NPC。玩家使用独立的中性 `host` 设计。
+产品只保留方案 1：AI 从授权照片中总结可见特征，绘制固定 UV 的 MC 像素皮肤，再装配到 Blender 方块身体并发布到 Three.js。
 
-原始照片不会进入 `public/`、GLB 或浏览器网络请求。前端只加载结构化特征、派生贴图和模型。
+人物模型与表情实现是一条链路：四种表情都通过切换该人物的完整像素 atlas 实现，不存在第二套人物或表情资源。
 
-## 运行时布局
+| 项目 | 约定 |
+| --- | --- |
+| 运行时参数 | `?character=voxel` |
+| 贴图尺寸 | 128x128 PNG |
+| 表情 | `neutral / happy / surprised / thinking` |
+| 采样 | `NearestFilter` |
+| 表情路径 | `textures/characters/voxel/expressions/{slot}_{expression}.png` |
 
-场景和当前启用的人物方案：
+绘本角色和 AI 直接生成完整 3D 人物只作历史归档，不进入前端选择器。
 
-```text
-?scene=v1|v3
-?character=voxel
-```
-
-- 默认场景：`v3`。
-- 默认人物：`voxel`。
-- 切换场景会保留人物参数并刷新页面。
-- 单个人物资产失败时回退到原 V3 无脸人物，不阻塞整个咖啡厅。
-- `storybook` 资产作为设计归档保留，不再进入前端选择器；旧参数会规范为 `voxel`。
-
-## 方案 2：特征驱动绘本 Low-poly
+## 完整链路
 
 ```text
-多人照片
--> 人物框与匿名槽位
--> CharacterSpec
--> 头型/发型/眼镜/身形/服装模块选择
--> 绘本 atlas
--> Blender 固定规则装配
--> GLB
+摄像头照片群
+-> K3 按人物归组
+-> 授权、质量与来源校验
+-> AI 总结可见特征 CharacterSpec
+-> AI/规则绘制固定 UV 的像素 atlas
+-> Blender 固定方块身体装配
+-> GLB、四张表情 atlas、预览与 manifest
+-> UV/尺寸/隐私/哈希校验
+-> 发布 CharacterAsset
+-> Three.js 加载与 Agent 驱动
 ```
 
-几何负责远距离辨识，贴图负责近距离气质。每个角色保持独立的发型轮廓、眼镜、身高比例和服装色块；脸部只使用共享风格的极简眉眼、鼻影和嘴线，不追求写实生物特征。
+Blender 只负责稳定的模板、UV 和导出，不让 AI 生成任意 Blender Python。AI 输出必须先进入受校验的 `CharacterSpec` 和贴图任务。
 
-绘本贴图使用有限色板、轻微纸张颗粒和手绘边缘。可见服装图案会被概括为无文字色块，不复刻品牌、证件或活动 Logo。
+## 所需数据
 
-## 方案 3：固定身体与 MC 像素皮肤
+正式上游最少需要提供：
 
-```text
-多人照片
--> CharacterSpec
--> AI 像素皮肤描述
--> 固定 UV atlas 绘制器
--> Blender regular/tall 身体模板
--> GLB
+```json
+{
+  "personId": "person_01",
+  "displayName": "谢淯琪",
+  "sourceAssetIds": ["asset-authorized-001"],
+  "consentScope": ["character_model", "pixel_texture"],
+  "visibleTraits": {
+    "hair": "后束中分发",
+    "glasses": false,
+    "bodyTemplate": "regular",
+    "outfitPalette": ["#715474", "#66717f"],
+    "signatureItem": "深色挂绳"
+  },
+  "confidence": {
+    "hair": 0.91,
+    "outfitPalette": 0.96,
+    "signatureItem": 0.74
+  }
+}
 ```
 
-几何仅保留少量模板，人物差异主要来自像素皮肤。头部立方体明确使用五个可见面：
+每项数据需要保留来源、用途授权、时间和置信度。不可见或低置信度特征必须标为设计补全，不得猜测身份、健康、民族等敏感属性。
+
+原始照片、音频、embedding、内部 URI 和模型密钥不得进入 `public/`、GLB、日志或前端 DTO。浏览器只加载脱敏后的像素贴图、模型和资料 DTO。
+
+## 像素皮肤契约
+
+头部使用五个可见面：
 
 ```text
 front | right | back | left | top
 ```
 
-正面承担刘海、眼镜和极简表情；左右面保持鬓角与镜腿连续；背面表现后脑发型；顶面表现发旋和发色变化。底面使用共享肤色，不要求 AI 绘制。
+- 正面表现刘海、眼镜与极简表情。
+- 左右面保持鬓角、镜腿和发型连续。
+- 背面与顶面表现后脑轮廓、发旋和发色。
+- 躯干、手臂和腿使用固定 UV 区域。
+- 服装只保留色块和无文字图案，不复刻品牌、证件或活动 Logo。
+- 禁止抗锯齿和连续渐变，避免破坏像素风格。
 
-躯干、手臂和腿同样使用固定 UV 区域。贴图禁止抗锯齿和连续渐变，Three.js 使用 `NearestFilter`，确保相机缩放时仍保持清晰像素格。
+每次表情切换都替换完整 atlas，而不是只改头部某一面。这样能保证脸、头发、眼镜和穿搭始终属于同一个人物，也能让贴图缓存和失败回退保持简单。
 
-## 匿名槽位映射
+## 表情触发
 
-| 照片槽位 | 姓名 | 演示角色 ID | 主要视觉线索 |
-| --- | --- | --- | --- |
-| `person_01` | 谢淯琪 | `lin-che` | 后束中分发、梅紫外套、蓝灰长裤 |
-| `person_02` | 曾英杰 | `zhou-ning` | 短卷发、圆框眼镜、米红拼色上衣 |
-| `person_03` | 黄月胜 | `chen-mo` | 层次长刘海、细框眼镜、灰色宽松套装 |
-| `person_04` | 李浩 | `xu-an` | 高瘦、矩形眼镜、黑色短袖和短裤 |
-| `person_05` | 刘璐 | `su-he` | 中分长发、浅色外套、暖灰长裤 |
-| `person_06` | 洪选婷 | `tang-ke` | 后束中分发、矩形眼镜、黑上衣和灰蓝长裤 |
+UI、NPC 和会议系统统一发送语义事件：
 
-姓名与槽位的对应关系由团队确认，只服务于本次演示；模型特征仍按可见证据和隐私规则生成，不用于自动身份识别。
-
-## 生产接口
-
-正式服务中，视觉模型不应直接写任意 Blender Python。建议输出受校验的 `CharacterSpec` 和 atlas PNG；Blender Worker 只执行版本化生成器：
-
-```text
-CharacterSpec + texture.png + template_version
--> validate input
--> build asset
--> render preview
--> validate bounds/UV/texture/triangle budget
--> publish GLB + manifest
+```json
+{
+  "type": "character.expression.set",
+  "personId": "lin-che",
+  "state": "thinking",
+  "source": "roundtable-listening",
+  "durationMs": 1000
+}
 ```
 
-每项不可见或低置信度特征必须标记为设计补全。用户确认三视图或角色预览后，才可将资产发布到关系世界。
+- 资料侧栏手动选择：保持状态，直到用户再次切换。
+- NPC 自主对话：普通语句为开心，问句为思考，感叹句为惊讶，随后恢复平静。
+- 圆桌会议：倾听时思考，发言时按文本选择表情，随后恢复平静。
+- 贴图缺失：先回退同一人物的 `neutral`，再回退 GLB 内嵌初始 atlas。
+- 异步加载：较旧请求不得覆盖较新的表情状态。
 
-## 当前实现与重建
+## 槽位映射
 
-当前原型严格拆成两步：AI/视觉算法读取 `scenes/photoes` 中的授权照片并写出 `scenes/data/character_specs.json`；Blender 生成器只读取这个脱敏规格，不直接读取或打包原始照片。
+当前合照按从左到右映射：
+
+| 槽位 | 姓名 | 演示角色 ID |
+| --- | --- | --- |
+| `person_01` | 谢淯琪 | `lin-che` |
+| `person_02` | 曾英杰 | `zhou-ning` |
+| `person_03` | 黄月胜 | `chen-mo` |
+| `person_04` | 李浩 | `xu-an` |
+| `person_05` | 刘璐 | `su-he` |
+| `person_06` | 洪选婷 | `tang-ke` |
+
+关系 Map、资料侧栏、场景模型、肖像和表情 atlas 必须共用这张映射。玩家使用独立的 `host` 槽位。
+
+## 服务端执行
+
+建议把生成任务放在隔离的 Blender Worker 中：
+
+```text
+CharacterSpec + atlas + templateVersion
+-> schema validation
+-> versioned Blender generator
+-> render preview
+-> bounds/UV/texture/triangle/privacy validation
+-> publish GLB + atlas + manifest
+```
+
+Worker 需要限制 CPU、内存、执行时间和输出路径。生成失败时保留任务日志，但不得在错误信息中暴露原始照片或内部地址。
+
+## 当前重建命令
 
 在仓库根目录执行：
 
 ```powershell
 blender --background --factory-startup --python .\blender\build_photo_character_modes.py
 blender --background --factory-startup --python .\blender\validate_photo_character_modes.py
+python .\blender\build_character_expression_textures.py
 ```
 
-服务器任务应显式传入本次任务的规格文件，避免依赖机器目录结构：
+关键输出：
 
-```powershell
-blender --background --factory-startup --python .\blender\build_photo_character_modes.py -- --spec D:\jobs\<job-id>\character_specs.json
-```
-
-生成结果：
-
-- `public/models/characters/photo-derived/`：14 个运行时 GLB。
-- `public/textures/characters/storybook/`：7 张 256×256 绘本 atlas。
-- `public/textures/characters/voxel/`：7 张 128×128 像素 atlas。
-- `public/portraits/photo-derived/voxel/`：7 张 512×512 Blender 像素角色肖像，用于关系 Map、资料侧栏和会议 UI。
-- `exports/photo_character_modes_manifest.json`：资产 ID、尺寸、三角面、哈希和隐私策略。
-- `exports/photo_character_modes_validation.json`：模型、UV、贴图、预览与隐私验证结果。
-- `renders/photo_characters_*_lineup.png`：两套角色的 Blender 阵容预览。
+- `public/models/characters/photo-derived/voxel/`：7 个运行时 GLB。
+- `public/textures/characters/voxel/`：7 张基础像素 atlas。
+- `public/textures/characters/voxel/expressions/`：7 人 x 4 表情，共 28 张完整 atlas。
+- `public/portraits/photo-derived/voxel/`：关系 Map 与资料侧栏肖像。
+- `exports/character_expression_assets_manifest.json`：表情资源路径、尺寸和哈希。
 
 ## 验收标准
 
-- 六个 NPC 在中远距离可通过轮廓、眼镜和穿搭互相区分。
-- 关系 Map 的姓名、`person_01..06` 槽位和角色肖像一一对应。
-- 绘本角色和像素角色使用同一个人物槽位映射。
-- 像素头部五面均有有效 UV，且侧面与正面发型连续。
-- 模型脚底位于 `z=0` 的导出地面，面向本地 `-Y`，高度与现有座位系统兼容。
-- 所有角色可被点选、移动、压缩入座并加入圆桌会议。
-- GLB 和贴图中不包含输入照片、姓名、证件或可读品牌文字。
+- 前端不显示多方案人物选择器，运行时人物固定为像素角色。
+- 七个角色的模型、肖像、姓名和表情 atlas 槽位一致。
+- 四种表情可以手动切换，也能被 NPC 对话和圆桌会议自动驱动。
+- 切换表情时使用完整 atlas 和 nearest 采样，像素边缘清晰。
+- 缺图与异步竞态有可预测回退。
+- 模型脚底位于导出地面、面向本地 `-Y`，兼容移动、入座和圆桌会议。
+- `public/` 不包含原始照片或未授权数据。

@@ -22,12 +22,13 @@ npm run build
 -> 3D Echo Cafe
 -> Agent 随机选择普通桌并同桌自主交谈
 -> 点选人物查看资料
+-> 手动编辑人物资料与切换表情
 -> 靠近中央六人圆桌，邀请人物入座并对话
 -> 关系 Map
 -> 从节点返回咖啡厅定位人物
 ```
 
-场景包含 1 个玩家和 6 个 Agent。六名 Agent 当前统一使用固定身体、五面头像的 MC 像素角色；绘本 Low-poly 角色资产仅作归档。中央六人桌只接受用户会议邀请，普通 Agent 调度不会占用它。
+场景包含 1 个玩家和 6 个 Agent。人物统一使用固定身体、五面头像的 MC 像素角色。中央六人桌只接受用户会议邀请，普通 Agent 调度不会占用它。
 
 ## 代码边界
 
@@ -37,7 +38,9 @@ npm run build
 - `src/runtime/CafeLayout.js`：咖啡厅边界、5 张桌和 18 个 Blender 座位锚点。
 - `src/runtime/NpcAgentSystem.js`：普通桌随机分配、入座、同桌对话与会议调度。
 - `src/runtime/CharacterSystem.js`：人物 GLB 缓存、克隆、换色与实例生命周期。
-- `src/runtime/CharacterVariants.js`：两套人物生产方案、匿名人物槽位和 URL 状态。
+- `src/runtime/CharacterVariants.js`：人物生产方案、匿名人物槽位和 URL 状态。
+- `src/runtime/CharacterExpressionSystem.js`：按人物方案路由表情贴图、缓存和回退。
+- `src/runtime/ProfileStore.js`：可编辑人物资料的版本化本地覆盖层。
 - `src/main.js`：Three.js 场景、第三人称相机、移动、碰撞、射线选择和会议编排。
 - `public/data/asset-catalog.json`：环境、人物和资料资产白名单。
 
@@ -58,7 +61,7 @@ V2 几何场景资产仍归档保留，但不再出现在前端选择器中，�
 
 绘本人物资产仍归档保留，但不再出现在前端选择器中，旧 `?character=storybook` 地址会回落到 `voxel`。
 
-照片输入边界、匿名槽位、五面头部贴图和生产服务接口见 [`docs/PHOTO_CHARACTER_PIPELINES.md`](docs/PHOTO_CHARACTER_PIPELINES.md)。
+人物与表情生产契约、照片输入边界和服务接口见 [`docs/PHOTO_CHARACTER_PIPELINES.md`](docs/PHOTO_CHARACTER_PIPELINES.md)。运行时表情使用 `neutral / happy / surprised / thinking`，每次切换同一人物的完整 128x128 像素 atlas，并使用 nearest 采样。
 
 ![几何 Low-poly 版本](renders/echo_world_cafe_reference-lowpoly-v2_preview.png)
 
