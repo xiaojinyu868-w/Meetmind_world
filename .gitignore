@@ -16,3 +16,4 @@ backend/data/*
 # Blender 产物
 *.blend1
 exports/*.glb
+backend/uvicorn.log
