@@ -60,16 +60,16 @@ front | right | back | left | top
 
 ## 匿名槽位映射
 
-| 照片槽位 | 演示角色 ID | 主要视觉线索 |
-| --- | --- | --- |
-| `person_01` | `lin-che` | 后束中分发、梅紫外套、蓝灰长裤 |
-| `person_02` | `zhou-ning` | 短卷发、圆框眼镜、米红拼色上衣 |
-| `person_03` | `chen-mo` | 层次长刘海、细框眼镜、灰色宽松套装 |
-| `person_04` | `xu-an` | 高瘦、矩形眼镜、黑色短袖和短裤 |
-| `person_05` | `su-he` | 中分长发、浅色外套、暖灰长裤 |
-| `person_06` | `tang-ke` | 后束中分发、矩形眼镜、黑上衣和灰蓝长裤 |
+| 照片槽位 | 姓名 | 演示角色 ID | 主要视觉线索 |
+| --- | --- | --- | --- |
+| `person_01` | 谢淯琪 | `lin-che` | 后束中分发、梅紫外套、蓝灰长裤 |
+| `person_02` | 曾英杰 | `zhou-ning` | 短卷发、圆框眼镜、米红拼色上衣 |
+| `person_03` | 黄月胜 | `chen-mo` | 层次长刘海、细框眼镜、灰色宽松套装 |
+| `person_04` | 李浩 | `xu-an` | 高瘦、矩形眼镜、黑色短袖和短裤 |
+| `person_05` | 刘璐 | `su-he` | 中分长发、浅色外套、暖灰长裤 |
+| `person_06` | 洪选婷 | `tang-ke` | 后束中分发、矩形眼镜、黑上衣和灰蓝长裤 |
 
-映射只服务于演示数据，不声明照片人物的姓名或真实身份。
+姓名与槽位的对应关系由团队确认，只服务于本次演示；模型特征仍按可见证据和隐私规则生成，不用于自动身份识别。
 
 ## 生产接口
 
@@ -108,6 +108,7 @@ blender --background --factory-startup --python .\blender\build_photo_character_
 - `public/models/characters/photo-derived/`：14 个运行时 GLB。
 - `public/textures/characters/storybook/`：7 张 256×256 绘本 atlas。
 - `public/textures/characters/voxel/`：7 张 128×128 像素 atlas。
+- `public/portraits/photo-derived/voxel/`：7 张 512×512 Blender 像素角色肖像，用于关系 Map、资料侧栏和会议 UI。
 - `exports/photo_character_modes_manifest.json`：资产 ID、尺寸、三角面、哈希和隐私策略。
 - `exports/photo_character_modes_validation.json`：模型、UV、贴图、预览与隐私验证结果。
 - `renders/photo_characters_*_lineup.png`：两套角色的 Blender 阵容预览。
@@ -115,6 +116,7 @@ blender --background --factory-startup --python .\blender\build_photo_character_
 ## 验收标准
 
 - 六个 NPC 在中远距离可通过轮廓、眼镜和穿搭互相区分。
+- 关系 Map 的姓名、`person_01..06` 槽位和角色肖像一一对应。
 - 绘本角色和像素角色使用同一个人物槽位映射。
 - 像素头部五面均有有效 UV，且侧面与正面发型连续。
 - 模型脚底位于 `z=0` 的导出地面，面向本地 `-Y`，高度与现有座位系统兼容。

@@ -5,17 +5,20 @@
   "source_spec_sha256": "a08c683d25017bec19e743ee7a27b999adf0fc3446a9890ff17bbcf67e913636",
   "identity_policy": {
     "raw_photos_copied_to_public": false,
+    "source_photo_crops_in_public": false,
     "photo_projection": false,
     "storybook": "structured visible features plus generated painterly swatches",
     "voxel": "fixed body template plus abstract pixel atlas",
     "unknown_side_and_back_views": "shared design defaults",
-    "logos_and_readable_text": "omitted"
+    "logos_and_readable_text": "omitted",
+    "voxel_portraits": "Blender renders of generated models, never source-photo crops"
   },
   "counts": {
     "photo_subjects": 6,
     "generic_hosts": 1,
     "modes": 2,
-    "character_glbs": 14
+    "character_glbs": 14,
+    "voxel_portraits": 7
   },
   "modes": {
     "storybook": {
@@ -40,7 +43,15 @@
         "back",
         "top"
       ],
-      "head_bottom": "design-default solid color"
+      "head_bottom": "design-default solid color",
+      "portrait": {
+        "size": [
+          512,
+          512
+        ],
+        "path_pattern": "public/portraits/photo-derived/voxel/{person_id}.png",
+        "source": "Blender render of the generated voxel model; no source-photo crop"
+      }
     }
   },
   "assets": [
@@ -186,7 +197,14 @@
       "texture_bytes": 1356,
       "glb_sha256": "73c08f0c65baf9dd106a3f6ebacd065d0675495c713c7dd5f862c5f600d8183c",
       "texture_sha256": "a0e76a86e40df2d61f9ec3ef2803366e4084175c99232aef979c88c0fc10a954",
-      "body_template": "regular"
+      "body_template": "regular",
+      "portrait": "public/portraits/photo-derived/voxel/person_01.png",
+      "portrait_size": [
+        512,
+        512
+      ],
+      "portrait_bytes": 241019,
+      "portrait_sha256": "9caed5f79045a725a03f094cee75ee113214acec3c92db3fd56907f0a13081d6"
     },
     {
       "asset_id": "character.photo.person_02.voxel.v1",
@@ -204,7 +222,14 @@
       "texture_bytes": 1313,
       "glb_sha256": "3b275c02b3266411e0f86eaa4ae342c8e4afcf515b65a37ee088e8ca0b7a2bdd",
       "texture_sha256": "701dba72d5515aa6d28135a6a0684b53acc8be1902f8a4798737948273d6fe87",
-      "body_template": "regular"
+      "body_template": "regular",
+      "portrait": "public/portraits/photo-derived/voxel/person_02.png",
+      "portrait_size": [
+        512,
+        512
+      ],
+      "portrait_bytes": 240483,
+      "portrait_sha256": "0e8a4a83f011997073ef00cc6ba232b243b3a28ae446b9eab359c41cc9c162c3"
     },
     {
       "asset_id": "character.photo.person_03.voxel.v1",
@@ -222,7 +247,14 @@
       "texture_bytes": 1283,
       "glb_sha256": "12b132213b24917cca29abc12bf18409445183c2d782e1f925be01df03ee4dde",
       "texture_sha256": "123599e3d345efc76d9d67a97bd19a8d2ff1f578c3908e2739e8e9ee715c5968",
-      "body_template": "regular"
+      "body_template": "regular",
+      "portrait": "public/portraits/photo-derived/voxel/person_03.png",
+      "portrait_size": [
+        512,
+        512
+      ],
+      "portrait_bytes": 240903,
+      "portrait_sha256": "daabf45874cc278959be3b7c98d9e8bdaaa57693d06aafa8a13bbcd2d45133c5"
     },
     {
       "asset_id": "character.photo.person_04.voxel.v1",
@@ -240,7 +272,14 @@
       "texture_bytes": 1310,
       "glb_sha256": "bf3020203133c0d416286f8b675563ce2da42649bb1e59c0be7c99de8abe223e",
       "texture_sha256": "326c78f345fe96c4b1a1b6d9349420272c625e799883dacb012047ae01c5cfc6",
-      "body_template": "tall"
+      "body_template": "tall",
+      "portrait": "public/portraits/photo-derived/voxel/person_04.png",
+      "portrait_size": [
+        512,
+        512
+      ],
+      "portrait_bytes": 241738,
+      "portrait_sha256": "a3336b1a0db471a6b21c8f030e65bb68b59b68ca2b1320b696d2a6c3f5b31335"
     },
     {
       "asset_id": "character.photo.person_05.voxel.v1",
@@ -258,7 +297,14 @@
       "texture_bytes": 1279,
       "glb_sha256": "648d9bd6fd813a014ed7f8c05bec0c0d306341685edd02f4d106339e1183c053",
       "texture_sha256": "940573f432d17dd03f7e759bfee5815966edb02bbff21f0767a1d98d90fa7638",
-      "body_template": "regular"
+      "body_template": "regular",
+      "portrait": "public/portraits/photo-derived/voxel/person_05.png",
+      "portrait_size": [
+        512,
+        512
+      ],
+      "portrait_bytes": 236750,
+      "portrait_sha256": "69e547544df3c0c7553f9a4b9f38c73526ddcf3ac360a4320e63a97e73ab1e71"
     },
     {
       "asset_id": "character.photo.person_06.voxel.v1",
@@ -276,7 +322,14 @@
       "texture_bytes": 1300,
       "glb_sha256": "cbf9d468086c2fc62e70e10e277a91581cc350cfa22f53130dd28f3db9021751",
       "texture_sha256": "f2d4d476952eae6f4d7c6f38f6cf5d165364bd8386be7fb8b781595e8b1299d6",
-      "body_template": "regular"
+      "body_template": "regular",
+      "portrait": "public/portraits/photo-derived/voxel/person_06.png",
+      "portrait_size": [
+        512,
+        512
+      ],
+      "portrait_bytes": 239772,
+      "portrait_sha256": "36bccd08ad2b2ac1b879d359c3243fcfe29c23c20365ca3c2cb30190a0625c1f"
     },
     {
       "asset_id": "character.photo.host.voxel.v1",
@@ -294,7 +347,14 @@
       "texture_bytes": 1314,
       "glb_sha256": "1141152b6383f63ee502eb0df9aa8732a4065d37b4277986c36a2f6c199132ba",
       "texture_sha256": "9e619c2536f16535f7c24e6beef67afb11c02a89cb84265698f569ad8907726f",
-      "body_template": "regular"
+      "body_template": "regular",
+      "portrait": "public/portraits/photo-derived/voxel/host.png",
+      "portrait_size": [
+        512,
+        512
+      ],
+      "portrait_bytes": 241374,
+      "portrait_sha256": "0f3172c53c0f6266bdb9b398726d4bf81d99f103639f0ad3248c75089cf716a7"
     }
   ],
   "previews": [

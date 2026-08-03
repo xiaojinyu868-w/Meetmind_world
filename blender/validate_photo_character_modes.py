@@ -11,6 +11,7 @@ from mathutils import Vector
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MODEL_ROOT = PROJECT_ROOT / "public" / "models" / "characters" / "photo-derived"
 TEXTURE_ROOT = PROJECT_ROOT / "public" / "textures" / "characters"
+VOXEL_PORTRAIT_ROOT = PROJECT_ROOT / "public" / "portraits" / "photo-derived" / "voxel"
 EXPORT_ROOT = PROJECT_ROOT / "exports"
 RENDER_ROOT = PROJECT_ROOT / "renders"
 MANIFEST_PATH = EXPORT_ROOT / "photo_character_modes_manifest.json"
@@ -166,6 +167,45 @@ def validate_texture_file(mode: str, person_id: str) -> dict[str, object]:
     return result
 
 
+def validate_voxel_portrait(person_id: str) -> dict[str, object]:
+    path = VOXEL_PORTRAIT_ROOT / f"{person_id}.png"
+    if not path.exists():
+        return {
+            "person_id": person_id,
+            "path": str(path),
+            "exists": False,
+            "checks": {"exists": False},
+            "passed": False,
+        }
+    image = bpy.data.images.load(str(path), check_existing=False)
+    width, height = image.size
+    pixels = image.pixels
+    color_bins = {
+        tuple(round(pixels[index + channel] * 15) for channel in range(3))
+        for index in range(0, len(pixels), 4 * 64)
+    }
+    checks = {
+        "exists": True,
+        "square_512": width == 512 and height == 512,
+        "png_extension": path.suffix.lower() == ".png",
+        "nontrivial_file_size": path.stat().st_size > 5_000,
+        "nonblank_color_variation": len(color_bins) >= 12,
+    }
+    result = {
+        "person_id": person_id,
+        "path": str(path.relative_to(PROJECT_ROOT)).replace("\\", "/"),
+        "exists": True,
+        "size": [width, height],
+        "bytes": path.stat().st_size,
+        "sha256": sha256(path),
+        "sampled_color_bins": len(color_bins),
+        "checks": checks,
+        "passed": all(checks.values()),
+    }
+    bpy.data.images.remove(image)
+    return result
+
+
 def validate_glb(mode: str, person_id: str) -> dict[str, object]:
     reset_scene()
     path = MODEL_ROOT / mode / f"{person_id}.glb"
@@ -266,7 +306,11 @@ def validate_glb(mode: str, person_id: str) -> dict[str, object]:
     return record
 
 
-def validate_manifest(asset_reports: list[dict[str, object]], texture_reports: list[dict[str, object]]) -> dict[str, object]:
+def validate_manifest(
+    asset_reports: list[dict[str, object]],
+    texture_reports: list[dict[str, object]],
+    portrait_reports: list[dict[str, object]],
+) -> dict[str, object]:
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     manifest_assets = {item["asset_id"]: item for item in manifest["assets"]}
     textures_by_key = {
@@ -288,12 +332,25 @@ def validate_manifest(asset_reports: list[dict[str, object]], texture_reports: l
         texture_report = textures_by_key[(mode, person_id)]
         if manifest_asset["texture_sha256"] != texture_report["sha256"]:
             mismatches.append(f"texture hash mismatch: {asset_id}")
+    portraits_by_person = {report["person_id"]: report for report in portrait_reports}
+    for person_id in PERSON_IDS:
+        asset_id = f"character.photo.{person_id}.voxel.v1"
+        manifest_asset = manifest_assets.get(asset_id)
+        portrait_report = portraits_by_person[person_id]
+        if not manifest_asset:
+            continue
+        if manifest_asset.get("portrait") != portrait_report["path"]:
+            mismatches.append(f"portrait path mismatch: {asset_id}")
+        if manifest_asset.get("portrait_sha256") != portrait_report["sha256"]:
+            mismatches.append(f"portrait hash mismatch: {asset_id}")
     checks = {
         "manifest_exists": MANIFEST_PATH.exists(),
         "schema_version": manifest.get("schema_version") == "echo-photo-character-modes.v1",
         "fourteen_assets": len(manifest_assets) == 14,
         "six_photo_plus_host_per_mode": manifest.get("counts", {}).get("character_glbs") == 14,
+        "seven_voxel_portraits": manifest.get("counts", {}).get("voxel_portraits") == 7,
         "raw_photos_not_copied": manifest.get("identity_policy", {}).get("raw_photos_copied_to_public") is False,
+        "source_photo_crops_forbidden": manifest.get("identity_policy", {}).get("source_photo_crops_in_public") is False,
         "hashes_match": not mismatches,
     }
     return {
@@ -338,7 +395,8 @@ def main() -> None:
         for person_id in PERSON_IDS:
             asset_reports.append(validate_glb(mode, person_id))
             texture_reports.append(validate_texture_file(mode, person_id))
-    manifest_report = validate_manifest(asset_reports, texture_reports)
+    portrait_reports = [validate_voxel_portrait(person_id) for person_id in PERSON_IDS]
+    manifest_report = validate_manifest(asset_reports, texture_reports, portrait_reports)
     preview_reports = validate_previews()
     public_photo_names = {
         path.name
@@ -358,16 +416,20 @@ def main() -> None:
             "texture_count": len(texture_reports),
             "texture_passed": sum(report["passed"] for report in texture_reports),
             "preview_passed": sum(report["passed"] for report in preview_reports),
+            "portrait_count": len(portrait_reports),
+            "portrait_passed": sum(report["passed"] for report in portrait_reports),
         },
         "manifest": manifest_report,
         "privacy": privacy_check,
         "assets": asset_reports,
         "textures": texture_reports,
+        "portraits": portrait_reports,
         "previews": preview_reports,
     }
     report["passed"] = (
         all(item["passed"] for item in asset_reports)
         and all(item["passed"] for item in texture_reports)
+        and all(item["passed"] for item in portrait_reports)
         and manifest_report["passed"]
         and privacy_check["passed"]
         and all(item["passed"] for item in preview_reports)

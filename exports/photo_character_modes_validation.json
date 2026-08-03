@@ -6,7 +6,9 @@
     "asset_passed": 14,
     "texture_count": 14,
     "texture_passed": 14,
-    "preview_passed": 2
+    "preview_passed": 2,
+    "portrait_count": 7,
+    "portrait_passed": 7
   },
   "manifest": {
     "path": "exports/photo_character_modes_manifest.json",
@@ -16,7 +18,9 @@
       "schema_version": true,
       "fourteen_assets": true,
       "six_photo_plus_host_per_mode": true,
+      "seven_voxel_portraits": true,
       "raw_photos_not_copied": true,
+      "source_photo_crops_forbidden": true,
       "hashes_match": true
     },
     "passed": true
@@ -1246,6 +1250,148 @@
         "png_extension": true,
         "five_head_faces_have_pixels": true,
         "hard_alpha_only": true
+      },
+      "passed": true
+    }
+  ],
+  "portraits": [
+    {
+      "person_id": "person_01",
+      "path": "public/portraits/photo-derived/voxel/person_01.png",
+      "exists": true,
+      "size": [
+        512,
+        512
+      ],
+      "bytes": 241019,
+      "sha256": "9caed5f79045a725a03f094cee75ee113214acec3c92db3fd56907f0a13081d6",
+      "sampled_color_bins": 58,
+      "checks": {
+        "exists": true,
+        "square_512": true,
+        "png_extension": true,
+        "nontrivial_file_size": true,
+        "nonblank_color_variation": true
+      },
+      "passed": true
+    },
+    {
+      "person_id": "person_02",
+      "path": "public/portraits/photo-derived/voxel/person_02.png",
+      "exists": true,
+      "size": [
+        512,
+        512
+      ],
+      "bytes": 240483,
+      "sha256": "0e8a4a83f011997073ef00cc6ba232b243b3a28ae446b9eab359c41cc9c162c3",
+      "sampled_color_bins": 53,
+      "checks": {
+        "exists": true,
+        "square_512": true,
+        "png_extension": true,
+        "nontrivial_file_size": true,
+        "nonblank_color_variation": true
+      },
+      "passed": true
+    },
+    {
+      "person_id": "person_03",
+      "path": "public/portraits/photo-derived/voxel/person_03.png",
+      "exists": true,
+      "size": [
+        512,
+        512
+      ],
+      "bytes": 240903,
+      "sha256": "daabf45874cc278959be3b7c98d9e8bdaaa57693d06aafa8a13bbcd2d45133c5",
+      "sampled_color_bins": 49,
+      "checks": {
+        "exists": true,
+        "square_512": true,
+        "png_extension": true,
+        "nontrivial_file_size": true,
+        "nonblank_color_variation": true
+      },
+      "passed": true
+    },
+    {
+      "person_id": "person_04",
+      "path": "public/portraits/photo-derived/voxel/person_04.png",
+      "exists": true,
+      "size": [
+        512,
+        512
+      ],
+      "bytes": 241738,
+      "sha256": "a3336b1a0db471a6b21c8f030e65bb68b59b68ca2b1320b696d2a6c3f5b31335",
+      "sampled_color_bins": 49,
+      "checks": {
+        "exists": true,
+        "square_512": true,
+        "png_extension": true,
+        "nontrivial_file_size": true,
+        "nonblank_color_variation": true
+      },
+      "passed": true
+    },
+    {
+      "person_id": "person_05",
+      "path": "public/portraits/photo-derived/voxel/person_05.png",
+      "exists": true,
+      "size": [
+        512,
+        512
+      ],
+      "bytes": 236750,
+      "sha256": "69e547544df3c0c7553f9a4b9f38c73526ddcf3ac360a4320e63a97e73ab1e71",
+      "sampled_color_bins": 30,
+      "checks": {
+        "exists": true,
+        "square_512": true,
+        "png_extension": true,
+        "nontrivial_file_size": true,
+        "nonblank_color_variation": true
+      },
+      "passed": true
+    },
+    {
+      "person_id": "person_06",
+      "path": "public/portraits/photo-derived/voxel/person_06.png",
+      "exists": true,
+      "size": [
+        512,
+        512
+      ],
+      "bytes": 239772,
+      "sha256": "36bccd08ad2b2ac1b879d359c3243fcfe29c23c20365ca3c2cb30190a0625c1f",
+      "sampled_color_bins": 48,
+      "checks": {
+        "exists": true,
+        "square_512": true,
+        "png_extension": true,
+        "nontrivial_file_size": true,
+        "nonblank_color_variation": true
+      },
+      "passed": true
+    },
+    {
+      "person_id": "host",
+      "path": "public/portraits/photo-derived/voxel/host.png",
+      "exists": true,
+      "size": [
+        512,
+        512
+      ],
+      "bytes": 241374,
+      "sha256": "0f3172c53c0f6266bdb9b398726d4bf81d99f103639f0ad3248c75089cf716a7",
+      "sampled_color_bins": 62,
+      "checks": {
+        "exists": true,
+        "square_512": true,
+        "png_extension": true,
+        "nontrivial_file_size": true,
+        "nonblank_color_variation": true
       },
       "passed": true
     }
