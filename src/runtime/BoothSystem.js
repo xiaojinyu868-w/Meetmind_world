@@ -233,7 +233,7 @@ export class BoothSystem {
 
   async prepare() {
     try {
-      const asset = this.assetCatalog.resolve(this.templateAssetId, "module");
+      const asset = this.assetCatalog.resolve(this.templateAssetId, "environment-module");
       this.template = await this.assetStore.loadScene(asset.resolvedUrl);
     } catch (error) {
       console.warn(`[BoothSystem] 展位模板 ${this.templateAssetId} 未就绪，使用简易占位展位`, error);

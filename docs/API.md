@@ -6,7 +6,7 @@
 
 ## 接口地图（按产品闭环排列，IF = Interface 组）
 
-一次完整闭环：`IF-1 输入 → IF-2 处理（pipeline）→ IF-3 确认 → IF-5 检索/查看`；世界渲染持续走 `IF-4`；MVP2 起增加 `IF-6 互动 / IF-7 推送与回填`。
+一次完整闭环：`IF-1 输入 → IF-2 处理（pipeline）→ IF-3 确认 → IF-5 检索/查看`；世界渲染持续走 `IF-4`；MVP2 增加 `IF-6 互动 / IF-7 推送与回填 / IF-8 现场群体房间`。
 
 | 组 | 接口 | 阶段 | 职责 |
 |---|---|---|---|
@@ -17,13 +17,14 @@
 | IF-5 | `GET /api/v0/packages/...` `POST /api/v0/search` | MVP1 | 资料包查看 + 人脸/姓名/关键词检索（FR-1.8/1.9） |
 | IF-6 | `POST /api/v0/agents/meeting` 等 | MVP2 | 互动：发起圆桌、Agent 事件流 |
 | IF-7 | `GET /api/v0/notifications` `POST /api/v0/feedback` `POST /api/v0/refill` | MVP2 | 推送：价值事件通知、有用/无用反馈、微信行动回填 |
-| IF-8 | 授权/组织/网络接口 | MVP3 | 本人确认、权限级别变更、组织空间、网络互联（届时另立详节） |
+| IF-8 | `/api/v0/group/sessions/...` | MVP2 | 现场房间：位置同步、第一印象互写、“谁写的？”破冰游戏 |
+| IF-9 | 授权/组织/网络接口 | MVP3 | 本人确认、权限级别变更、组织空间、网络互联（届时另立详节） |
 
 设计要点：
 
 - **IF-1 与 IF-2 分离**：输入可能长时间持续（眼镜常开），处理按需触发；输入只管可靠落盘（事实层，只增不改），处理只管从事实层提取特征。
 - **中间特征是一等公民**：IF-2 不只产出最终结果，还有关键帧、人脸候选、转写片段——前端用它们做实时反馈（"拍到了谁、正在识别什么"），它们也是推断层数据的来源指针。
-- **一切人物数据写入都必须经过 IF-3 用户确认**（P-3：事实层只能由采集管线 + 用户确认写入）。
+- **人物身份与相遇事实写入必须经过 IF-3 用户确认**（P-3：事实层只能由采集管线 + 用户确认写入）；IF-8 的现场文字与游戏结果只进入可重算推断层，并强制记录作者和房间来源。
 
 ---
 
@@ -146,6 +147,57 @@ booth module 结构（快照 modules 内，`type: "booth"`）：
 - `POST /api/v0/feedback`：`{ "notification_id", "useful": true|false }` → 写入推断层调优阈值。
 - `POST /api/v0/refill`：微信行动建议的回填（文本/语音/照片）→ 新事实入库 + 推断层重算。
 
+## IF-8 现场群体房间（MVP2）
+
+现场房间使用独立的 `echo-group-room.v1` 状态权威，不修改 `echo-snapshot.v1`。首版面向同一场地部署，以约 700ms 的房间轮询和带单调 `seq` 的位置上报验证多设备协作；这不是云端联机协议，见 ARCHITECTURE.md ADR-7 / TBD-ARCH-4。
+
+本组接口只消费上游已建档的参与者 DTO（`person_id / display_name / avatar_ref`）。照片分割、人脸匹配、人物贴图、音视频处理及其上下文抽取均不在 IF-8 内。
+
+### 房间与位置
+
+```jsonc
+// POST /api/v0/group/sessions
+{
+  "title": "周五工作坊",
+  "host": {"person_id": "p1", "display_name": "小满", "avatar_ref": "assets/p1.glb"},
+  "participants": [
+    {"person_id": "p2", "display_name": "阿澄", "avatar_ref": "assets/p2.glb"}
+  ]
+}
+
+// POST /api/v0/group/sessions/join
+{"code": "7KQ9FM", "participant": {"person_id": "p3", "display_name": "柏舟"}}
+
+// PUT /api/v0/group/sessions/{session_id}/presence
+{"person_id": "p1", "seq": 1740000000001, "position": {"x": 1.2, "z": -0.8, "yaw": 0.4}}
+```
+
+- `GET /api/v0/group/sessions/{session_id}?viewer_id=p1` 返回观察者视角房间快照。
+- 位置限制在现场空间 `x ∈ [-7, 7] / z ∈ [-5, 5]`；旧 `seq` 返回 `409`，避免乱序包把玩家拉回旧位置。
+- 返回 `participants[].avatar_ref` 仅是上游授权资源引用，服务不读取或加工其内容。
+
+### 第一印象
+
+```jsonc
+// PUT /api/v0/group/sessions/{session_id}/impressions/batch
+{
+  "author_id": "p1",
+  "impressions": [
+    {"subject_id": "p1", "value": "会先听完再给判断"},
+    {"subject_id": "p2", "value": "安静，但总能照顾到别人"}
+  ]
+}
+```
+
+每个作者必须提交 `1 条自评 + 每位同伴 1 条互评`。落盘为 `echo-group-impression.v1`，包含 `author_id / subject_id / kind / source.session_id / created_at`；重复的作者-对象组合返回 `409`，不可静默覆盖。
+
+### “谁写的？”
+
+- `POST /api/v0/group/sessions/{session_id}/game/start`：房主在全部印象收齐后开始。
+- `POST /api/v0/group/sessions/{session_id}/game/guess`：轮到的参与者猜一条关于自己的印象由谁写下。
+- `POST /api/v0/group/sessions/{session_id}/game/next`：房主在答案揭晓后推进。
+- 作答前的 `current_round` 不包含 `author_id`；作答后才揭晓。游戏结束写入每人的 `echo-group-game-result.v1`，并在房间 `events` 产生可见 `game-finished` 事件。
+
 ## 前端 mock 约定（先前端阶段）
 
 - mock 数据放 `public/data/mock/`：`ingest.response.json`、`pipeline.stream.jsonl`（按行模拟 SSE 事件，前端定时器逐条播放模拟流式）、`snapshot.demo.json`、`packages.demo.json`、`search.demo.json`。
@@ -163,3 +215,4 @@ booth module 结构（快照 modules 内，`type: "booth"`）：
 - 2026-08-03 | v0.1：扩展为全量接口地图（IF-1~IF-8，按 MVP 阶段分组），IF-1~IF-5 出详节，IF-6/7/8 先行登记 | 人（指正接口不止两个）+ AI（补全）
 - 2026-08-03 | v0.2：IF-2 接口更名为 `pipeline`（原 paipai 为语音转写错误） | 人 + AI
 - 2026-08-03 | v0.3（加性）：IF-4 增加 `?world=hall|cafe` 参数与 booth module 结构；新增媒体路由 `GET /api/v0/media/{ref}`；IF-3 confirm 响应增加 `booth_id` | AI
+- 2026-08-04 | v0.4（加性）：原预留授权/组织接口顺延为 IF-9；IF-8 落地现场房间、第一印象与“谁写的？”协议，明确只消费上游参与者/资产 DTO，不处理视觉与音视频 | 人（边界）+ AI（实现）

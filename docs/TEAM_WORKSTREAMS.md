@@ -14,6 +14,7 @@
 | Agent Runtime | Agent 组 | 授权后的 PersonPackage、人物基本资料、相遇事件 | 人物状态、会话、记忆更新和有序 `AgentEvent` | 人物外观推断、GLB 修改、前端布局 |
 | Design + 3D | 设计组，本分支 | PersonPackage 中已授权的照片索引和基本资料 | `CharacterSpec`、三视图、`BlenderBuildPlan`、Low-poly GLB、咖啡厅 UI 与 Three.js 交互 | 人脸/声纹聚类、服务端长期记忆 |
 | Platform / Integration | 集成组 | BuildPlan、CharacterAsset、AgentEvent 和前端构建产物 | API、队列、Blender Worker、对象存储、部署与端到端追踪 | 修改设计定稿和 Agent 人物事实 |
+| Group Experience | 群体玩法组 | 上游已建档参与者 DTO、授权后的 `avatar_ref` | 现场房间状态、第一印象推断、位置同步、破冰游戏事件与结果 | 合照分割、人脸/贴图生成、音频/视频处理及上下文抽取 |
 
 ## 设计组目录所有权
 
@@ -73,6 +74,10 @@ fixtures/                    脱敏联调样例
 - `consent.revoked`
 
 AgentEvent 不得携带要在浏览器执行的 JavaScript、任意 Three.js 参数或 Blender Python。
+
+### GroupRoom：已建档 DTO -> 现场群体玩法
+
+`echo-group-room.v1` 只接收 `person_id / display_name / avatar_ref` 和玩家主动输入的文字、位置、选择。`avatar_ref` 仅透传，不得由群体玩法服务读取原图、生成贴图或推断人脸；音视频上下文同理由上游处理后以授权 DTO 或推断项交付。本工作流产出的第一印象和游戏结果写入推断层，必须保留作者、对象、现场房间来源与时间。
 
 ## 集成顺序
 

@@ -126,6 +126,9 @@ const integrations = mountIntegrations({
   onPackagesChangedHook: (packages) => fillPackageNames(packages),
   onToastHook: (message) => pushLiveToast(message),
   presenceProvider: (personId) => worldAgentState(personId),
+  groupParticipants: [currentUser, ...people],
+  groupPresenceProvider: () => readGroupPresence(),
+  onGroupPresenceHook: (participants, viewerId) => applyGroupPresence(participants, viewerId),
 });
 const api = integrations.api;
 // 点击世界中的小人：保留现有侧栏行为，资料包面板浮于其上（外部可用 onPersonSelected 覆盖）
@@ -220,6 +223,7 @@ heartSignalSystem.setVisible(false);
 const packageNames = new Map();
 const liveTargets = new Map();
 const liveMeetingOverrides = new Map();
+const groupPresenceOverrides = new Map();
 const liveBubbles = new Map();
 const liveFacing = new THREE.Vector3();
 let liveMeetingSeatIndices = [];
@@ -893,8 +897,14 @@ function hallGlanceFor(personId) {
 
 function updateLiveAgents(delta) {
   if (!npcSystem) return;
-  for (const personId of new Set([...liveTargets.keys(), ...liveMeetingOverrides.keys()])) {
-    const target = liveMeetingOverrides.get(personId) ?? liveTargets.get(personId);
+  for (const personId of new Set([
+    ...liveTargets.keys(),
+    ...groupPresenceOverrides.keys(),
+    ...liveMeetingOverrides.keys(),
+  ])) {
+    const target = liveMeetingOverrides.get(personId)
+      ?? groupPresenceOverrides.get(personId)
+      ?? liveTargets.get(personId);
     const entity = npcSystem.getEntity(personId);
     if (!target || !entity) continue;
     const root = entity.root;
@@ -1035,7 +1045,7 @@ function syncDynamicAgents(agents) {
 function worldAgentState(personId) {
   if (liveEnabled) {
     const override = liveMeetingOverrides.get(personId);
-    const target = override ?? liveTargets.get(personId);
+    const target = override ?? groupPresenceOverrides.get(personId) ?? liveTargets.get(personId);
     if (target) {
       const table = target.seat ? tableById(target.seat.tableId) : null;
       return {
@@ -1049,6 +1059,36 @@ function worldAgentState(personId) {
     }
   }
   return npcSystem.getState(personId);
+}
+
+
+function readGroupPresence() {
+  if (!player) return null;
+  const heading = new THREE.Vector3(0, 0, 1).applyQuaternion(player.quaternion);
+  return {
+    x: player.position.x,
+    z: player.position.z,
+    yaw: Math.atan2(heading.x, heading.z),
+  };
+}
+
+
+function applyGroupPresence(participants, viewerId) {
+  groupPresenceOverrides.clear();
+  for (const participant of Array.isArray(participants) ? participants : []) {
+    if (participant.person_id === viewerId || participant.person_id === currentUser.id) continue;
+    const position = participant.presence;
+    if (!position || !npcSystem?.getEntity(participant.person_id)) continue;
+    groupPresenceOverrides.set(participant.person_id, {
+      x: position.x,
+      z: position.z,
+      yaw: position.yaw ?? 0,
+      state: "walking",
+      seat: null,
+    });
+  }
+  canvas.dataset.groupParticipantCount = String(participants?.length ?? 0);
+  canvas.dataset.groupRemoteCount = String(groupPresenceOverrides.size);
 }
 
 
