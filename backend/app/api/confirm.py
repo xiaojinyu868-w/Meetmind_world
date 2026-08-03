@@ -26,6 +26,7 @@ from app.schemas.package_schema import (
     PackageSchemaError,
     validate_encounter_draft,
 )
+from app.world.hall import build_display_from_package
 
 router = APIRouter(prefix="/api/v0", tags=["confirm"])
 
@@ -81,9 +82,18 @@ def confirm(request: Request, body: ConfirmRequest):
     # 用户确认 = 长期记忆唯一写入入口（FR-1.3，权限矩阵）
     package = store.confirm_identity(person_id, name=body.identity.name)
     avatar_status = "ready" if package["avatar"].get("model_ref") else "placeholder"
+
+    # 新人进世界：注册进展位大厅（幂等——重复 confirm 只刷新 display，不重复分配）
+    booth_id = None
+    hall = getattr(request.app.state, "hall", None)
+    if hall is not None:
+        booth = hall.register_person(person_id, build_display_from_package(package, store))
+        booth_id = booth["id"]
+
     return {
         "person_id": person_id,
         "encounter_id": encounter["encounter_id"],
         "package_ref": f"people/{person_id}/profile.json",
         "avatar_status": avatar_status,
+        "booth_id": booth_id,
     }

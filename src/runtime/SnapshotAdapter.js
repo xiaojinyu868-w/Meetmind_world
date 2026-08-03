@@ -2,7 +2,7 @@ import { CAFE_LAYOUT } from "./CafeLayout.js";
 
 
 export const SNAPSHOT_SCHEMA = "echo-snapshot.v1";
-export const AGENT_STATES = Object.freeze(["walking", "seated", "talking", "in-meeting"]);
+export const AGENT_STATES = Object.freeze(["walking", "seated", "talking", "in-meeting", "at-booth"]);
 
 // seated/talking 位置与座位锚点的最大偏差，超过则认为快照未对齐座位
 const SEAT_SNAP_RADIUS = 1.4;
@@ -157,11 +157,16 @@ export function adaptSnapshot(rawSnapshot, { people = [], reservedRoundtableSeat
   const events = (Array.isArray(rawSnapshot?.events) ? rawSnapshot.events : [])
     .map(normalizeEvent)
     .filter(Boolean);
+  // modules 原样透传（booth 等展示数据归 BoothSystem 消费），仅做对象/id 防御
+  const modules = (Array.isArray(rawSnapshot?.modules) ? rawSnapshot.modules : []).filter(
+    (module) => module && typeof module === "object" && typeof module.id === "string",
+  );
 
   return {
     schema: typeof rawSnapshot?.schema === "string" ? rawSnapshot.schema : null,
     tick: finiteNumber(rawSnapshot?.tick) ?? 0,
     agents,
     events,
+    modules,
   };
 }

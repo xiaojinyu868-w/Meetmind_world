@@ -37,7 +37,10 @@ app/
   packages/store.py       Package 存储：facts/ append-only、inferences/ 可重算、people/ 目录
   world/
     service.py            World Service：事件消费（move/state/talk/meeting-*）、tick、
-                          最近 20 条事件滚动缓冲、圆桌会议入座真实锚点
+                          最近 20 条事件滚动缓冲、圆桌会议入座真实锚点、
+                          register_person 展位注册（幂等，大厅/confirm 调用）
+    hall.py               展位大厅：双排网格展位锚点布局（间距 ≥2.2m、面向大厅中心）、
+                          HallRegistry 幂等分配、build_display_from_package（≥L2 才上墙）
     tables.py             桌位/阻挡配置：TABLE_BLOCKERS + 边界 + 18 个座位锚点
                           （与前端 TABLE_BLOCKERS/CafeLayout 同源），clamp_to_walkable
                           统一钳制 + seated 锚点吸附（防穿模）
@@ -88,7 +91,7 @@ data/                     运行期数据（.gitkeep 占位，内容被 .gitigno
 | IF-1 | POST | `/api/v0/ingest` | 输入：multipart（media[]/captured_at/device/note?/place_hint?）→ 201 `{input_id, facts_refs, status:"stored"}`，落盘即只读 |
 | IF-2 | POST | `/api/v0/pipeline` | 处理「pipeline」：`{input_id, mode, steps?}`；`mode=stream`（默认）SSE 流式产出 preprocess/faces/transcript/scene 中间特征 + result 返回 encounter_draft；`mode=once` 一次性返回合并 JSON |
 | IF-3 | POST | `/api/v0/confirm` | 确认：`{encounter_draft, identity{name, match_person_id}, privacy}` → `{person_id, encounter_id, package_ref, avatar_status}`；match_person_id 为 null 新建 Person，否则并入；长期记忆唯一写入入口 |
-| IF-4 | GET | `/api/v0/world/snapshot?advance=1` | echo-snapshot.v1 世界快照（advance=1 默认推进一个 tick，advance=0 只读）；events 字段为最近 20 条世界事件缓冲（agent-move/agent-state/agent-talk/meeting-started/meeting-ended），另附 meeting 字段 |
+| IF-4 | GET | `/api/v0/world/snapshot?world=hall\|cafe&advance=1` | echo-snapshot.v1 世界快照。world=cafe（默认）：活动世界，events 为最近 20 条缓冲；world=hall：展位大厅，agents 只含 at-booth 站位、events 恒空、modules 含 booth（display 名牌/人像/相框/标签）。advance=1 默认推进 tick，=0 只读 |
 | IF-5 | GET | `/api/v0/packages` | Package 摘要列表 |
 | IF-5 | GET | `/api/v0/packages/{person_id}?viewer=self\|agent\|org\|public` | 按权限圈层过滤的详情（agent 视角要求已确认） |
 | IF-5 | POST | `/api/v0/search` | 检索（FR-1.9）：`{by:"face"\|"name"\|"keyword", query/photo}` → `{results:[{person_id,name,score,last_encounter}]}`；face 为 stub |

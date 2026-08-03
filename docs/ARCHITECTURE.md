@@ -167,3 +167,4 @@ Agent 行为按场景半规则驱动（走动/访问/圆桌），由 Agent Runti
 
 - 2026-08-03 | 初始版本 | AI
 - 2026-08-03 | 新增 §5a 生成管线（硬件链路：眼镜/K3 → Package → 三视图 → Blender GLB；人/场景解耦；接口先行算法 mock） | 人（输入）+ AI（记录）
+- 2026-08-03 | 两级世界落地：大厅（Expo Hall，静态展位陈列，独立 WorldService 无 runtime）+ 咖啡厅（活的世界）；展位数据流：confirm → register_person → 快照 booth/at-booth → 前端 BoothSystem 渲染 | AI

@@ -1,0 +1,63 @@
+{
+  "schema_version": "echo-booth-template.v1",
+  "name": "EchoWorld Expo Booth Template",
+  "style": "warm low-poly matte booth; display planes carry placeholder emissive materials",
+  "generator": "blender/build_booth_template.py",
+  "seed": 26080402,
+  "blend": "blender/echo_world_booth_template.blend",
+  "glb": "public/models/modules/echo_world_booth_template.glb",
+  "preview": "renders/echo_world_booth_template_preview.png",
+  "root_node": "ROOT_Booth",
+  "stand_anchor": "ANCHOR_PersonStand",
+  "display_surfaces": {
+    "MESH_NamePlate": {
+      "width_m": 1.4,
+      "height_m": 0.32,
+      "kind": "name_plate",
+      "material": "MAT_Display_NamePlate"
+    },
+    "MESH_Portrait": {
+      "width_m": 0.8,
+      "height_m": 1.0,
+      "kind": "portrait",
+      "material": "MAT_Display_Portrait"
+    },
+    "MESH_PhotoFrame_01": {
+      "width_m": 0.7,
+      "height_m": 0.5,
+      "kind": "photo_frame",
+      "material": "MAT_Display_PhotoFrame_01"
+    },
+    "MESH_PhotoFrame_02": {
+      "width_m": 0.7,
+      "height_m": 0.5,
+      "kind": "photo_frame",
+      "material": "MAT_Display_PhotoFrame_02"
+    },
+    "MESH_Backdrop": {
+      "width_m": 1.7,
+      "height_m": 0.45,
+      "kind": "tag_strip",
+      "material": "MAT_Display_Backdrop"
+    }
+  },
+  "scale_contract": {
+    "unit": "meter",
+    "table_width_m": 1.6,
+    "table_depth_m": 0.7,
+    "table_height_m": 0.9,
+    "backdrop_width_m": 2.0,
+    "backdrop_height_m": 2.2
+  },
+  "coordinate_contract": {
+    "origin": "booth center on floor",
+    "front_side": "-Y in Blender, +Z after glTF export",
+    "up_axis_export": "+Y via glTF"
+  },
+  "export_excludes": [
+    "EXPO_BoothPreviewOnly collection",
+    "preview camera",
+    "preview lights",
+    "preview ground card"
+  ]
+}

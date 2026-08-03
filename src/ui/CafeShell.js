@@ -161,6 +161,7 @@ export function createCafeShell({
   onLocatePerson = () => {},
   onMeetingStart = async () => {},
   onMeetingEnd = async () => {},
+  resolveMediaUrl = (ref) => ref,
 }) {
   let currentView = "intro";
   let worldReady = false;
@@ -175,6 +176,35 @@ export function createCafeShell({
   const meetingMessages = [];
   const speechTimers = new Map();
   const activeSpeechIds = new Set();
+
+  // HUD 头像：src 经注入的 resolveMediaUrl 映射（live 媒体路由 / BASE_URL），
+  // onerror 降级为 canvas dataURL（palette.jacket 圆底 + 名字首字），任何情况下不出现破图
+  const avatarFallbackCache = new Map();
+  function avatarFallbackUrl(person) {
+    const key = person.id ?? person.name;
+    if (!avatarFallbackCache.has(key)) {
+      const canvas = document.createElement("canvas");
+      canvas.width = 64;
+      canvas.height = 64;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = person.palette?.jacket ?? "#2f665c";
+      ctx.beginPath();
+      ctx.arc(32, 32, 32, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#fffdf4";
+      ctx.font = '700 30px "PingFang SC", "Microsoft YaHei", sans-serif';
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(person.displayName ?? person.name ?? "?").slice(0, 1), 32, 34);
+      avatarFallbackCache.set(key, canvas.toDataURL("image/png"));
+    }
+    return avatarFallbackCache.get(key);
+  }
+  function avatarImg(person, { alt = "", title = "" } = {}) {
+    const fallback = avatarFallbackUrl(person);
+    const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
+    return `<img src="${escapeHtml(resolveMediaUrl(person.portrait))}" alt="${escapeHtml(alt)}"${titleAttr} onerror="this.onerror=null;this.src='${fallback}'" />`;
+  }
 
   root.innerHTML = `
     <div class="cafe-shell" data-view="intro">
@@ -219,7 +249,7 @@ export function createCafeShell({
           </button>
           <div class="cafe-presence">
             <div class="presence-faces">
-              ${people.map((person) => `<img src="${person.portrait}" alt="" title="${person.name}" />`).join("")}
+              ${people.map((person) => avatarImg(person, { title: person.name })).join("")}
             </div>
             <span><strong>6</strong> Agent 在线</span>
           </div>
@@ -309,20 +339,12 @@ export function createCafeShell({
   }
 
   function renderWorldInspector() {
-    if (!selectedWorldPerson) {
-      worldInspector.innerHTML = "";
-      worldInspector.setAttribute("aria-hidden", "true");
-      shell.classList.remove("has-world-inspector");
-      return;
-    }
-    worldInspector.innerHTML = inspectorMarkup(
-      selectedWorldPerson,
-      agentStates.get(selectedWorldPerson.id),
-      "world",
-    );
-    worldInspector.setAttribute("aria-hidden", "false");
-    shell.classList.add("has-world-inspector");
-    hydrateIcons(worldInspector);
+    // 已退役，由 PackagePanel 取代（2026-08-03）：世界内点击小人的人物详情侧栏不再展示，
+    // 避免两代人物 UI 并存。保留函数体与全部调用点以兼容既有流程
+    // （selectedWorldPerson 选中态、agentStates 跟踪、地图 inspector 仍复用 inspectorMarkup）。
+    worldInspector.innerHTML = "";
+    worldInspector.setAttribute("aria-hidden", "true");
+    shell.classList.remove("has-world-inspector");
   }
 
   function renderMapInspector() {

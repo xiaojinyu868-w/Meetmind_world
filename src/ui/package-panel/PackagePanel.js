@@ -133,11 +133,54 @@ export function mountPackagePanel(container, api) {
   let toastTimer = null;
   const cache = new Map();
 
+  // 在场状态（LiveWorld 快照注入）：setPresenceProvider 由 integrations 接线，不改对外签名
+  const PRESENCE_LABELS = {
+    "at-booth": "在自己的展位",
+    walking: "走动中",
+    seated: "已入座",
+    talking: "与人交谈中",
+    "in-meeting": "圆桌会议中",
+  };
+  const PRESENCE_REFRESH_MS = 2000;
+  let presenceProvider = null;
+  let presenceTimer = null;
+
+  function refreshPresence() {
+    const row = body.querySelector("[data-pp-presence]");
+    if (!row) return;
+    const state =
+      open && activePersonId && typeof presenceProvider === "function"
+        ? presenceProvider(activePersonId)
+        : null;
+    const label = state ? PRESENCE_LABELS[state.status ?? state.state] : null;
+    if (!label) {
+      row.hidden = true;
+      return;
+    }
+    row.hidden = false;
+    row.querySelector("[data-pp-presence-text]").textContent = label;
+  }
+
+  function startPresenceTimer() {
+    stopPresenceTimer();
+    if (typeof presenceProvider !== "function") return;
+    presenceTimer = window.setInterval(refreshPresence, PRESENCE_REFRESH_MS);
+  }
+
+  function stopPresenceTimer() {
+    window.clearInterval(presenceTimer);
+    presenceTimer = null;
+  }
+
   function resolveMedia(ref) {
     if (!ref) return "";
     if (typeof api?.resolveMediaUrl === "function") return api.resolveMediaUrl(ref);
     return String(ref);
   }
+
+  // M1.7：<img> 加载失败统一降级为占位肖像（onerror 先置空防循环触发）
+  const placeholderImg = resolveMedia("portraits/person-self.png");
+  const imgFallback = `onerror="this.onerror=null;this.src='${escapeHtml(placeholderImg)}'"`;
 
   function hydrateIcons() {
     createIcons({ icons: ICONS, root: layer, attrs: { "stroke-width": 1.8 } });
@@ -190,7 +233,7 @@ export function mountPackagePanel(container, api) {
         ${
           photos.length
             ? `<div class="pp-photos">${photos
-                .map((ref) => `<img src="${escapeHtml(resolveMedia(ref))}" alt="相遇现场照片" loading="lazy" />`)
+                .map((ref) => `<img src="${escapeHtml(resolveMedia(ref))}" alt="相遇现场照片" loading="lazy" ${imgFallback} />`)
                 .join("")}</div>`
             : ""
         }
@@ -314,7 +357,7 @@ export function mountPackagePanel(container, api) {
         <div class="pp-hero-face">
           ${
             faceUrl
-              ? `<img src="${escapeHtml(faceUrl)}" alt="${escapeHtml(name)}的真实人脸照片" />`
+              ? `<img src="${escapeHtml(faceUrl)}" alt="${escapeHtml(name)}的真实人脸照片" ${imgFallback} />`
               : `<span class="pp-hero-face-fallback">${escapeHtml(name.slice(0, 1))}</span>`
           }
           <span class="pp-hero-face-tag">真实人脸</span>
@@ -323,6 +366,10 @@ export function mountPackagePanel(container, api) {
           <span class="pp-eyebrow">人物资料包 · PERSON PACKAGE</span>
           <h2>${escapeHtml(name)}</h2>
           <p class="pp-headline">${escapeHtml(headline)}</p>
+          <p class="pp-presence" data-pp-presence hidden>
+            <span class="pp-presence-dot" aria-hidden="true"></span>
+            <span data-pp-presence-text></span>
+          </p>
           <div class="pp-badges">
             <span class="pp-badge pp-badge-privacy">${icon("shield-check")}${privacy.level} · ${privacy.label}</span>
             <span class="pp-badge ${confirmed ? "pp-badge-ok" : "pp-badge-warn"}">${confirmed ? "身份已确认" : "身份待确认"}</span>
@@ -348,12 +395,14 @@ export function mountPackagePanel(container, api) {
     body.innerHTML = packageMarkup(pkg);
     body.scrollTop = 0;
     hydrateIcons();
+    refreshPresence();
   }
 
   function openPanel() {
     open = true;
     layer.setAttribute("aria-hidden", "false");
     panel.focus({ preventScroll: true });
+    startPresenceTimer();
   }
 
   function close() {
@@ -361,6 +410,7 @@ export function mountPackagePanel(container, api) {
     open = false;
     activePersonId = null;
     requestSeq += 1;
+    stopPresenceTimer();
     layer.setAttribute("aria-hidden", "true");
   }
 
@@ -415,6 +465,14 @@ export function mountPackagePanel(container, api) {
   return {
     openPerson,
     close,
+    // 注入在场状态提供者：(personId) => { status } | null，由 integrations 接 LiveWorld 快照缓存
+    setPresenceProvider(provider) {
+      presenceProvider = typeof provider === "function" ? provider : null;
+      if (open) {
+        startPresenceTimer();
+        refreshPresence();
+      }
+    },
     get isOpen() {
       return open;
     },

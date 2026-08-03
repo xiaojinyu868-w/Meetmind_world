@@ -1,0 +1,46 @@
+{
+  "schema_version": "echo-expo-hall-validation.v1",
+  "file": "public/models/echo_world_expo_hall.glb",
+  "import_status": "ok",
+  "root_node": "ROOT_ExpoHall",
+  "objects": 102,
+  "empty_nodes": 4,
+  "mesh_objects": 98,
+  "vertices": 7092,
+  "triangles": 3136,
+  "degenerate_triangles": 0,
+  "material_count": 16,
+  "glb_bytes": 306008,
+  "bounds_after_reimport": {
+    "min_xyz": [
+      -8.03,
+      -6.21,
+      -0.12
+    ],
+    "max_xyz": [
+      8.03,
+      6.03,
+      3.55
+    ],
+    "size_xyz": [
+      16.06,
+      12.24,
+      3.67
+    ]
+  },
+  "contract_checks": {
+    "root_at_origin": true,
+    "ground_mesh_present": true,
+    "floor_top_z_m": 0.0,
+    "hall_footprint_16x12m": true,
+    "doorway_opening_clear": true,
+    "player_spawn_present": true,
+    "cafe_doorway_fixture_present": true,
+    "preview_nodes_excluded": true,
+    "no_degenerate_triangles": true,
+    "triangle_budget": 30000,
+    "material_budget": 40,
+    "all_materials_roughness_gte_0_7": true,
+    "glb_size_budget_10mb": true
+  }
+}

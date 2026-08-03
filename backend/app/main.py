@@ -20,7 +20,8 @@ from app.api import ingest, media, packages, pipeline, search as search_api
 from app.api import world as world_api
 from app.harness.permissions.guard import DEFAULT_GUARD, PermissionDenied
 from app.packages.store import PackageStore
-from app.world.seed import seed_demo_packages, seed_world
+from app.world.hall import build_display_from_package
+from app.world.seed import SEED_AGENTS, seed_demo_packages, seed_world
 from app.world.service import WorldService
 
 
@@ -34,7 +35,21 @@ def create_app() -> FastAPI:
     store = PackageStore()  # 数据目录由 ECHO_DATA_DIR 控制，默认 backend/data
     seed_demo_packages(store)  # 6 个 demo Package（幂等），检索/资料包开箱有数据
     memory = MemoryStore(store, guard=DEFAULT_GUARD)
+
+    # 展位大厅（MVP1.5 两级世界）：静态陈列实例，无 runtime 调度；
+    # 启动时把 seed 6 人全部注册（display 从各自 Package 组装，tags 只取 ≥L2）
+    hall_world = WorldService({
+        "agents": [],
+        "modules": [{"id": "expo-hall", "type": "hall",
+                     "position": {"x": 0.0, "z": 0.0, "yaw": 0.0}}],
+    })
+    for agent_seed in SEED_AGENTS:
+        package = store.load_package(agent_seed["id"])
+        hall_world.register_person(agent_seed["id"],
+                                   build_display_from_package(package, store))
+
     app.state.world = world_service
+    app.state.hall = hall_world
     app.state.bus = bus
     # skill + LLM 决策的运行时；chat provider 未配置时自动退化为纯规则驱动
     app.state.runtime = AgentRuntime(

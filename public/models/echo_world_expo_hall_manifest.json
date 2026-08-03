@@ -1,0 +1,35 @@
+{
+  "schema_version": "echo-expo-hall.v1",
+  "name": "EchoWorld Expo Hall",
+  "style": "warm low-poly matte diorama; compatible with storybook cafe palette",
+  "generator": "blender/build_expo_hall.py",
+  "seed": 26080401,
+  "blend": "blender/echo_world_expo_hall.blend",
+  "glb": "public/models/echo_world_expo_hall.glb",
+  "preview": "renders/echo_world_expo_hall_preview.png",
+  "root_node": "ROOT_ExpoHall",
+  "ground_node": "GROUND_ExpoHallFloor",
+  "spawn_anchor": "ANCHOR_PlayerSpawn",
+  "cafe_doorway": "FIXTURE_CafeDoorway",
+  "scale_contract": {
+    "unit": "meter",
+    "hall_width_m": 16.0,
+    "hall_depth_m": 12.0,
+    "wall_height_m": 1.05,
+    "column_height_m": 3.35,
+    "door_opening_width_m": 2.0,
+    "door_opening_height_m": 2.6,
+    "reference_character_height_m": 1.65,
+    "floor_top_z": 0.0
+  },
+  "coordinate_contract": {
+    "origin": "hall center on finished floor",
+    "doorway_side": "-Y",
+    "up_axis_export": "+Y via glTF"
+  },
+  "export_excludes": [
+    "EXPO_PreviewOnly collection",
+    "preview camera",
+    "preview lights"
+  ]
+}

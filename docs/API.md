@@ -101,7 +101,24 @@ event: result    data: {"encounter_draft": { ... echo-package.v0 的 encounter �
 
 ## IF-4 世界接口 `GET /api/v0/world/snapshot`
 
-返回 `echo-snapshot.v1`（见 ARCHITECTURE.md §4）。MVP1 前端轮询（如 2s）；MVP2 评估 SSE。资料包内容不走快照，由 IF-5 按权限单独拉取。
+返回 `echo-snapshot.v1`（见 ARCHITECTURE.md §4）。MVP1 前端轮询（咖啡厅 2s / 大厅 10s）；MVP2 评估 SSE。资料包内容不走快照，由 IF-5 按权限单独拉取。
+
+参数（v0.3 加性）：
+
+- `?world=hall|cafe`（默认 cafe）：`hall` = 展位大厅快照——agents 只含 `at-booth` 站位（位置=展位锚点），`events` 恒为空数组；modules 含 booth 条目（见下）。`cafe` = 活的世界（现状）。
+- `?advance=1`：推进 tick（hall 仅推进计数，无 runtime 调度）。
+
+booth module 结构（快照 modules 内，`type: "booth"`）：
+
+```jsonc
+{ "id": "booth_lin-che", "type": "booth", "person_id": "lin-che",
+  "position": { "x": 0, "z": -4.2, "yaw": 0 },
+  "display": { "name": "林澈", "headline": "一句话身份", "face_ref": "facts/.../face.png",
+               "photos": ["facts/.../scene_01.png"], "tags": ["咖啡"] } }
+  // display.tags/photos 只取 privacy ≥ agent-usable 的内容（L1 不上墙）
+```
+
+媒体文件服务（v0.3 加性）：`GET /api/v0/media/{ref}` —— 事实层文件（face_ref/photos 等指针）的 HTTP 出口，路径穿越防护 + 扩展名白名单。
 
 ## IF-5 资料包与检索接口
 
@@ -145,3 +162,4 @@ event: result    data: {"encounter_draft": { ... echo-package.v0 的 encounter �
 - 2026-08-03 | v0：定义输入/处理接口与 mock 约定 | 人（接口定义）+ AI（成文）
 - 2026-08-03 | v0.1：扩展为全量接口地图（IF-1~IF-8，按 MVP 阶段分组），IF-1~IF-5 出详节，IF-6/7/8 先行登记 | 人（指正接口不止两个）+ AI（补全）
 - 2026-08-03 | v0.2：IF-2 接口更名为 `pipeline`（原 paipai 为语音转写错误） | 人 + AI
+- 2026-08-03 | v0.3（加性）：IF-4 增加 `?world=hall|cafe` 参数与 booth module 结构；新增媒体路由 `GET /api/v0/media/{ref}`；IF-3 confirm 响应增加 `booth_id` | AI

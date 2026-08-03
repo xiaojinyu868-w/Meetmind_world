@@ -20,6 +20,7 @@
 from collections import deque
 
 from app.schemas.snapshot_schema import build_snapshot
+from app.world.hall import HallRegistry
 from app.world.tables import ROUNDTABLE_SEATS, clamp_to_walkable, nearest_seat
 
 EVENT_BUFFER_SIZE = 20
@@ -47,8 +48,42 @@ class WorldService:
         self._events: deque = deque(maxlen=EVENT_BUFFER_SIZE)
         # 当前进行中的圆桌会议：{"id", "participants", "started_tick"} | None
         self.current_meeting: dict | None = None
+        # 展位大厅注册表（person_id ↔ booth，幂等；大厅实例使用，咖啡厅实例空置）
+        self._hall = HallRegistry()
         # TODO(座位占用登记)：普通桌位表（seat_node -> agent_id），
         # 目前 seated 只做锚点吸附，不做一人一座的占用互斥。
+
+    # ---------- 展位大厅：人员注册（系统/确认流程驱动，非自进化写入） ----------
+
+    def register_person(self, person_id: str, display: dict) -> dict:
+        """把一个人注册进展位大厅（幂等）：分配展位锚点 → agents 增员
+        （state="at-booth"，位置=展位锚点，yaw 朝展位前方/大厅中心）→
+        modules 增加 booth 条目。重复注册只刷新 display，不重复分配展位。
+        """
+        display = dict(display or {})
+        booth_id = self._hall.booth_of(person_id)
+        if booth_id is None:
+            anchor = self._hall.assign(person_id)
+            booth_id = anchor["booth_id"]
+            booth = {
+                "id": booth_id,
+                "type": "booth",
+                "person_id": person_id,
+                "position": dict(anchor["position"]),
+                "display": display,
+            }
+            self._modules.append(booth)
+        else:
+            booth = next(m for m in self._modules if m["id"] == booth_id)
+            booth["display"] = display
+        if person_id not in self._agents:
+            self._agents[person_id] = {
+                "name": display.get("name") or person_id,
+                "position": dict(booth["position"]),
+                "state": "at-booth",
+                "palette": dict(display.get("palette") or {}),
+            }
+        return booth
 
     # ---------- 事件消费（Agent 改变世界的唯一方式） ----------
 

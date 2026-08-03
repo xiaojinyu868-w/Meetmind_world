@@ -50,8 +50,13 @@ src/runtime/
   LiveWorld.js              世界快照轮询器（echo-snapshot.v1）：优先 /api/v0/world/snapshot?advance=1，
                             降级 data/mock/snapshot.demo.json，再兜底内置快照；非 live 源由内置演化器驱动；
                             visibilitychange 时暂停；提供 onSnapshot/onEvent 订阅
-  SnapshotAdapter.js        快照 agent → 渲染结构映射（状态归一化 walking|seated|talking|in-meeting、
-                            CafeLayout 座位锚点对齐、事件 camelCase 归一化，纯函数可在 node 下自测）
+  SnapshotAdapter.js        快照 agent → 渲染结构映射（状态归一化 walking|seated|talking|in-meeting|at-booth、
+                            CafeLayout 座位锚点对齐、事件 camelCase 归一化、modules 透传，纯函数可在 node 下自测）
+  WalkSlide.js              live 插值轻量避障：位移将进入 TABLE_BLOCKERS 圆时投影到切线滑动（纯函数）
+  WorldSwitch.js            两级世界切换（?world=hall|cafe，默认 hall）+ HALL_LAYOUT 大厅布局常量
+  BoothSystem.js            展位系统：模板 GLB（module.booth-template.v1，未到货降级简易占位展位）→
+                            按快照 modules 克隆、MESH_* 展示面贴图/CanvasTexture 名牌与标签、增量同步、
+                            展位圆形阻挡与射线点选、0.3s 缩放入场
   mock/MockApi.js           API v0 契约客户端（IF-1~IF-5），`?api=live` 切真实后端
 src/bootstrap/
   integrations.js           统一集成层：MockApi → 各 UI 模块的 api 适配（getPackages 缓存 + confirm 失效）、
@@ -78,6 +83,8 @@ dist/                       构建产物（已提交 Git）
 `world-spec.json`（schema `echo-world.v1`）→ 引用 `asset-catalog.json`（schema `echo-assets.v1`）→ 白名单内的 GLB/JSON 资产经 `AssetStore` 加载。运行时人物数据来自 `src/data/demoPeople.js`，两个 schema 版本字符串是硬校验，改动 JSON 结构时必须同步更新 `WorldSpec.js` / `AssetCatalog.js` 中的版本常量。
 
 人物动态默认由世界快照驱动（ROADMAP 1.C.2）：`LiveWorld` 轮询 `/api/v0/world/snapshot?advance=1`（契约见 docs/API.md IF-4、docs/ARCHITECTURE.md §4，schema `echo-snapshot.v1`），经 `SnapshotAdapter` 映射后由 main.js 插值渲染；后端不可用时自动降级 `data/mock/snapshot.demo.json` → 内置兜底快照（本地演化保持世界运转）。`window.__ECHOWORLD_OPTIONS__ = { api, onPersonSelected, live, snapshotPollMs }` 可注入真实 api、选人回调或关回 NpcAgentSystem 本地调度（`live: false`）。
+
+两级世界（MVP1.5）：`?world=hall`（默认，展位大厅）陈列每个 Package 一个展位、人物 at-booth 站位不走动、气泡/Toast/tick 静默、轮询 10s、展位即点击入口开资料包；`?world=cafe` 为现有活的世界（2s 轮询、对话气泡、圆桌会议）。切换经 `navigateToWorld()` 改 URL 整页刷新；大厅环境资产 `environment.expo-hall.v1`、展位模板 `module.booth-template.v1`，未到货时前端自动降级占位场地/占位展位。
 
 ### 不纳入版本控制的本地内容
 

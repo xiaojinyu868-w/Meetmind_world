@@ -22,6 +22,21 @@
       "style": "painterly-adventure"
     },
     {
+      "asset_id": "environment.expo-hall.v1",
+      "kind": "environment",
+      "url": "models/echo_world_expo_hall.glb",
+      "version": 1,
+      "style": "expo-hall"
+    },
+    {
+      "asset_id": "module.booth-template.v1",
+      "kind": "environment-module",
+      "url": "models/modules/echo_world_booth_template.glb",
+      "version": 1,
+      "style": "expo-hall",
+      "root_node": "ROOT_Booth"
+    },
+    {
       "asset_id": "character.faceless-prototype.v1",
       "kind": "character",
       "url": "models/characters/echo_world_faceless_person.glb",

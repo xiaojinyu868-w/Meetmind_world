@@ -9,8 +9,8 @@
 
 SCHEMA_VERSION = "echo-snapshot.v1"
 
-# ARCHITECTURE.md §4 示例中的状态枚举
-AGENT_STATES = ("walking", "seated", "talking", "in-meeting")
+# ARCHITECTURE.md §4 示例中的状态枚举 + MVP1.5 展位大厅的 at-booth
+AGENT_STATES = ("walking", "seated", "talking", "in-meeting", "at-booth")
 
 
 class SnapshotSchemaError(ValueError):
@@ -98,3 +98,27 @@ def _validate_module(module, field: str) -> None:
     module_type = module.get("type")
     if not isinstance(module_type, str) or not module_type.strip():
         raise SnapshotSchemaError(f"Snapshot module type must be a non-empty string: {field}.type")
+    if module_type == "booth":
+        _validate_booth_module(module, field)
+
+
+def _validate_booth_module(module, field: str) -> None:
+    """展位 module（MVP1.5 大厅）：person_id/position/display 结构校验（向后兼容，
+    非 booth 类型 module 仍只要求 id/type）。"""
+    person_id = module.get("person_id")
+    if not isinstance(person_id, str) or not person_id.strip():
+        raise SnapshotSchemaError(f"Booth module requires person_id: {field}.person_id")
+    _validate_position(module.get("position"), f"{field}.position")
+    display = module.get("display")
+    if not isinstance(display, dict):
+        raise SnapshotSchemaError(f"Booth module requires a display object: {field}.display")
+    for key in ("name", "headline", "face_ref"):
+        value = display.get(key)
+        if value is not None and not isinstance(value, str):
+            raise SnapshotSchemaError(
+                f"Booth display {key} must be a string or null: {field}.display.{key}")
+    for key in ("photos", "tags"):
+        value = display.get(key, [])
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            raise SnapshotSchemaError(
+                f"Booth display {key} must be an array of strings: {field}.display.{key}")
