@@ -22,6 +22,7 @@ from app.api import world as world_api
 from app.harness.permissions.guard import DEFAULT_GUARD, PermissionDenied
 from app.packages.store import PackageStore
 from app.world.hall import HALL_BOUNDS, build_display_from_package
+from app.world.broadcast import BroadcastService
 from app.world.seed import SEED_AGENTS, seed_demo_packages, seed_world
 from app.world.service import WorldService
 
@@ -66,6 +67,7 @@ def create_app() -> FastAPI:
     )
     app.state.store = store
     app.state.memory = memory
+    app.state.broadcast = BroadcastService(store)
 
     # 自进化写入越权 → 403（ADR-4：权限失控是最大的产品风险）
     @app.exception_handler(PermissionDenied)

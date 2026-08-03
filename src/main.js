@@ -12,6 +12,7 @@ import { HeartSignalSystem } from "./runtime/HeartSignalSystem.js";
 import { LiveWorld } from "./runtime/LiveWorld.js";
 import { NpcAgentSystem } from "./runtime/NpcAgentSystem.js";
 import { PersonSignalStore } from "./runtime/PersonSignalStore.js";
+import { normalizeWorldBroadcast } from "./runtime/WorldBroadcast.js";
 import {
   CHARACTER_VARIANT_OPTIONS,
   characterAssetId,
@@ -287,6 +288,7 @@ toastStack.style.cssText =
 document.body.append(toastStack);
 
 const tickBadge = document.createElement("div");
+tickBadge.className = "world-tick-badge";
 tickBadge.style.cssText =
   "position:fixed;right:18px;bottom:18px;z-index:60;display:none;align-items:center;gap:7px;" +
   "padding:7px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.4);" +
@@ -779,6 +781,7 @@ function updateHallHover() {
 
 
 function applyLiveSnapshot(rawSnapshot) {
+  appShell.setWorldBroadcast(normalizeWorldBroadcast(rawSnapshot?.broadcast));
   const adapted = adaptSnapshot(rawSnapshot, {
     people,
     reservedRoundtableSeats: meetingMode ? liveMeetingSeatIndices : [],

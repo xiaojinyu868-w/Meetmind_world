@@ -94,14 +94,20 @@ MVP2（2026-08-03 重设后）增加三条线：场景语言（点位交互/播�
     }
   ],
   "modules": [ { "id": "booth_xxx", "type": "booth", "position": {} } ],
-  "events": [ { "type": "agent-talk", "agent_id": "person_x", "to_agent_id": "person_y", "text": "...", "tick": 12340 }, { "type": "meeting-start", "meeting_id": "meeting_1", "participants": [] } ]
+  "events": [ { "type": "agent-talk", "agent_id": "person_x", "to_agent_id": "person_y", "text": "...", "tick": 12340 }, { "type": "meeting-start", "meeting_id": "meeting_1", "participants": [] } ],
   // events 为最近 N=20 条滚动缓冲；类型枚举：agent-move / agent-state / agent-talk / meeting-start / meeting-end
+  "broadcast": {
+    "schema": "echo-broadcast.v1",
+    "ticker": [ { "id": "evt_x", "type": "agent-talk", "text": "服务端生成的播报文案", "tick": 12340, "occurred_at": "..." } ],
+    "morning": { "date": "2026-08-04", "period": "2026-08-03", "title": "...", "summary": "...", "items": [], "new_encounters": 0, "world_events": 1 }
+  }
 }
 ```
 
 - 前端不推断状态，只渲染；快照未包含的信息前端无权知道。
 - 资料包内容（人脸照片、谈话记录）**不走快照**，由用户点击后经 API 按权限单独拉取。
-- 场景语言（FR-2.8/2.9）的点位与播报内容：热点定义走 `modules`，播报文本走 `events`，均从快照消费，前端不自行编造。
+- 场景语言（FR-2.8/2.9）的点位与播报内容：热点定义走 `modules`；原始行为走 `events`；服务端将可公开事件写入追加式 `world-events.v1.jsonl` 并生成 `broadcast` 展示视图。前端不从原始事件自行编造播报事实。
+- 图像到人脸/贴图、音视频到上下文的处理管线不属于 World Service；本层只消费上游产出的 `PersonPackage`、`CharacterAsset` 与已确认事实指针。
 
 ## 5. 自进化权限矩阵（harness 圈层管理）
 

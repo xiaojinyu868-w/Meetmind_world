@@ -179,6 +179,18 @@ export const SNAPSHOT_FALLBACK = Object.freeze({
     { id: "table-counter-four", type: "table", position: { x: 3.28, z: 1.65 } },
   ]),
   events: Object.freeze([]),
+  broadcast: Object.freeze({
+    schema: "echo-broadcast.v1",
+    ticker: Object.freeze([
+      Object.freeze({ id: "evt_demo_1", world: "cafe", type: "agent-talk", text: "谢淯琪和黄月胜聊起了周末的展览", tick: 12, occurred_at: "2026-08-04T00:30:00Z" }),
+    ]),
+    morning: Object.freeze({
+      date: "2026-08-04", period: "2026-08-03", title: "早上好，来看看昨日世界",
+      summary: "昨日新增 1 次相遇，世界发生 2 件值得留意的事。",
+      items: Object.freeze(["新相遇已进入世界：一位新朋友", "咖啡厅里完成了一场圆桌。"]),
+      new_encounters: 1, world_events: 2,
+    }),
+  }),
 });
 
 /**

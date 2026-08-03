@@ -93,6 +93,7 @@ export function mountSearchBar(container, api, onLocate = () => {}) {
 
   function hydrateIcons() {
     createIcons({ icons: ICONS, root: wrap, attrs: { "stroke-width": 1.8 } });
+    for (const svg of wrap.querySelectorAll("svg[data-lucide]")) svg.removeAttribute("data-lucide");
   }
 
   function showToast(message) {

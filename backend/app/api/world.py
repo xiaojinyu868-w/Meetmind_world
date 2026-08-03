@@ -12,6 +12,8 @@
 
 from fastapi import APIRouter, Query, Request
 
+from app.schemas.snapshot_schema import validate_snapshot
+
 router = APIRouter(prefix="/api/v0/world", tags=["world"])
 
 
@@ -23,10 +25,10 @@ def world_snapshot(request: Request, advance: int = 1,
         if advance:
             request.app.state.hall_runtime.tick(hall.snapshot())
             hall.step()
-        return hall.snapshot()
+        return validate_snapshot(request.app.state.broadcast.enrich(hall.snapshot(), "hall"))
     cafe = request.app.state.world
     runtime = request.app.state.runtime
     if advance:
         runtime.tick(cafe.snapshot())
         cafe.step()
-    return cafe.snapshot()
+    return validate_snapshot(request.app.state.broadcast.enrich(cafe.snapshot(), "cafe"))

@@ -46,7 +46,35 @@ def validate_snapshot(snapshot) -> dict:
         _validate_module(module, f"modules[{i}]")
     for i, event in enumerate(snapshot["events"]):
         _validate_event(event, f"events[{i}]")
+    if snapshot.get("broadcast") is not None:
+        _validate_broadcast(snapshot["broadcast"], "broadcast")
     return snapshot
+
+
+def _validate_broadcast(broadcast, field: str) -> None:
+    if not isinstance(broadcast, dict) or broadcast.get("schema") != "echo-broadcast.v1":
+        raise SnapshotSchemaError(f"Snapshot broadcast schema is invalid: {field}.schema")
+    ticker = broadcast.get("ticker")
+    if not isinstance(ticker, list) or len(ticker) > 8:
+        raise SnapshotSchemaError(f"Snapshot broadcast ticker must contain at most 8 items: {field}.ticker")
+    for index, item in enumerate(ticker):
+        if not isinstance(item, dict):
+            raise SnapshotSchemaError(f"Broadcast ticker item must be an object: {field}.ticker[{index}]")
+        for key in ("id", "type", "text", "occurred_at"):
+            if not isinstance(item.get(key), str) or not item[key].strip():
+                raise SnapshotSchemaError(f"Broadcast ticker item requires {key}: {field}.ticker[{index}].{key}")
+    morning = broadcast.get("morning")
+    if not isinstance(morning, dict):
+        raise SnapshotSchemaError(f"Snapshot broadcast morning must be an object: {field}.morning")
+    for key in ("date", "period", "title", "summary"):
+        if not isinstance(morning.get(key), str) or not morning[key].strip():
+            raise SnapshotSchemaError(f"Broadcast morning requires {key}: {field}.morning.{key}")
+    if not isinstance(morning.get("items"), list) or not all(
+            isinstance(item, str) and item.strip() for item in morning["items"]):
+        raise SnapshotSchemaError(f"Broadcast morning items must be strings: {field}.morning.items")
+    for key in ("new_encounters", "world_events"):
+        if not isinstance(morning.get(key), int) or isinstance(morning[key], bool) or morning[key] < 0:
+            raise SnapshotSchemaError(f"Broadcast morning {key} must be non-negative: {field}.morning.{key}")
 
 
 def _validate_event(event, field: str) -> None:

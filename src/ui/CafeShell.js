@@ -15,9 +15,11 @@ import {
   Network,
   Plus,
   Pencil,
+  Radio,
   Save,
   Send,
   Smile,
+  Sun,
   Lightbulb,
   Sparkles,
   UserRound,
@@ -29,6 +31,7 @@ import {
 } from "lucide";
 import { renderRelationshipGraph } from "./RelationshipGraph.js";
 import { createProfileStore } from "../runtime/ProfileStore.js";
+import { markMorningSeen, shouldShowMorning } from "../runtime/WorldBroadcast.js";
 
 
 const ICONS = {
@@ -48,9 +51,11 @@ const ICONS = {
   Network,
   Plus,
   Pencil,
+  Radio,
   Save,
   Send,
   Smile,
+  Sun,
   Lightbulb,
   Sparkles,
   UserRound,
@@ -92,6 +97,7 @@ function icon(name, className = "") {
 
 function hydrateIcons(root) {
   createIcons({ icons: ICONS, root, attrs: { "stroke-width": 1.8 } });
+  for (const svg of root.querySelectorAll("svg[data-lucide]")) svg.removeAttribute("data-lucide");
 }
 
 function finiteNumber(value) {
@@ -434,6 +440,7 @@ export function createCafeShell({
   onProfileChange = () => {},
   signalStore = null,
   signalByPersonId = null,
+  morningStorage = null,
 }) {
   let currentView = "intro";
   let worldReady = false;
@@ -443,6 +450,12 @@ export function createCafeShell({
   let meetingSheetOpen = false;
   let meetingActive = false;
   let meetingCursor = 0;
+  let worldBroadcast = null;
+  let broadcastSignature = "";
+  let broadcastCursor = 0;
+  let broadcastTimer = null;
+  let morningReportOpen = false;
+  const morningSeenInSession = new Set();
   const invitedIds = new Set();
   const agentStates = new Map();
   const meetingMessages = [];
@@ -530,6 +543,17 @@ export function createCafeShell({
 
         <div id="world-speech-layer" class="world-speech-layer" aria-live="polite"></div>
 
+        <div id="world-broadcast-screen" class="world-broadcast-screen" aria-hidden="true" aria-live="polite">
+          <span class="world-broadcast-icon" aria-hidden="true">${icon("radio")}</span>
+          <span class="world-broadcast-copy">
+            <small>世界播报</small>
+            <strong data-broadcast-text>世界还很安静</strong>
+          </span>
+          <button type="button" data-action="open-morning" title="查看今日晨报" aria-label="查看今日晨报">${icon("sun")}</button>
+        </div>
+
+        <aside id="morning-report" class="morning-report glass-panel" role="dialog" aria-modal="true" aria-label="今日晨报" aria-hidden="true"></aside>
+
         <div id="roundtable-prompt" class="roundtable-prompt" aria-hidden="true">
           <span class="roundtable-symbol">${icon("users")}</span>
           <span><small>中央六人圆桌</small><strong>发起一次圆桌会议</strong></span>
@@ -565,10 +589,115 @@ export function createCafeShell({
   const roundtablePrompt = root.querySelector("#roundtable-prompt");
   const meetingSheet = root.querySelector("#meeting-sheet");
   const speechLayer = root.querySelector("#world-speech-layer");
+  const broadcastScreen = root.querySelector("#world-broadcast-screen");
+  const broadcastText = broadcastScreen.querySelector("[data-broadcast-text]");
+  const morningReport = root.querySelector("#morning-report");
   const toast = root.querySelector("#cafe-toast");
   let toastTimer = null;
+  const reportStorage = morningStorage ?? (() => {
+    try {
+      return globalThis.localStorage;
+    } catch {
+      return null;
+    }
+  })();
+
+  function renderBroadcastTicker() {
+    const ticker = worldBroadcast?.ticker ?? [];
+    const visible = currentView === "cafe" && Boolean(worldBroadcast?.morning) && !morningReportOpen;
+    const entry = ticker.length ? ticker[broadcastCursor % ticker.length] : null;
+    broadcastText.textContent = entry?.text ?? "世界还很安静，晨报已经准备好";
+    broadcastScreen.setAttribute("aria-hidden", String(!visible));
+  }
+
+  function restartBroadcastTimer() {
+    window.clearInterval(broadcastTimer);
+    broadcastTimer = null;
+    const ticker = worldBroadcast?.ticker ?? [];
+    if (currentView !== "cafe" || ticker.length < 2) return;
+    broadcastTimer = window.setInterval(() => {
+      broadcastCursor = (broadcastCursor + 1) % ticker.length;
+      renderBroadcastTicker();
+    }, 5200);
+  }
+
+  function closeMorningReport({ markSeen = true } = {}) {
+    if (markSeen && worldBroadcast?.morning) {
+      morningSeenInSession.add(worldBroadcast.morning.date);
+      try {
+        markMorningSeen(worldBroadcast.morning, world, reportStorage);
+      } catch (error) {
+        console.warn("Unable to store the morning report state", error);
+      }
+    }
+    morningReportOpen = false;
+    morningReport.innerHTML = "";
+    morningReport.setAttribute("aria-hidden", "true");
+    document.body.removeAttribute("data-morning-report");
+    renderBroadcastTicker();
+  }
+
+  function openMorningReport() {
+    const report = worldBroadcast?.morning;
+    if (!report || currentView !== "cafe") return;
+    morningReportOpen = true;
+    document.body.dataset.morningReport = "open";
+    morningReport.innerHTML = `
+      <header class="morning-report-header">
+        <span class="morning-report-icon" aria-hidden="true">${icon("sun")}</span>
+        <div><small>${escapeHtml(report.period)} 回顾</small><h2>${escapeHtml(report.title)}</h2></div>
+        <button class="glass-icon-button" type="button" data-action="close-morning" title="关闭晨报" aria-label="关闭晨报">${icon("x")}</button>
+      </header>
+      <div class="morning-report-body">
+        <p class="morning-report-summary">${escapeHtml(report.summary)}</p>
+        <dl class="morning-report-counts" aria-label="昨日统计">
+          <div><dt>新相遇</dt><dd>${report.newEncounters}</dd></div>
+          <div><dt>世界事件</dt><dd>${report.worldEvents}</dd></div>
+        </dl>
+        <ol class="morning-report-list">
+          ${report.items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+        </ol>
+      </div>
+      <footer class="morning-report-footer">
+        <small>${escapeHtml(report.date)} · ${worldLabel}</small>
+        <button type="button" data-action="close-morning">开始今天</button>
+      </footer>`;
+    morningReport.setAttribute("aria-hidden", "false");
+    renderBroadcastTicker();
+    hydrateIcons(morningReport);
+  }
+
+  function maybeOpenMorningReport() {
+    const report = worldBroadcast?.morning;
+    if (currentView !== "cafe" || !report || morningReportOpen || morningSeenInSession.has(report.date)) return;
+    try {
+      if (!shouldShowMorning(report, world, reportStorage)) return;
+    } catch (error) {
+      console.warn("Unable to read the morning report state", error);
+    }
+    openMorningReport();
+  }
+
+  function setWorldBroadcast(broadcast) {
+    const ticker = broadcast?.ticker ?? [];
+    const signature = JSON.stringify([
+      broadcast?.morning?.date ?? "",
+      broadcast?.morning?.summary ?? "",
+      ...ticker.map((entry) => entry.id),
+    ]);
+    if (!broadcast?.morning && morningReportOpen) closeMorningReport({ markSeen: false });
+    worldBroadcast = broadcast;
+    if (signature !== broadcastSignature) {
+      broadcastSignature = signature;
+      broadcastCursor = Math.max(0, ticker.length - 1);
+      restartBroadcastTimer();
+    }
+    renderBroadcastTicker();
+    maybeOpenMorningReport();
+  }
 
   function setView(view) {
+    if (view !== "cafe" && morningReportOpen) closeMorningReport({ markSeen: false });
     currentView = view;
     shell.dataset.view = view;
     document.body.dataset.view = view;
@@ -579,6 +708,9 @@ export function createCafeShell({
       selectedWorldPerson = null;
       renderWorldInspector();
     }
+    restartBroadcastTimer();
+    renderBroadcastTicker();
+    maybeOpenMorningReport();
     onViewChange(view);
     document.title = view === "intro" ? `EchoWorld · ${worldLabel}` : view === "map" ? "EchoWorld · 关系 Map" : `EchoWorld · ${worldLabel} 在线`;
   }
@@ -898,6 +1030,14 @@ export function createCafeShell({
       setView("cafe");
       return;
     }
+    if (target.dataset.action === "open-morning") {
+      openMorningReport();
+      return;
+    }
+    if (target.dataset.action === "close-morning") {
+      closeMorningReport();
+      return;
+    }
     if (target.dataset.action === "intro") {
       setView("intro");
       return;
@@ -1039,6 +1179,7 @@ export function createCafeShell({
       button.classList.toggle("is-ready", worldReady);
     },
     setView,
+    setWorldBroadcast,
     selectWorldPerson(personId) {
       selectedWorldPerson = people.find((person) => person.id === personId) ?? null;
       inspectorModes.world = "profile";
@@ -1117,6 +1258,8 @@ export function createCafeShell({
     },
     destroy() {
       unsubscribeSignalStore();
+      window.clearInterval(broadcastTimer);
+      document.body.removeAttribute("data-morning-report");
     },
   };
 }

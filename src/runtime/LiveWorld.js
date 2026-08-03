@@ -34,6 +34,16 @@ export const FALLBACK_SNAPSHOT = Object.freeze({
   ]),
   modules: Object.freeze([]),
   events: Object.freeze([]),
+  broadcast: Object.freeze({
+    schema: "echo-broadcast.v1",
+    ticker: Object.freeze([]),
+    morning: Object.freeze({
+      date: "2026-08-04", period: "2026-08-03", title: "早上好，来看看昨日世界",
+      summary: "昨日没有新增相遇，世界保持安静。",
+      items: Object.freeze(["没有遗漏需要补看的世界事件。"]),
+      new_encounters: 0, world_events: 0,
+    }),
+  }),
 });
 
 const NPC_SEATS = Object.freeze(
@@ -445,6 +455,7 @@ export class LiveWorld {
       })),
       modules: [],
       events,
+      broadcast: this.baseSnapshot?.broadcast ?? null,
     };
   }
 }

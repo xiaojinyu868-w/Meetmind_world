@@ -231,6 +231,7 @@ export function mountPipelineFlow(container, api, opts = {}) {
 
   function hydrateIcons(scope) {
     createIcons({ icons: ICONS, root: scope, attrs: { "stroke-width": 1.8 } });
+    for (const svg of scope.querySelectorAll("svg[data-lucide]")) svg.removeAttribute("data-lucide");
   }
 
   function resolveAssetUrl(ref) {

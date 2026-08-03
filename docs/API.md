@@ -120,6 +120,25 @@ booth module 结构（快照 modules 内，`type: "booth"`）：
 
 媒体文件服务（v0.3 加性）：`GET /api/v0/media/{ref}` —— 事实层文件（face_ref/photos 等指针）的 HTTP 出口，路径穿越防护 + 扩展名白名单。
 
+世界播报（v0.4 加性）：快照可带 `broadcast`，由 World Service 根据权威 `events` 与新确认相遇生成。前端只展示服务端生成的 `text`，不自行拼接事实；事件同时写入 `world-events.v1.jsonl` 追加式日志，用于跨日聚合。
+
+```jsonc
+{
+  "broadcast": {
+    "schema": "echo-broadcast.v1",
+    "ticker": [
+      { "id": "evt_x", "type": "agent-talk", "text": "两位朋友聊起了周末的展览", "tick": 12340, "occurred_at": "2026-08-04T00:30:00+00:00" }
+    ],
+    "morning": {
+      "date": "2026-08-04", "period": "2026-08-03",
+      "title": "早上好，来看看昨日世界", "summary": "昨日新增 1 次相遇，世界发生 2 件值得留意的事。",
+      "items": ["新相遇已进入世界：一位新朋友"],
+      "new_encounters": 1, "world_events": 2
+    }
+  }
+}
+```
+
 ## IF-5 资料包与检索接口
 
 ### `GET /api/v0/packages` — 列表（按 `viewer` 权限过滤字段）
@@ -163,3 +182,4 @@ booth module 结构（快照 modules 内，`type: "booth"`）：
 - 2026-08-03 | v0.1：扩展为全量接口地图（IF-1~IF-8，按 MVP 阶段分组），IF-1~IF-5 出详节，IF-6/7/8 先行登记 | 人（指正接口不止两个）+ AI（补全）
 - 2026-08-03 | v0.2：IF-2 接口更名为 `pipeline`（原 paipai 为语音转写错误） | 人 + AI
 - 2026-08-03 | v0.3（加性）：IF-4 增加 `?world=hall|cafe` 参数与 booth module 结构；新增媒体路由 `GET /api/v0/media/{ref}`；IF-3 confirm 响应增加 `booth_id` | AI
+- 2026-08-04 | v0.4（加性）：IF-4 增加 `echo-broadcast.v1` 世界播报与每日晨报视图 | AI
