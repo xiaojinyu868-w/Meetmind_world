@@ -19,13 +19,13 @@ npm run build
 
 ```text
 标题页
--> 3D Echo Cafe
--> Agent 随机选择普通桌并同桌自主交谈
--> 点选人物查看资料
--> 手动编辑人物资料与切换表情
--> 靠近中央六人圆桌，邀请人物入座并对话
--> 关系 Map
--> 从节点返回咖啡厅定位人物
+-> 3D Echo 集市（展位即人物/共同课题入口）
+-> 点选人物或展位查看资料包
+-> 进入“我与 TA”的关系场域，E/F 触发共同记忆与线索
+-> Echo Cafe 桌位/吧台情境菜单
+-> 邀请熟人进入中央圆桌并对话
+-> 世界播报即时显示邀请、圆桌和场域事件
+-> 关系 Map / 集市 / 咖啡厅之间返回定位
 ```
 
 场景包含 1 个玩家和 6 个 Agent。人物统一使用固定身体、五面头像的 MC 像素角色。中央六人桌只接受用户会议邀请，普通 Agent 调度不会占用它。
@@ -56,6 +56,10 @@ npm run build
 - `src/runtime/ProfileStore.js`：可编辑人物资料的版本化本地覆盖层。
 - `src/runtime/PersonSignalStore.js`：按 `personId` 接收快照、拒绝过期/乱序事件并通知 UI。
 - `src/runtime/HeartSignalSystem.js`：角色头顶的心动值 Sprite 与随分值变化的双脉冲动画。
+- `src/runtime/RelationshipFieldSystem.js`：消费 `echo-field.v1` 生成可进入的关系场域与 4 类热点。
+- `src/runtime/WorldModuleRegistry.js`：严格校验 `echo-world-modules.v1` 小屋/场域挂载契约。
+- `src/runtime/WorldBroadcastSystem.js`：咖啡厅 3D 播报屏与晨报摘要。
+- `src/ui/SceneInteraction.js`：统一 E/F、触屏提示与情境菜单。
 - `src/data/demoSignals.js`：6 个 NPC 的 `person-signal.v1` 占位快照，正式接口可直接替换。
 - `src/main.js`：Three.js 场景、第三人称相机、移动、碰撞、射线选择和会议编排。
 - `public/data/asset-catalog.json`：环境、人物和资料资产白名单。
@@ -90,3 +94,4 @@ V2 几何场景资产仍归档保留，但不再出现在前端选择器中，�
 - 当前照片输入是合照，技术槽位由主参考图从左到右确定，姓名映射由团队确认；正式链路仍需要上游提供稳定的 `personId + boundingBox`。
 - 人物暂时没有骨骼动画；移动和入座采用刚性模型的轻量表现。
 - 咖啡厅使用运行时圆形桌面碰撞，尚未从 Blender 导出完整碰撞壳。
+- 人脸/人物贴图生产与音视频上下文处理由上游团队负责；当前运行时只消费其 DTO/资产引用，详见 [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md)。

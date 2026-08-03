@@ -40,6 +40,16 @@ const EXPO_HALL_SHELL = Object.freeze({
   staticCircles: Object.freeze([]),
 });
 
+const RELATIONSHIP_FIELD_SHELL = Object.freeze({
+  id: "relationship-field",
+  bounds: Object.freeze({ minX: -7.6, maxX: 7.6, minZ: -7.6, maxZ: 7.6 }),
+  staticCircles: Object.freeze([
+    Object.freeze({ x: -2.5, z: 0.4, r: 0.72 }),
+    Object.freeze({ x: 2.4, z: -1.6, r: 0.76 }),
+    Object.freeze({ x: -1.1, z: -3.6, r: 0.82 }),
+  ]),
+});
+
 const SHELL_BY_ENVIRONMENT = Object.freeze({
   "environment.cafe.v1": CAFE_SHELL,
   // 美术变体几何不同，但活的世界锁定 v1 锚点（见 main.js 提示 Toast），碰撞同 v1
@@ -47,6 +57,7 @@ const SHELL_BY_ENVIRONMENT = Object.freeze({
   "environment.cafe.painterly.v1": CAFE_SHELL,
   "environment.market-street.v1": MARKET_STREET_SHELL,
   "environment.expo-hall.v1": EXPO_HALL_SHELL,
+  "environment.relationship-field.v1": RELATIONSHIP_FIELD_SHELL,
 });
 
 /**

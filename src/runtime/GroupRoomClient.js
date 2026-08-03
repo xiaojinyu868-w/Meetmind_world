@@ -21,7 +21,9 @@ async function requestJson(path, options = {}) {
     payload = null;
   }
   if (!response.ok) {
-    throw new Error(payload?.detail ?? `现场房间请求失败（HTTP ${response.status}）`);
+    const error = new Error(payload?.detail ?? `现场房间请求失败（HTTP ${response.status}）`);
+    error.status = response.status;
+    throw error;
   }
   if (!payload || payload.schema !== GROUP_SCHEMA) {
     throw new Error(`现场房间返回了不兼容的数据版本：${payload?.schema ?? "unknown"}`);

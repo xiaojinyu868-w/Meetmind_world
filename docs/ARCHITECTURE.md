@@ -101,7 +101,7 @@ MVP2（2026-08-03 重设后）增加三条线：场景语言（点位交互/播�
 
 - 前端不推断状态，只渲染；快照未包含的信息前端无权知道。
 - 资料包内容（人脸照片、谈话记录）**不走快照**，由用户点击后经 API 按权限单独拉取。
-- 场景语言（FR-2.8/2.9）的点位与播报内容：热点定义走 `modules`，播报文本走 `events`，均从快照消费，前端不自行编造。
+- 场景语言（FR-2.8/2.9）分为两类契约：动态角色/展位仍走快照；稳定场所入口走静态 `echo-world-modules.v1` 挂载清单。用户触发的邀请、圆桌和场域事件写入 append-only 世界事件存储，由 `/world/events` 与 `/world/brief` 提供可恢复播报。前端不把本地动画当作已发生事件。
 
 ## 5. 自进化权限矩阵（harness 圈层管理）
 
@@ -149,7 +149,7 @@ MVP2（2026-08-03 重设后）增加三条线：场景语言（点位交互/播�
 | `texture_gen.py` | `generate(photos: list[Path]) -> TextureSet`（头部五面 + 身体 atlas） | mock：占位贴图 |
 | `voxel_gen.py` | `generate(textures: TextureSet, style: StyleSpec) -> Path(glb)`（体素组装） | 固定体素身体 + 贴图；产物必须过 ART-BRIEF 契约（贴图槽位/根节点/朝向/身高） |
 | `person_builder.py` | `build(encounter_facts) -> avatar + asset_entry` | 编排上述两步并登记白名单（全流程 mock 可跑通） |
-| `field_gen.py` | `generate(person_materials) -> FieldScene`（个人场域，FR-2.11） | mock：模板场景；产物标注生成物、带来源素材指针（P-3） |
+| `app/fields/generator.py` | `generate_field(package, inferences, relations_md) -> echo-field.v1`（关系场域，FR-2.11） | 确定性艺术参数 + 4 类互动实体；产物标注生成物、来源素材指针、可重算（P-3） |
 
 注：现有 `three_view.py` / `blender_gen.py` 将随代码同步改语义/重命名为上表形态（文档为准，同步前视为遗留实现）。风格规范（体素分辨率、贴图生成 prompt 模板、调色板提取）由美术在 ART-BRIEF.md 定义，管线读取，不硬编码。
 
@@ -172,6 +172,7 @@ Agent 行为按场景半规则驱动（走动/访问/圆桌），由 Agent Runti
 | ADR-5 | 沿用现有 three.js 咖啡厅原型演进，不重写 | 原型已验证渲染与交互闭环 |
 | ADR-6 | 人物形象走"体素 + AI 图片贴图"，不走 per-person 高模管线（2026-08-03） | 现场场景下生成速度与成本优先；辨识度由照片贴图保证；P-6 |
 | ADR-7 | 现场群体玩法使用独立 `GroupSessionService`，不叠加到单人 `WorldService`；MVP2 场地试点采用 HTTP 轮询 + 单调位置序号 | 房间/印象/游戏有自己的生命周期；先验证同场多设备与玩法节奏，避免把一次性试点协议固化成未来云联机架构 |
+| ADR-8 | 稳定场所入口使用 `echo-world-modules.v1`，用户场景事件使用 append-only `echo-world-event.v1` | 后续小屋/应用可按 mount/entry/interaction 挂载；播报与重启恢复不依赖前端瞬时状态 |
 
 ## 8. TBD
 
@@ -188,3 +189,4 @@ Agent 行为按场景半规则驱动（走动/访问/圆桌），由 Agent Runti
 - 2026-08-03 | 依 8-03 晚会议纪要：§5a 新增场域生成链路（多模态素材 → 情感/关系特征 → 艺术化环境参数映射，非机械映射）；TBD-ARCH-4 细分为现场联机（MVP2）与云端联机（远期）两档 | 人（会议纪要）+ AI（记录）
 - 2026-08-03 | TBD-F2 决策落档：场域 = "我与 TA 的关系"的表达，输入以双方共同事件与关系状态为主 | 人（决策）+ AI（记录）
 - 2026-08-04 | ADR-7 落档：现场房间与单人世界状态分离，以轮询 + 单调序号完成 MVP2 同场试点；视觉/音频链路由上游工作流负责，本服务只消费已授权 DTO | 人（边界）+ AI（实现）
+- 2026-08-04 | ADR-8 落档：版本化世界模块挂载清单、关系场域推断管线与 append-only 世界事件/晨报接入；视觉和音视频语义继续由上游提供 | AI

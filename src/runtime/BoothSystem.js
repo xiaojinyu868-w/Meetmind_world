@@ -380,6 +380,7 @@ export class BoothSystem {
       ownedTextures: new Map(),
       displaySignature: null,
       displayName: null,
+      displayHeadline: null,
       hoverRing,
       namePlate: root.getObjectByName("MESH_NamePlate") ?? null,
       entrance: 0,
@@ -425,6 +426,7 @@ export class BoothSystem {
   #applyDisplay(record, rawDisplay) {
     const display = normalizeDisplay(rawDisplay, record.personId);
     record.displayName = display.name;
+    record.displayHeadline = display.headline;
     const signature = JSON.stringify(display);
     if (signature === record.displaySignature) return;
     record.displaySignature = signature;

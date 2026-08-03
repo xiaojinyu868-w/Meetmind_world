@@ -174,6 +174,19 @@ export function mountGroupPlay(root, {
     }
   }
 
+  function clearMissingRoom() {
+    client.stopPolling();
+    window.clearInterval(presenceTimer);
+    presenceTimer = null;
+    room = null;
+    renderKey = "";
+    root.classList.remove("has-group-room");
+    hud.hidden = true;
+    onPresence?.([], viewerId);
+    updateUrl();
+    render(true);
+  }
+
   function startSync() {
     if (!room) return;
     client.startPolling(
@@ -181,6 +194,11 @@ export function mountGroupPlay(root, {
       () => viewerId,
       (snapshot) => setRoom(snapshot),
       (error) => {
+        if (error.status === 404) {
+          clearMissingRoom();
+          notify("现场房间已结束，已回到普通世界");
+          return;
+        }
         if (!networkErrorShown) notify(error.message);
         networkErrorShown = true;
       },
@@ -191,6 +209,10 @@ export function mountGroupPlay(root, {
       const position = getLocalPresence();
       if (!position) return;
       client.updatePresence(room.session_id, viewerId, position).catch((error) => {
+        if (error.status === 404) {
+          clearMissingRoom();
+          return;
+        }
         if (!networkErrorShown) notify(error.message);
         networkErrorShown = true;
       });
@@ -560,7 +582,14 @@ export function mountGroupPlay(root, {
       updateUrl();
       startSync();
       open();
-    }).catch((error) => notify(error.message));
+    }).catch((error) => {
+      if (error.status === 404) {
+        clearMissingRoom();
+        notify("现场房间已结束，已回到普通世界");
+      } else {
+        notify(error.message);
+      }
+    });
   } else if (sharedRoomCode) {
     open();
   }

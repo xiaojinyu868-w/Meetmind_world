@@ -57,6 +57,7 @@ const INTEGRATION_STYLES = `
   text-transform: uppercase;
 }
 .echo-integrations .record-fab strong { font-size: 12px; font-weight: 800; }
+.echo-integrations .record-fab[hidden] { display: none !important; }
 body[data-view="cafe"] .echo-integrations .record-fab { display: flex; }
 
 /* 世界切换导航：叠放在「记录相遇」之上，两个世界各显示对应的出口 */
@@ -154,6 +155,21 @@ export function createUnifiedApi(base = MockApi) {
     // IF-5
     getPackage(personId) {
       return base.getPackage(personId);
+    },
+    getField(personId) {
+      return base.getField(personId);
+    },
+    regenerateField(personId) {
+      return base.regenerateField(personId);
+    },
+    getWorldEvents(limit) {
+      return base.getWorldEvents(limit);
+    },
+    getWorldBrief() {
+      return base.getWorldBrief();
+    },
+    recordWorldInteraction(payload) {
+      return base.recordWorldInteraction(payload);
     },
     search(request) {
       return base.search(request);
@@ -298,8 +314,11 @@ export function mountIntegrations({
   mountRoot.append(fab);
 
   // 世界切换导航：大厅 →「去咖啡厅坐坐」，咖啡厅 →「回到我的集市」（body.dataset.world 由 main.js 写入）
-  const currentWorld = document.body.dataset.world === "cafe" ? "cafe" : "hall";
-  const navToCafe = currentWorld === "hall";
+  const currentWorld = ["hall", "cafe", "field"].includes(document.body.dataset.world)
+    ? document.body.dataset.world
+    : "hall";
+  const navTarget = currentWorld === "hall" ? "cafe" : "hall";
+  const navToCafe = navTarget === "cafe";
   const navFab = document.createElement("button");
   navFab.className = "record-fab nav-world-fab";
   navFab.type = "button";
@@ -308,7 +327,7 @@ export function mountIntegrations({
     `<i data-lucide="${navToCafe ? "coffee" : "store"}"></i>` +
     `<span><small>${navToCafe ? "Echo Cafe" : "Expo Hall"}</small>` +
     `<strong>${navToCafe ? "去咖啡厅坐坐" : "回到我的集市"}</strong></span>`;
-  navFab.addEventListener("click", () => navigateToWorld(navToCafe ? "cafe" : "hall"));
+  navFab.addEventListener("click", () => navigateToWorld(navTarget));
   mountRoot.append(navFab);
 
   const groupFab = document.createElement("button");
@@ -321,6 +340,10 @@ export function mountIntegrations({
     `<span><small>Group Session</small><strong>现场一起玩</strong></span>`;
   groupFab.addEventListener("click", () => groupPlay.open());
   mountRoot.append(groupFab);
+  if (currentWorld === "field") {
+    fab.hidden = true;
+    groupFab.hidden = true;
+  }
   for (const button of [fab, navFab, groupFab]) {
     createIcons({ icons: INTEGRATIONS_ICONS, root: button, attrs: { "stroke-width": 1.8 } });
   }

@@ -1,6 +1,7 @@
 export const WORLDS = Object.freeze([
   Object.freeze({ id: "hall", label: "集市", title: "Echo 集市大厅" }),
   Object.freeze({ id: "cafe", label: "咖啡厅", title: "Echo Cafe" }),
+  Object.freeze({ id: "field", label: "关系场域", title: "关系回声场域" }),
 ]);
 
 export const DEFAULT_WORLD_ID = "hall";
@@ -29,6 +30,12 @@ export const CAFE_WORLD = Object.freeze({
   snapshotUrl: `${import.meta.env.BASE_URL}api/v0/world/snapshot?advance=1`,
 });
 
+export const FIELD_WORLD = Object.freeze({
+  environmentAssetId: "environment.relationship-field.v1",
+  bounds: Object.freeze({ minX: -7.6, maxX: 7.6, minZ: -7.6, maxZ: 7.6 }),
+  playerSpawn: Object.freeze({ x: 0, z: 6.2, yaw: Math.PI }),
+});
+
 
 export function worldById(value) {
   return WORLDS.find((world) => world.id === value) ?? null;
@@ -49,6 +56,25 @@ export function navigateToWorld(worldId, location = window.location) {
   if (!world) return false;
   const nextUrl = new URL(location.href);
   nextUrl.searchParams.set("world", world.id);
+  if (world.id !== "field") nextUrl.searchParams.delete("person");
+  if (world.id !== "cafe") nextUrl.searchParams.delete("invite");
+  location.assign(nextUrl.href);
+  return true;
+}
+
+
+export function fieldPersonFromLocation(location = window.location) {
+  const value = new URLSearchParams(location.search).get("person");
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+
+export function navigateToField(personId, location = window.location) {
+  if (typeof personId !== "string" || !personId.trim()) return false;
+  const nextUrl = new URL(location.href);
+  nextUrl.searchParams.set("world", "field");
+  nextUrl.searchParams.set("person", personId.trim());
+  nextUrl.searchParams.delete("invite");
   location.assign(nextUrl.href);
   return true;
 }

@@ -430,6 +430,7 @@ export function createCafeShell({
   onMeetingEnd = async () => {},
   resolveMediaUrl = (ref) => ref,
   world = "cafe",
+  fieldPerson = null,
   onExpressionChange = () => {},
   onProfileChange = () => {},
   signalStore = null,
@@ -450,9 +451,24 @@ export function createCafeShell({
   const activeSpeechIds = new Set();
   const avatarImg = createAvatarRenderer(resolveMediaUrl);
   defaultAvatarImg = avatarImg;
-  // HUD 文案按世界联动（hall=集市 / cafe=咖啡厅）
-  const worldLabel = world === "hall" ? "Echo 集市" : "Echo Cafe";
-  const worldStatusLine = world === "hall" ? "展位陈列中 · 欢迎串门" : "Agent 正在自主交流";
+  // HUD 文案按世界联动（hall=集市 / cafe=咖啡厅 / field=关系场域）
+  const worldLabel = world === "hall"
+    ? "Echo 集市"
+    : world === "field"
+      ? `${fieldPerson?.name ?? "TA"} · 关系场域`
+      : "Echo Cafe";
+  const worldStatusLine = world === "hall"
+    ? "展位陈列中 · 欢迎串门"
+    : world === "field"
+      ? "共同记忆正在构成环境"
+      : "熟人交流空间 · 今日播报已开启";
+  const introTitle = world === "field" ? "关系场域" : world === "cafe" ? "Echo Cafe" : "Echo 集市";
+  const introDescription = world === "field"
+    ? `这里表达的是你与${fieldPerson?.name ?? "TA"}相处时留下的感觉，而不是对现实的复刻。`
+    : world === "cafe"
+      ? "坐到桌边，邀请熟人喝杯咖啡，或在圆桌展开一次有上下文的交流。"
+      : "这是你的关系集市：你认识的人，都在这里有了自己的展位。";
+  const introAction = world === "field" ? "进入这段关系" : world === "cafe" ? "推门进咖啡厅" : "走进集市";
   const expressionTimers = new Map();
   const personExpressions = new Map();
   const personSignals = new Map();
@@ -484,21 +500,21 @@ export function createCafeShell({
               activeCharacterVariant,
               context: "intro",
             }) : ""}
-            <div class="intro-live"><span></span>6 个 Agent 已在展位就位</div>
+            <div class="intro-live"><span></span>${world === "field" ? "关系场域已生成" : world === "cafe" ? "熟人空间已开门" : "6 个 Agent 已在展位就位"}</div>
           </div>
         </header>
         <div class="intro-copy">
           <p>YOUR RELATIONSHIPS, IN ONE PLACE</p>
-          <h1>Echo 集市</h1>
-          <h2>这是你的关系集市：你认识的人，都在这里有了自己的展位。</h2>
+          <h1>${introTitle}</h1>
+          <h2>${introDescription}</h2>
         </div>
         <button class="intro-enter" type="button" data-action="enter-cafe" disabled>
-          <span><small>进入我的关系空间</small>走进集市</span>
+          <span><small>${world === "field" ? "YOU × THEM" : "进入我的关系空间"}</small>${introAction}</span>
           ${icon("arrow-right")}
         </button>
         <footer class="intro-footnote">
           <span>ECHOWORLD / PRIVATE AGENT SPACE</span>
-          <span>06 PEOPLE · 06 BOOTHS · 01 CAFE</span>
+          <span>${world === "field" ? "01 RELATION · 04 MEMORIES · REGENERABLE" : "06 PEOPLE · 06 BOOTHS · 01 CAFE"}</span>
         </footer>
       </section>
 
@@ -510,9 +526,9 @@ export function createCafeShell({
           </button>
           <div class="cafe-presence">
             <div class="presence-faces">
-              ${people.map((person) => avatarImg(person, { title: person.name })).join("")}
+              ${(world === "field" && fieldPerson ? [fieldPerson] : people).map((person) => avatarImg(person, { title: person.name })).join("")}
             </div>
-            <span><strong>6</strong> Agent 在线</span>
+            <span><strong>${world === "field" ? 1 : people.length}</strong> Agent 在线</span>
           </div>
           <button class="glass-control map-control" type="button" data-action="open-map">
             ${icon("network")}
@@ -1055,6 +1071,24 @@ export function createCafeShell({
       const visible = currentView === "cafe" && roundtableNearby && !meetingActive && !meetingSheetOpen;
       roundtablePrompt.setAttribute("aria-hidden", String(!visible));
     },
+    openMeeting(personIds = []) {
+      if (meetingActive || meetingSheetOpen || world !== "cafe") return false;
+      meetingSheetOpen = true;
+      invitedIds.clear();
+      for (const personId of personIds) {
+        if (people.some((person) => person.id === personId) && invitedIds.size < 5) {
+          invitedIds.add(personId);
+        }
+      }
+      shell.classList.add("has-meeting-sheet");
+      renderMeetingSetup();
+      return true;
+    },
+    closeMeeting() {
+      if (meetingActive) return false;
+      closeMeetingSheet();
+      return true;
+    },
     showNpcConversation({ speakerId, text, duration = 4.5 }) {
       const person = people.find((candidate) => candidate.id === speakerId);
       if (!person) return;
@@ -1111,6 +1145,9 @@ export function createCafeShell({
     },
     get isMeetingActive() {
       return meetingActive;
+    },
+    get isMeetingSheetOpen() {
+      return meetingSheetOpen;
     },
     get isWorldReady() {
       return worldReady;

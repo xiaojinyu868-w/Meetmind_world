@@ -18,7 +18,8 @@
 | IF-6 | `POST /api/v0/agents/meeting` 等 | MVP2 | 互动：发起圆桌、Agent 事件流 |
 | IF-7 | `GET /api/v0/notifications` `POST /api/v0/feedback` `POST /api/v0/refill` | MVP2 | 推送：价值事件通知、有用/无用反馈、微信行动回填 |
 | IF-8 | `/api/v0/group/sessions/...` | MVP2 | 现场房间：位置同步、第一印象互写、“谁写的？”破冰游戏 |
-| IF-9 | 授权/组织/网络接口 | MVP3 | 本人确认、权限级别变更、组织空间、网络互联（届时另立详节） |
+| IF-9 | `/api/v0/fields/...` `/api/v0/world/events` | MVP2 | 关系场域、空间互动事件与世界晨报 |
+| IF-10 | 授权/组织/网络接口 | MVP3 | 本人确认、权限级别变更、组织空间、网络互联（届时另立详节） |
 
 设计要点：
 
@@ -95,7 +96,7 @@ event: result    data: {"encounter_draft": { ... echo-package.v0 的 encounter �
   "privacy": "self-only"                   // 默认 L1
 }
 // 响应 200
-{ "person_id": "person_01JXXX", "encounter_id": "enc_01", "package_ref": "people/person_01JXXX/profile.json", "avatar_status": "placeholder" }
+{ "person_id": "person_01JXXX", "encounter_id": "enc_01", "package_ref": "people/person_01JXXX/profile.json", "avatar_status": "placeholder", "booth_id": "booth_person_01JXXX", "field_status": "ready" }
 ```
 
 - `avatar_status`: `placeholder`（占位模型）| `queued`（生成管线排队中）| `ready`（per-person 模型已生成）。
@@ -198,6 +199,29 @@ booth module 结构（快照 modules 内，`type: "booth"`）：
 - `POST /api/v0/group/sessions/{session_id}/game/next`：房主在答案揭晓后推进。
 - 作答前的 `current_round` 不包含 `author_id`；作答后才揭晓。游戏结束写入每人的 `echo-group-game-result.v1`，并在房间 `events` 产生可见 `game-finished` 事件。
 
+## IF-9 关系场域与世界事件（MVP2）
+
+本组接口只消费已确认 Package、关系记录、第一印象等授权 DTO。照片、人脸、贴图与音视频上下文的提取由上游工作流负责。
+
+- `GET /api/v0/fields/{person_id}`：读取或生成 `echo-field.v1`。产物位于推断层，包含 `generated_from / model / regenerable`、艺术参数与 4 类互动实体。
+- `POST /api/v0/fields/{person_id}/regenerate`：从现有来源重算场域，不修改 facts。
+- `GET /api/v0/world/events?limit=20`：读取最近的 `echo-world-event.v1` 持久化事件。
+- `GET /api/v0/world/brief`：返回 `echo-world-brief.v1` 晨报摘要。
+- `POST /api/v0/world/interactions`：记录场景行为；类型白名单包含摊位查看、邀请、咖啡、圆桌开始/结束、共同记忆与场域触发。
+
+```jsonc
+// POST /api/v0/world/interactions
+{
+  "type": "meeting-started",
+  "summary": "你邀请谢淯琪在中央圆桌坐下",
+  "person_ids": ["lin-che"],
+  "source": "scene-interaction",
+  "payload": {"table_id": "roundtable-six"}
+}
+```
+
+事件使用 append-only JSONL 保存，服务重启后仍可生成晨报；用户输入文本只通过 `textContent` 渲染到 DOM。
+
 ## 前端 mock 约定（先前端阶段）
 
 - mock 数据放 `public/data/mock/`：`ingest.response.json`、`pipeline.stream.jsonl`（按行模拟 SSE 事件，前端定时器逐条播放模拟流式）、`snapshot.demo.json`、`packages.demo.json`、`search.demo.json`。
@@ -216,3 +240,4 @@ booth module 结构（快照 modules 内，`type: "booth"`）：
 - 2026-08-03 | v0.2：IF-2 接口更名为 `pipeline`（原 paipai 为语音转写错误） | 人 + AI
 - 2026-08-03 | v0.3（加性）：IF-4 增加 `?world=hall|cafe` 参数与 booth module 结构；新增媒体路由 `GET /api/v0/media/{ref}`；IF-3 confirm 响应增加 `booth_id` | AI
 - 2026-08-04 | v0.4（加性）：原预留授权/组织接口顺延为 IF-9；IF-8 落地现场房间、第一印象与“谁写的？”协议，明确只消费上游参与者/资产 DTO，不处理视觉与音视频 | 人（边界）+ AI（实现）
+- 2026-08-04 | v0.5（加性）：授权/组织接口顺延为 IF-10；新增 IF-9 `echo-field.v1` 关系场域、持久化世界事件与晨报；confirm 响应增加 `field_status` | AI

@@ -12,6 +12,9 @@ import { HeartSignalSystem } from "./runtime/HeartSignalSystem.js";
 import { LiveWorld } from "./runtime/LiveWorld.js";
 import { NpcAgentSystem } from "./runtime/NpcAgentSystem.js";
 import { PersonSignalStore } from "./runtime/PersonSignalStore.js";
+import { RelationshipFieldSystem } from "./runtime/RelationshipFieldSystem.js";
+import { WorldBroadcastSystem } from "./runtime/WorldBroadcastSystem.js";
+import { WorldModuleRegistry } from "./runtime/WorldModuleRegistry.js";
 import {
   CHARACTER_VARIANT_OPTIONS,
   characterAssetId,
@@ -26,7 +29,15 @@ import {
 } from "./runtime/SceneVariants.js";
 import { adaptSnapshot, normalizeEvent } from "./runtime/SnapshotAdapter.js";
 import { slideStepAroundBlockers } from "./runtime/WalkSlide.js";
-import { CAFE_WORLD, HALL_LAYOUT, worldFromLocation } from "./runtime/WorldSwitch.js";
+import {
+  CAFE_WORLD,
+  FIELD_WORLD,
+  HALL_LAYOUT,
+  fieldPersonFromLocation,
+  navigateToField,
+  navigateToWorld,
+  worldFromLocation,
+} from "./runtime/WorldSwitch.js";
 import {
   adaptMaterialToProfile,
   adaptSceneMaterials,
@@ -34,6 +45,7 @@ import {
 } from "./runtime/VisualProfiles.js";
 import { loadWorldSpec, publicUrl } from "./runtime/WorldSpec.js";
 import { createCafeShell } from "./ui/CafeShell.js";
+import { mountSceneInteraction } from "./ui/SceneInteraction.js";
 import { mountIntegrations, resolveMediaUrl } from "./bootstrap/integrations.js";
 import "./cafe.css";
 
@@ -64,18 +76,29 @@ if (replaceCanonicalUrl) {
 // 两级世界：展位大厅（hall，默认）/ 咖啡厅（cafe），?world= URL 参数 + 刷新切换
 const activeWorld = worldFromLocation();
 const isHallWorld = activeWorld.id === "hall";
+const isCafeWorld = activeWorld.id === "cafe";
+const isFieldWorld = activeWorld.id === "field";
+const fieldTargetPersonId = fieldPersonFromLocation() ?? people[0].id;
+const fieldTargetPerson = people.find((person) => person.id === fieldTargetPersonId) ?? people[0];
+const invitedPersonId = new URLSearchParams(window.location.search).get("invite");
 // 大厅暂只用 v1 视觉配置（专属 profile 后续）；环境资产/布局/出生点按世界选择
-const activeVisualProfile = isHallWorld
+const activeVisualProfile = isHallWorld || isFieldWorld
   ? sceneVariantById("v1").visualProfile
   : activeSceneVariant.visualProfile;
 const environmentAssetId = isHallWorld
   ? HALL_LAYOUT.environmentAssetId
-  : activeSceneVariant.environmentAssetId;
+  : isFieldWorld
+    ? FIELD_WORLD.environmentAssetId
+    : activeSceneVariant.environmentAssetId;
 // 静态碰撞壳（边界 + 静态圆）统一从注册表取数；大厅动态摊位圆由 BoothSystem 注入
 const worldShell = colliderShellFor(environmentAssetId);
 const worldBounds = worldShell.bounds;
-const worldPlayerSpawn = isHallWorld ? HALL_LAYOUT.playerSpawn : CAFE_LAYOUT.playerSpawn;
-const worldTitle = isHallWorld ? activeWorld.title : activeSceneVariant.title;
+const worldPlayerSpawn = isHallWorld
+  ? HALL_LAYOUT.playerSpawn
+  : isFieldWorld
+    ? FIELD_WORLD.playerSpawn
+    : CAFE_LAYOUT.playerSpawn;
+const worldTitle = isCafeWorld ? activeSceneVariant.title : activeWorld.title;
 document.body.dataset.world = activeWorld.id;
 
 const MOVE_SPEED = 2.7;
@@ -138,7 +161,7 @@ const onPersonSelected =
     : (personId) => {
         if (personId) integrations.panel.openPerson(personId);
       };
-const liveEnabled = runtimeOptions.live !== false;
+const liveEnabled = runtimeOptions.live !== false && !isFieldWorld;
 const snapshotPollMs =
   Number.isFinite(runtimeOptions.snapshotPollMs) && runtimeOptions.snapshotPollMs >= 250
     ? runtimeOptions.snapshotPollMs
@@ -230,6 +253,16 @@ let liveMeetingSeatIndices = [];
 let liveWorld = null;
 let liveWorldTick = null;
 let boothSystem = null;
+let relationshipFieldSystem = null;
+let relationshipField = null;
+let worldBroadcastSystem = null;
+let worldModuleRegistry = null;
+let playerSeatedAt = null;
+let pendingSceneInviteId = people.some((person) => person.id === invitedPersonId)
+  ? invitedPersonId
+  : null;
+let nearbyHotspotId = null;
+let sceneHotspots = [];
 const hallGlances = new Map();
 const dynamicPeople = new Map();
 const pendingAgentSpawns = new Set();
@@ -261,10 +294,15 @@ const appShell = createCafeShell({
   onMeetingEnd: endMeeting,
   resolveMediaUrl,
   world: activeWorld.id,
+  fieldPerson: isFieldWorld ? fieldTargetPerson : null,
   onExpressionChange: (personId, expression, metadata) => {
     void setCharacterExpression(personId, expression, metadata);
   },
   onProfileChange: updateRuntimeProfile,
+});
+
+const sceneInteraction = mountSceneInteraction({
+  onAction: handleSceneInteraction,
 });
 
 const unsubscribePersonSignals = personSignalStore.subscribe((snapshot, metadata) => {
@@ -418,32 +456,38 @@ async function spawnCharacters() {
   currentHeading.copy(MODEL_FORWARD).applyQuaternion(player.quaternion).setY(0).normalize();
   expressionSystem.register(playerEntity, currentUser.id, activeCharacterVariant.id);
 
+  const visiblePeople = isFieldWorld ? [fieldTargetPerson] : people;
   npcSystem = new NpcAgentSystem({
-    people,
+    people: visiblePeople,
     onConversation: (event) => appShell.showNpcConversation(event),
     onStateChange: (state) => appShell.updateAgentState(state),
   });
 
-  const npcEntrySpawns = isHallWorld ? HALL_LAYOUT.npcEntrySpawns : NPC_ENTRY_SPAWNS;
-  for (let index = 0; index < people.length; index += 1) {
-    setProgress(0.76 + index * 0.03, `正在载入 ${people[index].name} 的人物模型`);
+  const fieldCompanion = relationshipField?.scene?.companion ?? { x: 0, z: -1.1, yaw: 0 };
+  const npcEntrySpawns = isHallWorld
+    ? HALL_LAYOUT.npcEntrySpawns
+    : isFieldWorld
+      ? [fieldCompanion]
+      : NPC_ENTRY_SPAWNS;
+  for (let index = 0; index < visiblePeople.length; index += 1) {
+    setProgress(0.76 + index * 0.03, `正在载入 ${visiblePeople[index].name} 的人物模型`);
     const entity = await characterSystem.spawn(
       characterSpec(
-        people[index],
-        `agent-${people[index].id}`,
+        visiblePeople[index],
+        `agent-${visiblePeople[index].id}`,
         npcEntrySpawns[index],
       ),
     );
-    expressionSystem.register(entity, people[index].id, activeCharacterVariant.id);
+    expressionSystem.register(entity, visiblePeople[index].id, activeCharacterVariant.id);
     heartSignalSystem.register(
       entity,
-      people[index].id,
-      personSignalStore.getSnapshot(people[index].id),
+      visiblePeople[index].id,
+      personSignalStore.getSnapshot(visiblePeople[index].id),
     );
-    npcSystem.register(people[index], entity);
+    npcSystem.register(visiblePeople[index], entity);
   }
   // live 模式下本地随机调度关闭：座位分配与对话全部由世界快照驱动
-  if (!liveEnabled) npcSystem.initializeCafe();
+  if (!liveEnabled && !isFieldWorld) npcSystem.initializeCafe();
 
   playerMarker = makeGroundMarker("#f2c55f", 0.32, 0.42, 0.42);
   playerMarker.name = "PLAYER_GroundMarker";
@@ -456,7 +500,7 @@ async function spawnCharacters() {
 
 async function configureWorld(root) {
   environmentRoot = root;
-  adaptSceneMaterials(root, activeVisualProfile);
+  if (!isFieldWorld) adaptSceneMaterials(root, activeVisualProfile);
   scene.add(root);
   root.updateMatrixWorld(true);
 
@@ -500,8 +544,11 @@ async function configureWorld(root) {
   groundMeshes.length = 0;
   groundMeshes.push(...uniqueGroundMeshes);
 
-  if (!isHallWorld) validateRuntimeAnchors(root);
+  if (isCafeWorld) validateRuntimeAnchors(root);
   await spawnCharacters();
+  rebuildSceneHotspots();
+  worldBroadcastSystem = new WorldBroadcastSystem({ scene, api, world: activeWorld.id });
+  worldBroadcastSystem.mount();
   worldReady = true;
   canvas.dataset.ready = "true";
   canvas.dataset.characterCount = String(characterSystem.entities.length);
@@ -523,8 +570,8 @@ function setExperienceMode(mode) {
   touchKnob.style.transform = "translate(0, 0)";
   if (playerMarker) playerMarker.visible = mode === "cafe" && !meetingMode;
   if (mode !== "cafe") playerLabel.style.opacity = "0";
-  tickBadge.style.display = mode === "cafe" ? "flex" : "none";
-  heartSignalSystem.setVisible(mode === "cafe");
+  tickBadge.style.display = mode === "cafe" && !isFieldWorld ? "flex" : "none";
+  heartSignalSystem.setVisible(mode === "cafe" && !isFieldWorld);
   if (mode === "cafe") canvas.focus({ preventScroll: true });
 }
 
@@ -558,8 +605,9 @@ function updateSelectionMarker() {
 }
 
 
-function startMeeting(personIds) {
+async function startMeeting(personIds) {
   if (!worldReady || meetingMode) return [];
+  leavePlayerSeat();
   let accepted = [];
   if (liveEnabled) {
     // live 模式：不走 NpcAgentSystem 本地调度，改为快照驱动层上的会议覆盖目标
@@ -604,12 +652,21 @@ function startMeeting(personIds) {
   touchInput.set(0, 0);
   canvas.dataset.meetingActive = "true";
   canvas.dataset.meetingInvited = accepted.join(",");
+  await recordWorldEvent(
+    "meeting-started",
+    `你邀请${accepted.map(nameOf).join("、")}在中央圆桌坐下`,
+    accepted,
+    { table_id: CAFE_LAYOUT.roundtable.id },
+  );
   return accepted;
 }
 
 
-function endMeeting() {
+async function endMeeting() {
   if (!worldReady) return;
+  const participants = canvas.dataset.meetingInvited
+    ? canvas.dataset.meetingInvited.split(",").filter(Boolean)
+    : [];
   meetingMode = false;
   player.scale.set(1, 1, 1);
   playerMarker.visible = experienceMode === "cafe";
@@ -626,6 +683,14 @@ function endMeeting() {
   liveMeetingSeatIndices = [];
   canvas.dataset.meetingActive = "false";
   canvas.dataset.meetingInvited = "";
+  await recordWorldEvent(
+    "meeting-ended",
+    participants.length
+      ? `你与${participants.map(nameOf).join("、")}结束了圆桌交流`
+      : "中央圆桌交流结束",
+    participants,
+    { table_id: CAFE_LAYOUT.roundtable.id },
+  );
 }
 
 
@@ -655,6 +720,366 @@ function fillPackageNames(packages) {
 }
 
 
+function rebuildSceneHotspots() {
+  if (isFieldWorld) {
+    sceneHotspots = (relationshipFieldSystem?.hotspots ?? []).map((hotspot) => ({
+      ...hotspot,
+      icon: hotspot.kind === "memory"
+        ? "book-open"
+        : hotspot.kind === "thread"
+          ? "message-circle"
+          : hotspot.kind === "echo"
+            ? "landmark"
+            : "sparkles",
+      actions: [{
+        id: "touch-field",
+        label: hotspot.prompt,
+        description: "这次触发会成为一条新的世界事件",
+        icon: hotspot.kind === "memory" ? "book-open" : "sparkles",
+      }],
+    }));
+    return;
+  }
+
+  if (isHallWorld) {
+    const cafeModule = worldModuleRegistry?.byId("venue.cafe.v1");
+    sceneHotspots = [{
+      id: "hall-cafe-door",
+      kind: "venue",
+      x: 0,
+      z: -9.15,
+      radius: cafeModule?.interaction?.radius ?? 1.9,
+      eyebrow: "市集街上的室内空间",
+      title: cafeModule?.label ?? "Echo Cafe",
+      detail: "咖啡厅适合熟人之间的一对一交流。进去坐下、邀请某个人，或在圆桌开启一次讨论。",
+      prompt: cafeModule?.interaction?.verb ?? "进入咖啡厅",
+      icon: "door-open",
+      actions: [{ id: "enter-cafe", label: "推门进入", description: "前往熟人交流空间", icon: "door-open" }],
+    }];
+    for (const record of boothSystem?.booths.values() ?? []) {
+      sceneHotspots.push({
+        id: `booth-${record.personId}`,
+        kind: "booth",
+        x: record.position.x,
+        z: record.position.z,
+        radius: 2.15,
+        personId: record.personId,
+        eyebrow: "人 ↔ 共同课题 ↔ 人",
+        title: `${record.displayName ?? nameOf(record.personId)}的摊位`,
+        detail: record.displayHeadline || "从这个摊位的照片、作品和共同经历出发，看看你们之间还有什么值得继续。",
+        prompt: `看看${record.displayName ?? nameOf(record.personId)}的摊位`,
+        icon: "store",
+        actions: [
+          { id: "open-package", label: "翻开资料包", description: "回到相遇事实与现场记录", icon: "eye" },
+          { id: "enter-field", label: "进入关系场域", description: "看看这段关系被转译成怎样的空间", icon: "sparkles" },
+          { id: "invite-cafe", label: "约到咖啡厅继续聊", description: "把邀请带到熟人交流空间", icon: "coffee" },
+        ],
+      });
+    }
+    return;
+  }
+
+  const tableHotspots = CAFE_LAYOUT.npcTables.map((table) => ({
+    id: `cafe-table-${table.id}`,
+    kind: "table",
+    tableId: table.id,
+    x: table.center.x,
+    z: table.center.z,
+    radius: table.capacity === 2 ? 1.9 : 2.05,
+    eyebrow: "两个人之间的直接交流",
+    title: table.label,
+    detail: "坐下来后，可以邀请一位熟人、点一杯饮品，或从桌边调取一段共同记忆。",
+    prompt: playerSeatedAt === table.id ? "看看桌边还能做什么" : `在${table.label}坐下`,
+    icon: "coffee",
+    actions: playerSeatedAt === table.id
+      ? [
+          { id: "invite-table", label: "邀请一位熟人", description: "选择这次想一起坐下的人", icon: "users" },
+          { id: "recall-memory", label: "调取共同记忆", description: "从资料包中找回第一次相遇", icon: "book-open" },
+          { id: "leave-seat", label: "起身离开", icon: "door-open" },
+        ]
+      : [{ id: "sit-at-table", label: "坐到桌边", description: "进入这张桌子的情境菜单", icon: "coffee" }],
+  }));
+  sceneHotspots = [
+    {
+      id: "cafe-roundtable",
+      kind: "roundtable",
+      x: CAFE_LAYOUT.roundtable.center.x,
+      z: CAFE_LAYOUT.roundtable.center.z,
+      radius: CAFE_LAYOUT.roundtable.interactionRadius,
+      eyebrow: "中央六人圆桌",
+      title: pendingSceneInviteId ? `邀请${nameOf(pendingSceneInviteId)}入座` : "发起一次圆桌会议",
+      detail: pendingSceneInviteId
+        ? `你从集市带来了给${nameOf(pendingSceneInviteId)}的邀请。还可以继续邀请其他人。`
+        : "围绕最近的变化、下一步或共同记忆，邀请最多五个人一起坐下。",
+      prompt: pendingSceneInviteId ? `带${nameOf(pendingSceneInviteId)}加入圆桌` : "发起圆桌会议",
+      icon: "users",
+      actions: [{ id: "open-meeting", label: "选择入座的人", description: "邀请后会议会写入今日播报", icon: "users" }],
+    },
+    {
+      id: "cafe-bar",
+      kind: "bar",
+      x: 1.65,
+      z: 3.15,
+      radius: 1.8,
+      eyebrow: "Echo Cafe 吧台",
+      title: "今天想和谁喝一杯？",
+      detail: "吧台不是装饰：点饮品、发出邀请，都会成为世界里可恢复的事件。",
+      prompt: "在吧台点单或邀请熟人",
+      icon: "coffee",
+      actions: [
+        { id: "order-coffee", label: "点一杯今日手冲", description: "给今天的世界留一个安静节点", icon: "coffee" },
+        { id: "invite-coffee", label: "邀请一位熟人", description: "选择想一起喝咖啡的人", icon: "users" },
+        { id: "recall-memory", label: "翻开一段共同记忆", icon: "book-open" },
+      ],
+    },
+    {
+      id: "cafe-broadcast",
+      kind: "broadcast",
+      x: 1.2,
+      z: -3.65,
+      radius: 1.65,
+      eyebrow: "世界事件不是背景动画",
+      title: "今日播报屏",
+      detail: "这里滚动显示最近发生的邀请、圆桌、场域访问和共同记忆触发。",
+      prompt: "查看今日世界事件",
+      icon: "message-circle",
+      actions: [{ id: "read-brief", label: "展开今日播报", icon: "message-circle" }],
+    },
+    ...tableHotspots,
+  ];
+}
+
+
+function nearestSceneHotspot() {
+  if (!worldReady || experienceMode !== "cafe" || meetingMode || !player) return null;
+  let nearest = null;
+  let nearestDistance = Infinity;
+  for (const hotspot of sceneHotspots) {
+    const distance = Math.hypot(player.position.x - hotspot.x, player.position.z - hotspot.z);
+    if (distance <= hotspot.radius && distance < nearestDistance) {
+      nearest = hotspot;
+      nearestDistance = distance;
+    }
+  }
+  return nearest;
+}
+
+
+function updateSceneInteraction() {
+  const hotspot = appShell.isMeetingSheetOpen || meetingMode ? null : nearestSceneHotspot();
+  if ((hotspot?.id ?? null) !== nearbyHotspotId) {
+    nearbyHotspotId = hotspot?.id ?? null;
+    canvas.dataset.nearbyHotspot = nearbyHotspotId ?? "";
+  }
+  sceneInteraction.setNearby(hotspot);
+}
+
+
+async function recordWorldEvent(type, summary, personIds = [], payload = {}) {
+  try {
+    const event = await api.recordWorldInteraction({
+      type,
+      summary,
+      person_ids: personIds,
+      source: "scene-interaction",
+      payload,
+    });
+    canvas.dataset.lastWorldEvent = event.event_id ?? type;
+    await worldBroadcastSystem?.refresh();
+    return event;
+  } catch (error) {
+    console.warn("[EchoWorld] 世界事件写入失败", error);
+    return null;
+  }
+}
+
+
+function inviteActions() {
+  return people.map((person) => ({
+    id: `invite-person:${person.id}`,
+    label: person.name,
+    description: `${person.relation} · ${person.tags.slice(0, 2).join(" · ")}`,
+    icon: "users",
+  }));
+}
+
+
+function sitPlayerAt(tableId) {
+  const table = tableById(tableId);
+  if (!table || meetingMode) return false;
+  const occupied = new Set(
+    people
+      .map((person) => worldAgentState(person.id))
+      .filter((state) => state?.tableId === tableId)
+      .map((state) => state.seatIndex),
+  );
+  const seatIndex = table.seats.findIndex((_, index) => !occupied.has(index));
+  const seat = table.seats[Math.max(0, seatIndex)];
+  actorAt(playerEntity, seat.x, seat.z, seat.yaw, SEATED_ROOT_Y);
+  player.scale.set(1, SEATED_SCALE_Y, 1);
+  playerEntity.spec.behavior.idle_bob = 0.003;
+  playerGroundY = playerEntity.baseY;
+  playerMarker.visible = false;
+  currentHeading.set(Math.sin(seat.yaw), 0, Math.cos(seat.yaw));
+  playerSeatedAt = tableId;
+  canvas.dataset.playerSeatedAt = tableId;
+  rebuildSceneHotspots();
+  return true;
+}
+
+
+function leavePlayerSeat() {
+  if (!playerSeatedAt) return false;
+  const x = player.position.x;
+  const z = player.position.z;
+  const yaw = Math.atan2(currentHeading.x, currentHeading.z);
+  actorAt(playerEntity, x, z, yaw);
+  playerGroundY = playerEntity.baseY;
+  player.scale.set(1, 1, 1);
+  playerEntity.spec.behavior.idle_bob = 0;
+  playerMarker.visible = experienceMode === "cafe";
+  playerSeatedAt = null;
+  canvas.dataset.playerSeatedAt = "";
+  rebuildSceneHotspots();
+  return true;
+}
+
+
+function navigateToCafeWithInvite(personId) {
+  const nextUrl = new URL(window.location.href);
+  nextUrl.searchParams.set("world", "cafe");
+  nextUrl.searchParams.set("invite", personId);
+  window.location.assign(nextUrl.href);
+}
+
+
+async function memoryNarrative(personId = null) {
+  const targetId = personId ?? pendingSceneInviteId ?? selectedPersonId ?? people[0].id;
+  const pkg = await api.getPackage(targetId);
+  const encounter = pkg.encounters?.[0] ?? {};
+  const highlight = (encounter.inferences ?? []).find((item) => item.type.includes("memory"))
+    ?? encounter.inferences?.[0];
+  return {
+    eyebrow: `你与${pkg.identity?.name ?? nameOf(targetId)}的共同记忆`,
+    title: encounter.place ?? "第一次相遇",
+    detail: highlight?.value ?? `这段记录发生在 ${encounter.time ?? "一个被留下的时刻"}。`,
+    icon: "book-open",
+    actions: [{ id: `open-package:${targetId}`, label: "查看完整资料包", icon: "eye" }],
+  };
+}
+
+
+async function handleSceneInteraction(hotspot, actionId) {
+  if (actionId === "enter-cafe") {
+    navigateToWorld("cafe");
+    return { close: true };
+  }
+  if (actionId === "open-package" || actionId.startsWith("open-package:")) {
+    const personId = actionId.split(":")[1] ?? hotspot.personId;
+    integrations.panel.openPerson(personId);
+    void recordWorldEvent("booth-viewed", `你翻开了${nameOf(personId)}的资料包`, [personId]);
+    return { close: true };
+  }
+  if (actionId === "enter-field") {
+    void recordWorldEvent("field-entered", `你从${nameOf(hotspot.personId)}的摊位走进关系场域`, [hotspot.personId]);
+    navigateToField(hotspot.personId);
+    return { close: true };
+  }
+  if (actionId === "invite-cafe") {
+    pendingSceneInviteId = hotspot.personId;
+    await recordWorldEvent("invitation-sent", `你邀请${nameOf(hotspot.personId)}去咖啡厅继续聊`, [hotspot.personId]);
+    navigateToCafeWithInvite(hotspot.personId);
+    return { close: true };
+  }
+  if (actionId === "order-coffee") {
+    await recordWorldEvent("coffee-shared", "你在吧台点了一杯今日手冲", []);
+    return {
+      eyebrow: "吧台已经记住",
+      title: "一杯咖啡留在了今日播报里",
+      detail: "这个安静的停顿现在是世界的一部分。邀请某个人后，它也会成为你们的共同事件。",
+      icon: "coffee",
+      actions: [{ id: "invite-coffee", label: "邀请一位熟人", icon: "users" }],
+    };
+  }
+  if (actionId === "invite-coffee" || actionId === "invite-table") {
+    return {
+      eyebrow: hotspot.title,
+      title: "这次想邀请谁？",
+      detail: "邀请会先写入今日行程；走到中央圆桌后，可以继续加入其他人。",
+      icon: "users",
+      actions: inviteActions(),
+    };
+  }
+  if (actionId.startsWith("invite-person:")) {
+    const personId = actionId.slice("invite-person:".length);
+    pendingSceneInviteId = personId;
+    await recordWorldEvent("invitation-sent", `你邀请${nameOf(personId)}在咖啡厅坐下`, [personId]);
+    rebuildSceneHotspots();
+    return {
+      eyebrow: "邀请已送达",
+      title: `${nameOf(personId)}会在圆桌等你`,
+      detail: "走到中央圆桌，按 E 就能把这次邀请变成一场会议。",
+      icon: "users",
+      actions: [],
+    };
+  }
+  if (actionId === "sit-at-table") {
+    sitPlayerAt(hotspot.tableId);
+    return {
+      eyebrow: hotspot.title,
+      title: "你在桌边坐下了",
+      detail: "此刻移动暂停。再次靠近桌边的互动菜单，可以邀请熟人或调取共同记忆。",
+      icon: "coffee",
+      actions: [{ id: "leave-seat", label: "起身离开", icon: "door-open" }],
+    };
+  }
+  if (actionId === "leave-seat") {
+    leavePlayerSeat();
+    return { close: true };
+  }
+  if (actionId === "recall-memory") {
+    const narrative = await memoryNarrative();
+    void recordWorldEvent("memory-recalled", `你在咖啡厅调取了与${nameOf(pendingSceneInviteId ?? people[0].id)}的共同记忆`, pendingSceneInviteId ? [pendingSceneInviteId] : []);
+    return narrative;
+  }
+  if (actionId === "open-meeting") {
+    leavePlayerSeat();
+    appShell.openMeeting(pendingSceneInviteId ? [pendingSceneInviteId] : []);
+    return { close: true };
+  }
+  if (actionId === "read-brief") {
+    const brief = await api.getWorldBrief();
+    return {
+      eyebrow: `${brief.event_count} 条近期世界事件`,
+      title: brief.headline,
+      detail: brief.summary,
+      icon: "message-circle",
+      actions: [],
+    };
+  }
+  if (actionId === "touch-field") {
+    const personId = hotspot.personId;
+    await recordWorldEvent(
+      hotspot.eventType,
+      `你在与${nameOf(personId)}的场域触发了「${hotspot.title}」`,
+      [personId],
+      { field_entity: hotspot.id },
+    );
+    const actions = hotspot.kind === "memory" || hotspot.kind === "thread"
+      ? [{ id: `open-package:${personId}`, label: "回到资料包查看来源", icon: "eye" }]
+      : [];
+    return {
+      eyebrow: relationshipField?.scene?.title ?? "关系场域",
+      title: hotspot.title,
+      detail: hotspot.detail,
+      icon: hotspot.icon,
+      actions,
+    };
+  }
+  return null;
+}
+
+
 // 在 3D 世界中选中/定位人物；不在世界中（如刚确认的新人）返回 false 且不影响当前选中
 function selectPersonInWorld(personId) {
   if (typeof personId !== "string" || personId === "") return false;
@@ -667,6 +1092,8 @@ function selectPersonInWorld(personId) {
 function pushLiveToast(message, { level = "info" } = {}) {
   // 大厅模式：Toast 轻量化，仅 meeting 级别提示（agent-talk 串门防噪）
   if (isHallWorld && level !== "meeting") return;
+  // 手机视口把主操作与 3D 视线留给用户，普通闲聊由今日播报承接。
+  if (window.innerWidth <= 760 && level !== "meeting") return;
   const toast = document.createElement("div");
   toast.style.cssText =
     "max-width:min(320px,calc(100vw - 36px));padding:9px 14px;border-radius:14px;" +
@@ -801,6 +1228,7 @@ function applyLiveSnapshot(rawSnapshot) {
         : (liveWorld?.source === "live" ? [] : buildFallbackBooths(people));
     canvas.dataset.boothCount = String(boothSystem.sync(booths));
     canvas.dataset.boothReadablePanelCount = String(boothSystem.readablePanelCount);
+    rebuildSceneHotspots();
   }
 
   for (const agent of adapted.agents) {
@@ -1168,7 +1596,7 @@ function commitCandidatePosition(nextPosition) {
 
 
 function updatePlayer(delta) {
-  if (meetingMode) return;
+  if (meetingMode || playerSeatedAt || sceneInteraction.isOpen || appShell.isMeetingSheetOpen) return;
   const input = readMovementInput();
   const moving = input.lengthSq() > 0.0025;
 
@@ -1302,8 +1730,8 @@ function updateSpeechPositions() {
 
 
 function updateRoundtablePrompt() {
-  if (isHallWorld) {
-    // 大厅没有圆桌会议
+  if (!isCafeWorld) {
+    // 集市与关系场域没有圆桌会议
     if (roundtableNearby) {
       roundtableNearby = false;
       appShell.setRoundtableNearby(false);
@@ -1322,7 +1750,7 @@ function updateRoundtablePrompt() {
 
 
 function refreshDiagnostics() {
-  const states = people.map((person) => worldAgentState(person.id));
+  const states = people.map((person) => worldAgentState(person.id)).filter(Boolean);
   const centralCount = states.filter((state) => state?.meeting).length;
   canvas.dataset.playerPosition = [player.position.x, player.position.y, player.position.z]
     .map((value) => value.toFixed(4))
@@ -1352,6 +1780,9 @@ function refreshDiagnostics() {
   canvas.dataset.renderCalls = String(renderer.info.render.calls);
   canvas.dataset.triangles = String(renderer.info.render.triangles);
   canvas.dataset.centerPixel = sampleCenterPixel().join(",");
+  canvas.dataset.sceneHotspotCount = String(sceneHotspots.length);
+  canvas.dataset.fieldEntityCount = String(relationshipFieldSystem?.hotspots.length ?? 0);
+  canvas.dataset.worldModuleCount = String(worldModuleRegistry?.modules.length ?? 0);
 }
 
 
@@ -1363,6 +1794,7 @@ function animate(timestamp) {
   if (worldReady) {
     characterSystem.update(delta, elapsed);
     boothSystem?.update(delta);
+    relationshipFieldSystem?.update(elapsed);
     if (liveEnabled) updateLiveAgents(delta);
     else npcSystem.update(delta, elapsed);
     heartSignalSystem.update(elapsed);
@@ -1372,6 +1804,7 @@ function animate(timestamp) {
       else updateFollowCamera(delta);
       updatePlayerLabel();
       updateRoundtablePrompt();
+      updateSceneInteraction();
     } else {
       updateCinematicCamera(delta);
     }
@@ -1469,6 +1902,15 @@ canvas.addEventListener("pointerup", (event) => {
 
 
 window.addEventListener("keydown", (event) => {
+  if (experienceMode === "cafe" && sceneInteraction.handleKey(event)) {
+    event.preventDefault();
+    return;
+  }
+  if (event.code === "Escape" && playerSeatedAt && !event.target.closest?.("input, textarea")) {
+    leavePlayerSeat();
+    event.preventDefault();
+    return;
+  }
   if (
     experienceMode === "cafe" &&
     !meetingMode &&
@@ -1520,6 +1962,9 @@ for (const eventName of ["pointerup", "pointercancel"]) {
 window.addEventListener("resize", resizeRenderer);
 window.addEventListener("beforeunload", () => {
   appShell.destroy();
+  sceneInteraction.destroy();
+  relationshipFieldSystem?.dispose();
+  worldBroadcastSystem?.dispose();
   unsubscribePersonSignals();
   heartSignalSystem.dispose();
   expressionSystem.dispose();
@@ -1557,6 +2002,7 @@ async function boot() {
     console.warn("[EchoWorld] api.getPackages() 失败，气泡人名回退为本地数据", error);
   });
   worldSpec = await loadWorldSpec(assetStore, WORLD_SPEC_URL);
+  worldModuleRegistry = await WorldModuleRegistry.load();
   const assetCatalog = await AssetCatalog.load(
     assetStore,
     publicUrl(worldSpec.asset_catalog_url),
@@ -1583,13 +2029,24 @@ async function boot() {
     await boothSystem.prepare();
   }
   let environment = null;
-  try {
-    const environmentAsset = assetCatalog.resolve(environmentAssetId, "environment");
-    setProgress(0.12, `正在搭建${worldTitle}`);
-    environment = await assetStore.loadScene(environmentAsset.resolvedUrl);
-  } catch (error) {
-    console.warn(`[EchoWorld] 环境资产 ${environmentAssetId} 未就绪，使用简易占位场地`, error);
-    environment = buildFallbackEnvironment();
+  if (isFieldWorld) {
+    setProgress(0.12, `正在生成你与${fieldTargetPerson.name}的关系场域`);
+    relationshipField = await api.getField(fieldTargetPerson.id);
+    relationshipFieldSystem = new RelationshipFieldSystem({ scene, field: relationshipField });
+    relationshipFieldSystem.applyAtmosphere(scene);
+    environment = relationshipFieldSystem.root;
+    canvas.dataset.fieldPerson = fieldTargetPerson.id;
+    canvas.dataset.fieldSchema = relationshipField.schema;
+    canvas.dataset.fieldGenerated = String(relationshipField.generated);
+  } else {
+    try {
+      const environmentAsset = assetCatalog.resolve(environmentAssetId, "environment");
+      setProgress(0.12, `正在搭建${worldTitle}`);
+      environment = await assetStore.loadScene(environmentAsset.resolvedUrl);
+    } catch (error) {
+      console.warn(`[EchoWorld] 环境资产 ${environmentAssetId} 未就绪，使用简易占位场地`, error);
+      environment = buildFallbackEnvironment();
+    }
   }
   setProgress(0.68);
   await configureWorld(environment);
@@ -1660,6 +2117,10 @@ window.__echoWorld = {
   get worldTick() { return liveWorldTick; },
   get world() { return activeWorld.id; },
   get boothSystem() { return boothSystem; },
+  get relationshipField() { return relationshipField; },
+  get sceneHotspots() { return [...sceneHotspots]; },
+  get nearbyHotspot() { return nearbySceneHotspot; },
+  get worldBrief() { return worldBroadcastSystem?.brief ?? null; },
   get integrations() { return integrations; },
   getAgentState: (personId) => worldAgentState(personId),
   selectPerson: selectWorldPerson,

@@ -352,6 +352,130 @@ export async function getPackage(personId) {
   return pkg;
 }
 
+function mockFieldFromPackage(pkg) {
+  const first = pkg.encounters?.[0] ?? {};
+  const values = (pkg.encounters ?? [])
+    .flatMap((encounter) => encounter.inferences ?? [])
+    .map((inference) => String(inference.value ?? "").trim())
+    .filter(Boolean);
+  const name = pkg.identity?.name ?? pkg.person_id;
+  const generatedFrom = (pkg.encounters ?? []).flatMap((encounter) => [
+    encounter.facts?.transcript,
+    ...(encounter.facts?.media ?? []),
+    ...(encounter.facts?.photos ?? []),
+  ]).filter(Boolean);
+  return {
+    schema: "echo-field.v1",
+    status: "ready",
+    person_id: pkg.person_id,
+    generated: true,
+    regenerable: true,
+    generated_from: generatedFrom.length ? generatedFrom : [`people/${pkg.person_id}/relations.md`],
+    model: "relationship-field-mock.v1",
+    created_at: new Date().toISOString(),
+    relation: {
+      with: name,
+      summary: values[0] ?? "一段仍在生长的关系",
+      shared_threads: values.slice(0, 3),
+      first_impressions: [],
+    },
+    scene: {
+      title: `你与${name} · 回声场域`,
+      summary: `这里呈现的不是 ${name} 的肖像，而是你们共同经历留下的空间感。`,
+      metaphor: "一座把零散记忆编成路径的风丘",
+      parameters: {
+        sky: "#8fc9c3",
+        horizon: "#d5e5d4",
+        ground: "#8fa66d",
+        accent: pkg.avatar?.palette?.jacket ?? "#d9a85f",
+        fog: "#dce8dc",
+        openness: 0.64,
+        warmth: 0.68,
+        motion: 0.45,
+        weather: "微风穿过草坡",
+      },
+      spawn: { x: 0, z: 6.2, yaw: Math.PI },
+      companion: { person_id: pkg.person_id, x: 0, z: -1.1, yaw: 0 },
+      entities: [
+        { id: "threshold", type: "threshold", label: "关系入口", detail: "一座把零散记忆编成路径的风丘", position: { x: 0, z: 3.8 }, interaction: { label: "听听这个场域为何出现", event_type: "field-entered" } },
+        { id: "first-encounter", type: "memory", label: "第一次相遇", detail: first.place ?? first.time ?? "第一次留下记录的地方", position: { x: -2.5, z: 0.4 }, interaction: { label: "调取这段共同记忆", event_type: "memory-recalled" } },
+        { id: "shared-thread", type: "thread", label: "共同课题", detail: values[1] ?? values[0] ?? "仍在形成的共同课题", position: { x: 2.4, z: -1.6 }, interaction: { label: "继续这条共同线索", event_type: "thread-opened" } },
+        { id: "echo-well", type: "echo", label: "回声井", detail: values[0] ?? "一段仍在生长的关系", position: { x: -1.1, z: -3.6 }, interaction: { label: "留下此刻的回声", event_type: "echo-left" } },
+      ],
+    },
+  };
+}
+
+/** FR-2.11：读取/生成个人关系场域。 */
+export async function getField(personId) {
+  if (isLiveMode()) {
+    return fetchJson(`${LIVE_BASE_URL}/fields/${encodeURIComponent(personId)}`);
+  }
+  return mockFieldFromPackage(await getPackage(personId));
+}
+
+/** FR-2.11：重算可删除的场域推断，不修改事实层。 */
+export async function regenerateField(personId) {
+  if (isLiveMode()) {
+    return postJson(`/fields/${encodeURIComponent(personId)}/regenerate`, {});
+  }
+  return getField(personId);
+}
+
+const MOCK_WORLD_EVENTS_KEY = "echoworld.world-events.v1";
+
+function readMockWorldEvents() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(MOCK_WORLD_EVENTS_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/** FR-2.9：读取近期世界事件。 */
+export async function getWorldEvents(limit = 20) {
+  if (isLiveMode()) {
+    return fetchJson(`${LIVE_BASE_URL}/world/events?limit=${Math.max(1, Math.min(100, limit))}`);
+  }
+  return { events: readMockWorldEvents().slice(0, limit) };
+}
+
+/** FR-2.9：进入世界时的晨报摘要。 */
+export async function getWorldBrief() {
+  if (isLiveMode()) return fetchJson(`${LIVE_BASE_URL}/world/brief`);
+  const events = readMockWorldEvents().slice(0, 6);
+  return {
+    schema: "echo-world-brief.v1",
+    date: new Date().toISOString().slice(0, 10),
+    headline: events[0]?.summary ?? "集市今天安静开门",
+    summary: events.length
+      ? events.slice(0, 3).map((event) => event.summary).join("；")
+      : "还没有新事件。走近一个摊位，或邀请一位朋友到圆桌坐下。",
+    event_count: events.length,
+    events,
+  };
+}
+
+/** FR-2.8/2.9：把空间互动追加为世界事件。 */
+export async function recordWorldInteraction(payload) {
+  if (isLiveMode()) return postJson("/world/interactions", payload);
+  const events = readMockWorldEvents();
+  const event = {
+    schema: "echo-world-event.v1",
+    event_id: `mock_${Date.now().toString(36)}`,
+    type: payload.type,
+    summary: payload.summary,
+    person_ids: payload.person_ids ?? [],
+    source: payload.source ?? "scene-interaction",
+    created_at: new Date().toISOString(),
+    payload: payload.payload ?? {},
+  };
+  events.unshift(event);
+  localStorage.setItem(MOCK_WORLD_EVENTS_KEY, JSON.stringify(events.slice(0, 100)));
+  return event;
+}
+
 /** 收集资料包内可检索文本（mock keyword 检索用）。 */
 function collectPackageText(pkg) {
   const parts = [pkg.identity?.name, pkg.identity?.role, pkg.identity?.city];
