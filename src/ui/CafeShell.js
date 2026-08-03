@@ -1,45 +1,72 @@
 import {
   ArrowLeft,
   ArrowRight,
+  Activity,
   Armchair,
   Check,
   Clock3,
+  Circle,
   Coffee,
   Info,
+  Heart,
   LocateFixed,
   MapPin,
   MessageCircle,
   Network,
   Plus,
+  Pencil,
+  Save,
   Send,
+  Smile,
+  Lightbulb,
   Sparkles,
   UserRound,
   Users,
+  Wind,
+  Thermometer,
   X,
   createIcons,
 } from "lucide";
 import { renderRelationshipGraph } from "./RelationshipGraph.js";
+import { createProfileStore } from "../runtime/ProfileStore.js";
 
 
 const ICONS = {
   ArrowLeft,
   ArrowRight,
+  Activity,
   Armchair,
   Check,
   Clock3,
+  Circle,
   Coffee,
   Info,
+  Heart,
   LocateFixed,
   MapPin,
   MessageCircle,
   Network,
   Plus,
+  Pencil,
+  Save,
   Send,
+  Smile,
+  Lightbulb,
   Sparkles,
   UserRound,
   Users,
+  Wind,
+  Thermometer,
   X,
 };
+
+const EXPRESSIONS = [
+  { id: "neutral", label: "平静", icon: "circle" },
+  { id: "happy", label: "开心", icon: "smile" },
+  { id: "surprised", label: "惊讶", icon: "sparkles" },
+  { id: "thinking", label: "思考", icon: "lightbulb" },
+];
+const EXPRESSION_IDS = new Set(EXPRESSIONS.map(({ id }) => id));
 
 const STATUS_LABELS = {
   arriving: "刚刚抵达",
@@ -65,6 +92,149 @@ function icon(name, className = "") {
 
 function hydrateIcons(root) {
   createIcons({ icons: ICONS, root, attrs: { "stroke-width": 1.8 } });
+}
+
+function finiteNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function formatSignalValue(value, digits = 0) {
+  const number = finiteNumber(value);
+  return number === null ? "--" : number.toFixed(digits);
+}
+
+function formatSignalTime(value, includeDate = false) {
+  if (!value) return "等待时间戳";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat("zh-CN", {
+    ...(includeDate ? { month: "numeric", day: "numeric" } : {}),
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
+function formatConfidence(value) {
+  const number = finiteNumber(value);
+  if (number === null) return "--";
+  const percent = number <= 1 ? number * 100 : number;
+  return `${Math.round(Math.max(0, Math.min(100, percent)))}%`;
+}
+
+function signalMetricMarkup({ iconName, label, metric, fallbackUnit, fallbackExplanation, digits = 0 }) {
+  const value = metric?.value ?? metric;
+  const unit = metric?.unit ?? fallbackUnit;
+  const status = metric?.status ?? (value === null || value === undefined ? "待接入" : "最近记录");
+  const explanation = metric?.explanation ?? fallbackExplanation ?? "AI 会结合个人基线解释这个指标。";
+  return `
+    <div class="signal-metric">
+      <div class="signal-metric-heading">
+        ${icon(iconName)}
+        <span>${escapeHtml(label)}</span>
+        <small>${escapeHtml(status)}</small>
+      </div>
+      <strong>${formatSignalValue(value, digits)}<small>${escapeHtml(unit ?? "")}</small></strong>
+      <p>${escapeHtml(explanation)}</p>
+    </div>`;
+}
+
+function formatHeartTrend(value) {
+  return ({
+    rising: "上升",
+    steady: "平稳",
+    stable: "稳定",
+    falling: "回落",
+    settling: "趋稳",
+    unknown: "待建立基线",
+  })[value] ?? value ?? "待建立基线";
+}
+
+function formatReliability(value) {
+  const label = ({ high: "高", medium: "中", low: "低", pending: "待评估" })[value];
+  return label ?? formatConfidence(value);
+}
+
+function personSignalMarkup(person, snapshot, context) {
+  const heart = snapshot?.heart ?? {};
+  const metrics = snapshot?.metrics ?? {};
+  const interpretation = snapshot?.interpretation ?? snapshot?.inference ?? {};
+  const iceBreak = snapshot?.iceBreak ?? {};
+  const score = finiteNumber(heart.score ?? heart.heartScore);
+  const bpm = finiteNumber(heart.bpm ?? heart.currentBpm);
+  const baselineBpm = finiteNumber(heart.baselineBpm);
+  const peakBpm = finiteNumber(heart.peakBpm);
+  const beatDuration = score === null ? 0.9 : Math.max(0.42, Math.min(1.35, 1.35 - (score / 100) * 0.93));
+  const beatScale = score === null ? 1.08 : 1.06 + Math.max(0, Math.min(100, score)) * 0.0014;
+  const status = String(snapshot?.status ?? "waiting").toLowerCase();
+  const isLive = ["live", "active", "streaming", "realtime"].includes(status);
+  const isDemo = Object.values(snapshot?.sourceRefs ?? {}).some((value) => String(value).startsWith("demo-"));
+  const statusLabel = isDemo ? "演示数据" : isLive ? "实时" : snapshot ? "历史记录" : "等待数据";
+  const isInactive = ["stale", "unavailable", "offline", "error"].includes(status);
+  const caveat = interpretation.caveat || "推测，不是情感事实";
+  const heartExplanation = heart.explanation
+    ?? "心动值会结合个人静息基线与当前心率变化计算，不等同于喜欢程度。";
+  const capturedAt = snapshot?.capturedAt ?? snapshot?.timestamp;
+  const accessibleSummary = `${person.name} 的心动值 ${score ?? "暂无"}，当前心率 ${bpm ?? "暂无"} BPM`;
+
+  return `
+    <section class="person-signal" data-signal-person="${escapeHtml(person.id)}" data-signal-context="${escapeHtml(context)}" aria-label="${escapeHtml(person.name)} 的生理信号" aria-live="polite">
+      <header class="signal-section-heading">
+        <span>生理信号</span>
+        <span class="signal-capture-status${isLive ? " is-live" : ""}">
+          <i aria-hidden="true"></i>${statusLabel} · ${escapeHtml(formatSignalTime(capturedAt, !isLive))}
+        </span>
+      </header>
+
+      <div class="heart-signal${score === null || isInactive ? " is-waiting" : ""}" style="--heart-beat-duration: ${beatDuration.toFixed(2)}s; --heart-beat-scale: ${beatScale.toFixed(2)}">
+        <span class="heart-signal-icon" aria-hidden="true">${icon("heart")}</span>
+        <div class="heart-score">
+          <small>心动值</small>
+          <strong>${score === null ? "--" : Math.round(score)}<span>/100</span></strong>
+        </div>
+        <div class="heart-bpm">
+          <small>当前心率</small>
+          <strong>${bpm === null ? "--" : Math.round(bpm)}<span>BPM</span></strong>
+          <p>基线 ${baselineBpm === null ? "--" : Math.round(baselineBpm)} · 峰值 ${peakBpm === null ? "--" : Math.round(peakBpm)}</p>
+        </div>
+        <span class="sr-only">${escapeHtml(accessibleSummary)}</span>
+      </div>
+      <p class="heart-signal-explanation">${escapeHtml(heartExplanation)}</p>
+      <div class="heart-signal-meta">
+        <span>${icon("activity")}趋势 ${escapeHtml(formatHeartTrend(heart.trend))}</span>
+        <span>置信度 ${formatConfidence(heart.confidence ?? interpretation.confidence)}</span>
+      </div>
+
+      <div class="signal-metrics" aria-label="其他生理指标">
+        ${signalMetricMarkup({ iconName: "wind", label: "呼吸", metric: metrics.breathingRate, fallbackUnit: "次/分", fallbackExplanation: "反映当时的生理唤起与交流节奏。", digits: 0 })}
+        ${signalMetricMarkup({ iconName: "activity", label: "压力", metric: metrics.stressIndex ?? metrics.stress, fallbackUnit: "%", fallbackExplanation: "多信号融合估计，不代表负面情绪。", digits: 0 })}
+        ${signalMetricMarkup({ iconName: "thermometer", label: "体表温度", metric: metrics.skinTemperature, fallbackUnit: "°C", fallbackExplanation: "容易受到环境与佩戴状态影响。", digits: 1 })}
+        ${signalMetricMarkup({ iconName: "sparkles", label: "HRV", metric: metrics.hrv, fallbackUnit: "ms", fallbackExplanation: "反映心搏间变化，需对照个人历史基线。", digits: 0 })}
+      </div>
+
+      <div class="signal-interpretation">
+        <div class="signal-interpretation-heading">
+          ${icon("sparkles")}
+          <span><small>AI 综合解释</small><strong>${escapeHtml(interpretation.label ?? "等待形成判断")}</strong></span>
+          <em>${formatConfidence(interpretation.confidence)}</em>
+        </div>
+        <p>${escapeHtml(interpretation.summary ?? "照片、对话和可穿戴数据接入后，这里会说明当前数值相对个人基线意味着什么。")}</p>
+        <small class="signal-caveat">${icon("info")}${escapeHtml(caveat.includes("推测，不是情感事实") ? caveat : `推测，不是情感事实 · ${caveat}`)}</small>
+      </div>
+
+      <div class="ice-break-signal" data-detected="${Boolean(iceBreak.detected)}">
+        <span>${icon("sparkles")}</span>
+        <div>
+          <small>破冰瞬间</small>
+          <strong>${iceBreak.detected ? `在 ${formatSignalTime(iceBreak.at)} 捕捉到互动转折` : "尚未识别到明确转折"}</strong>
+          <p>${iceBreak.detected
+            ? `用时 ${formatSignalValue(iceBreak.breakSeconds)} 秒 · 可靠度 ${formatReliability(iceBreak.reliability)}`
+            : "持续记录后，将在这里标记关系开始自然升温的时刻。"}</p>
+        </div>
+      </div>
+    </section>`;
 }
 
 
@@ -104,13 +274,13 @@ function variantControlsMarkup({
         kind: "scene",
         label: "场景风格",
       })}
-      ${variantSwitcherMarkup({
+      ${characterVariants.length > 1 ? variantSwitcherMarkup({
         variants: characterVariants,
         activeVariant: activeCharacterVariant,
         context,
         kind: "character",
         label: "人物生成方案",
-      })}
+      }) : ""}
     </div>`;
 }
 
@@ -145,10 +315,12 @@ function createAvatarRenderer(resolveMediaUrl) {
   };
 }
 
+// 模块级默认渲染器：createCafeShell 创建时赋值，供顶层 inspectorMarkup/personInspectorMarkup 共享
+let defaultAvatarImg = null;
 
-function inspectorMarkup(person, state, context = "world", avatarImg = null) {
-  const avatar = avatarImg
-    ? avatarImg(person, { alt: `${person.name} 的 Low-poly 头像` })
+function inspectorMarkup(person, state, context = "world", signal = null) {
+  const avatar = defaultAvatarImg
+    ? defaultAvatarImg(person, { alt: `${person.name} 的 Low-poly 头像` })
     : `<img src="${person.portrait}" alt="${person.name} 的 Low-poly 头像" />`;
   const status = STATUS_LABELS[state?.status] ?? "在 Echo Cafe";
   const place = state?.tableLabel ?? "咖啡厅大厅";
@@ -167,6 +339,7 @@ function inspectorMarkup(person, state, context = "world", avatarImg = null) {
       <div><small>Agent 状态</small><strong>${status}</strong></div>
       <span>${place}</span>
     </div>
+    ${personSignalMarkup(person, signal, context)}
     <p class="inspector-bio">${person.bio}</p>
     <div class="inspector-facts">
       <div>${icon("map-pin")}<span><small>所在城市</small><strong>${person.city}</strong></span></div>
@@ -178,6 +351,65 @@ function inspectorMarkup(person, state, context = "world", avatarImg = null) {
       <div><strong>${person.stats.voiceClips}</strong><small>语音</small></div>
       <div><strong>${person.stats.memories}</strong><small>记忆</small></div>
     </div>`;
+}
+
+function inspectorControlsMarkup(person, context, mode, expression) {
+  return `
+    <div class="inspector-controls">
+      <div class="inspector-mode-switch" role="group" aria-label="个人资料显示模式">
+        <button type="button" data-inspector-mode="profile" data-inspector-context="${context}" aria-pressed="${mode === "profile"}">
+          ${icon("user-round")}<span>资料</span>
+        </button>
+        <button type="button" data-inspector-mode="edit" data-inspector-context="${context}" aria-pressed="${mode === "edit"}">
+          ${icon("pencil")}<span>编辑</span>
+        </button>
+      </div>
+      <div class="expression-control" role="group" aria-label="切换 ${escapeHtml(person.name)} 的表情">
+        <small>表情</small>
+        <div>
+          ${EXPRESSIONS.map((option) => `
+            <button
+              type="button"
+              data-person-expression="${option.id}"
+              data-expression-person="${escapeHtml(person.id)}"
+              aria-label="${escapeHtml(option.label)}表情"
+              aria-pressed="${expression === option.id}"
+              title="${escapeHtml(option.label)}"
+            >${icon(option.icon)}<span>${escapeHtml(option.label)}</span></button>
+          `).join("")}
+        </div>
+      </div>
+    </div>`;
+}
+
+function inspectorEditMarkup(person, context) {
+  const formId = `profile-form-${context}-${person.id}`;
+  return `
+    <form class="profile-edit-form" id="${escapeHtml(formId)}" data-profile-form data-profile-person="${escapeHtml(person.id)}" data-profile-context="${context}">
+      <div class="profile-edit-grid">
+        <label><span>姓名</span><input name="name" value="${escapeHtml(person.name)}" maxlength="30" required /></label>
+        <label><span>关系</span><input name="relation" value="${escapeHtml(person.relation)}" maxlength="40" /></label>
+        <label><span>角色</span><input name="role" value="${escapeHtml(person.role)}" maxlength="40" /></label>
+        <label><span>城市</span><input name="city" value="${escapeHtml(person.city)}" maxlength="30" /></label>
+      </div>
+      <label class="profile-edit-wide"><span>个人简介</span><textarea name="bio" rows="4" maxlength="320">${escapeHtml(person.bio)}</textarea></label>
+      <label class="profile-edit-wide"><span>标签 <small>用逗号分隔</small></span><input name="tags" value="${escapeHtml((person.tags ?? []).join(", "))}" maxlength="160" /></label>
+      <div class="profile-edit-actions">
+        <button type="button" data-action="cancel-profile-edit" data-inspector-context="${context}">取消</button>
+        <button type="submit">${icon("save")}<span>保存资料</span></button>
+      </div>
+    </form>`;
+}
+
+function personInspectorMarkup(person, state, context, mode, expression, signal) {
+  const baseMarkup = inspectorMarkup(person, state, context, signal);
+  const headerEnd = baseMarkup.indexOf("</header>") + "</header>".length;
+  const header = baseMarkup.slice(0, headerEnd);
+  const controls = inspectorControlsMarkup(person, context, mode, expression);
+  if (mode === "edit") {
+    return `${header}${controls}<div class="inspector-panel-content is-editing">${inspectorEditMarkup(person, context)}</div>`;
+  }
+  return `${header}${controls}<div class="inspector-panel-content">${baseMarkup.slice(headerEnd)}</div>`;
 }
 
 
@@ -198,6 +430,10 @@ export function createCafeShell({
   onMeetingEnd = async () => {},
   resolveMediaUrl = (ref) => ref,
   world = "cafe",
+  onExpressionChange = () => {},
+  onProfileChange = () => {},
+  signalStore = null,
+  signalByPersonId = null,
 }) {
   let currentView = "intro";
   let worldReady = false;
@@ -213,9 +449,23 @@ export function createCafeShell({
   const speechTimers = new Map();
   const activeSpeechIds = new Set();
   const avatarImg = createAvatarRenderer(resolveMediaUrl);
+  defaultAvatarImg = avatarImg;
   // HUD 文案按世界联动（hall=集市 / cafe=咖啡厅）
   const worldLabel = world === "hall" ? "Echo 集市" : "Echo Cafe";
   const worldStatusLine = world === "hall" ? "展位陈列中 · 欢迎串门" : "Agent 正在自主交流";
+  const expressionTimers = new Map();
+  const personExpressions = new Map();
+  const personSignals = new Map();
+  const inspectorModes = { world: "profile", map: "profile" };
+  const profileStore = createProfileStore();
+  const storedProfiles = profileStore.getAll();
+  people = people.map((person) => ({ ...person, ...(storedProfiles[person.id] ?? {}) }));
+
+  if (signalByPersonId instanceof Map) {
+    for (const [personId, snapshot] of signalByPersonId) personSignals.set(personId, snapshot);
+  } else if (signalByPersonId && typeof signalByPersonId === "object") {
+    for (const [personId, snapshot] of Object.entries(signalByPersonId)) personSignals.set(personId, snapshot);
+  }
 
   root.innerHTML = `
     <div class="cafe-shell" data-view="intro">
@@ -340,6 +590,115 @@ export function createCafeShell({
     toastTimer = window.setTimeout(() => toast.classList.remove("is-visible"), 2200);
   }
 
+  function getPersonSignal(personId) {
+    if (personSignals.has(personId)) return personSignals.get(personId);
+    if (typeof signalStore?.getSnapshot !== "function") return null;
+    try {
+      const snapshot = signalStore.getSnapshot(personId);
+      if (snapshot) personSignals.set(personId, snapshot);
+      return snapshot ?? null;
+    } catch (error) {
+      console.warn(`Unable to read physiological signal for ${personId}`, error);
+      return null;
+    }
+  }
+
+  function applyPersonSignal(snapshot, fallbackPersonId = null) {
+    const personId = snapshot?.personId ?? fallbackPersonId;
+    if (!personId || !snapshot) return false;
+    personSignals.set(personId, { ...snapshot, personId });
+    if (selectedWorldPerson?.id === personId) renderWorldInspector();
+    if (selectedMapPerson?.id === personId) renderMapInspector();
+    return true;
+  }
+
+  function clearPersonSignal(personId) {
+    if (!personId || !personSignals.delete(personId)) return false;
+    if (selectedWorldPerson?.id === personId) renderWorldInspector();
+    if (selectedMapPerson?.id === personId) renderMapInspector();
+    return true;
+  }
+
+  function setPersonSignal(personIdOrSnapshot, nextSnapshot = null) {
+    const snapshot = typeof personIdOrSnapshot === "string"
+      ? { ...nextSnapshot, personId: personIdOrSnapshot }
+      : personIdOrSnapshot;
+    if (!snapshot?.personId) return false;
+    if (typeof signalStore?.upsert === "function") {
+      try {
+        const result = signalStore.upsert(snapshot);
+        return applyPersonSignal(result?.snapshot ?? snapshot);
+      } catch (error) {
+        console.warn(`Unable to persist physiological signal for ${snapshot.personId}`, error);
+      }
+    }
+    return applyPersonSignal(snapshot);
+  }
+
+  function expressionForText(text) {
+    if (/[!！]/.test(text)) return "surprised";
+    if (/[?？]/.test(text)) return "thinking";
+    return "happy";
+  }
+
+  function syncExpressionControls(personId) {
+    const expression = personExpressions.get(personId) ?? "neutral";
+    for (const button of root.querySelectorAll(`[data-expression-person="${CSS.escape(personId)}"]`)) {
+      button.setAttribute("aria-pressed", String(button.dataset.personExpression === expression));
+    }
+  }
+
+  function setPersonExpression(personId, expression = "neutral", metadata = {}) {
+    const person = people.find((candidate) => candidate.id === personId);
+    if (!person || !EXPRESSION_IDS.has(expression)) return false;
+
+    window.clearTimeout(expressionTimers.get(personId));
+    expressionTimers.delete(personId);
+    const previous = personExpressions.get(personId) ?? "neutral";
+    personExpressions.set(personId, expression);
+    syncExpressionControls(personId);
+    onExpressionChange(personId, expression, { ...metadata, previous });
+
+    const duration = Number(metadata.duration ?? 0);
+    if (expression !== "neutral" && duration > 0) {
+      expressionTimers.set(personId, window.setTimeout(() => {
+        setPersonExpression(personId, "neutral", {
+          source: "auto-reset",
+          previousSource: metadata.source ?? "programmatic",
+        });
+      }, duration * 1000));
+    }
+    return true;
+  }
+
+  function savePersonProfile(personId, values, context) {
+    const index = people.findIndex((person) => person.id === personId);
+    if (index < 0) return;
+    const changes = {
+      name: String(values.name ?? "").trim(),
+      relation: String(values.relation ?? "").trim(),
+      role: String(values.role ?? "").trim(),
+      city: String(values.city ?? "").trim(),
+      bio: String(values.bio ?? "").trim(),
+      tags: String(values.tags ?? "")
+        .split(/[,，]/)
+        .map((tag) => tag.trim())
+        .filter(Boolean)
+        .slice(0, 12),
+    };
+    const updated = { ...people[index], ...changes };
+    people = people.map((person) => person.id === personId ? updated : person);
+    profileStore.save(personId, changes);
+    if (selectedWorldPerson?.id === personId) selectedWorldPerson = updated;
+    if (selectedMapPerson?.id === personId) selectedMapPerson = updated;
+    inspectorModes[context] = "profile";
+    refreshGraph();
+    renderWorldInspector();
+    renderMapInspector();
+    onProfileChange(personId, updated, { source: "manual", changes });
+    showToast(`已保存 ${updated.name} 的个人资料`);
+  }
+
   function refreshGraph() {
     renderRelationshipGraph(graph, {
       currentUser,
@@ -351,8 +710,8 @@ export function createCafeShell({
 
   function renderWorldInspector() {
     // 已退役，由 PackagePanel 取代（2026-08-03）：世界内点击小人的人物详情侧栏不再展示，
-    // 避免两代人物 UI 并存。保留函数体与全部调用点以兼容既有流程
-    // （selectedWorldPerson 选中态、agentStates 跟踪、地图 inspector 仍复用 inspectorMarkup）。
+    // 避免两代人物 UI 并存。资料编辑/表情/信号面板经地图 inspector（personInspectorMarkup）保留可用。
+    // 保留函数体与全部调用点以兼容既有流程（selectedWorldPerson 选中态、agentStates 跟踪）。
     worldInspector.innerHTML = "";
     worldInspector.setAttribute("aria-hidden", "true");
     shell.classList.remove("has-world-inspector");
@@ -366,7 +725,14 @@ export function createCafeShell({
       return;
     }
     mapInspector.innerHTML = `
-      ${inspectorMarkup(selectedMapPerson, agentStates.get(selectedMapPerson.id), "map", avatarImg)}
+      ${personInspectorMarkup(
+        selectedMapPerson,
+        agentStates.get(selectedMapPerson.id),
+        "map",
+        inspectorModes.map,
+        personExpressions.get(selectedMapPerson.id) ?? "neutral",
+        getPersonSignal(selectedMapPerson.id),
+      )}
       <button class="locate-person-button" type="button" data-action="locate-person">
         ${icon("locate-fixed")}<span>在咖啡厅中定位</span>
       </button>`;
@@ -472,9 +838,18 @@ export function createCafeShell({
     const responder = participants[meetingCursor % participants.length];
     const reply = responder.conversation.replies[meetingCursor % responder.conversation.replies.length];
     meetingCursor += 1;
+    setPersonExpression(responder.id, "thinking", {
+      source: "roundtable-listening",
+      duration: 1,
+    });
     window.setTimeout(() => {
       if (!meetingActive) return;
       meetingMessages.push({ personId: responder.id, text: reply });
+      setPersonExpression(responder.id, expressionForText(reply), {
+        source: "roundtable-reply",
+        text: reply,
+        duration: 4.5,
+      });
       renderMeetingActive();
     }, 620);
   }
@@ -490,6 +865,32 @@ export function createCafeShell({
 
     if (target.dataset.characterVariant) {
       onCharacterVariantChange(target.dataset.characterVariant);
+      return;
+    }
+
+    if (target.dataset.inspectorMode) {
+      const context = target.dataset.inspectorContext;
+      if (context === "world" || context === "map") {
+        inspectorModes[context] = target.dataset.inspectorMode === "edit" ? "edit" : "profile";
+        if (context === "world") renderWorldInspector();
+        else renderMapInspector();
+      }
+      return;
+    }
+
+    if (target.dataset.personExpression) {
+      setPersonExpression(target.dataset.expressionPerson, target.dataset.personExpression, {
+        source: "manual",
+        persistent: true,
+      });
+      return;
+    }
+
+    if (target.dataset.action === "cancel-profile-edit") {
+      const context = target.dataset.inspectorContext;
+      inspectorModes[context] = "profile";
+      if (context === "world") renderWorldInspector();
+      else renderMapInspector();
       return;
     }
 
@@ -570,6 +971,10 @@ export function createCafeShell({
           personId: [...invitedIds][0],
           text: "大家都到了。既然坐在同一张桌边，我们从最近发生的一件事开始吧。",
         });
+        setPersonExpression([...invitedIds][0], "happy", {
+          source: "roundtable-opening",
+          duration: 4.5,
+        });
         renderMeetingActive();
       } catch (error) {
         console.error(error);
@@ -592,6 +997,17 @@ export function createCafeShell({
   });
 
   root.addEventListener("submit", (event) => {
+    const profileForm = event.target.closest("[data-profile-form]");
+    if (profileForm) {
+      event.preventDefault();
+      const values = Object.fromEntries(new FormData(profileForm).entries());
+      savePersonProfile(
+        profileForm.dataset.profilePerson,
+        values,
+        profileForm.dataset.profileContext,
+      );
+      return;
+    }
     const form = event.target.closest("[data-meeting-form]");
     if (!form) return;
     event.preventDefault();
@@ -603,6 +1019,18 @@ export function createCafeShell({
   refreshGraph();
   hydrateIcons(root);
 
+  let unsubscribeSignalStore = () => {};
+  if (typeof signalStore?.subscribe === "function") {
+    const subscription = signalStore.subscribe((event, metadata = {}) => {
+      if (!event && metadata.removed) {
+        clearPersonSignal(metadata.personId);
+        return;
+      }
+      applyPersonSignal(event?.snapshot ?? event?.signal ?? event);
+    });
+    if (typeof subscription === "function") unsubscribeSignalStore = subscription;
+  }
+
   return {
     setWorldReady(ready) {
       worldReady = Boolean(ready);
@@ -613,6 +1041,7 @@ export function createCafeShell({
     setView,
     selectWorldPerson(personId) {
       selectedWorldPerson = people.find((person) => person.id === personId) ?? null;
+      inspectorModes.world = "profile";
       renderWorldInspector();
     },
     updateAgentState(state) {
@@ -629,6 +1058,11 @@ export function createCafeShell({
     showNpcConversation({ speakerId, text, duration = 4.5 }) {
       const person = people.find((candidate) => candidate.id === speakerId);
       if (!person) return;
+      setPersonExpression(speakerId, expressionForText(text), {
+        source: "npc-conversation",
+        text,
+        duration,
+      });
       let bubble = speechLayer.querySelector(`[data-speech-person="${speakerId}"]`);
       if (!bubble) {
         bubble = document.createElement("div");
@@ -663,6 +1097,12 @@ export function createCafeShell({
       bubble.style.visibility = visible ? "visible" : "hidden";
     },
     showToast,
+    setPersonExpression,
+    setPersonSignal,
+    getPersonSignal,
+    getPersonExpression(personId) {
+      return personExpressions.get(personId) ?? "neutral";
+    },
     get speechPersonIds() {
       return [...activeSpeechIds];
     },
@@ -674,6 +1114,9 @@ export function createCafeShell({
     },
     get isWorldReady() {
       return worldReady;
+    },
+    destroy() {
+      unsubscribeSignalStore();
     },
   };
 }

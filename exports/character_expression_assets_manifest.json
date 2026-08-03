@@ -1,0 +1,330 @@
+{
+  "schema_version": "echo-character-expressions.v1",
+  "generator": "blender/build_character_expression_textures.py",
+  "expressions": [
+    "neutral",
+    "happy",
+    "surprised",
+    "thinking"
+  ],
+  "mapping": {
+    "voxel": "方案 1：每人完整像素 atlas，运行时 nearest 切换"
+  },
+  "counts": {
+    "slots": 7,
+    "expressions_per_slot": 4,
+    "voxel_textures": 28
+  },
+  "assets": {
+    "voxel": [
+      {
+        "slot": "host",
+        "expression": "neutral",
+        "path": "public/textures/characters/voxel/expressions/host_neutral.png",
+        "bytes": 659,
+        "sha256": "ac0c83f7929eed4e47f87cd64c5f0a5de3437a1e439adf1cbe8e077fd56feae1",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "host",
+        "expression": "happy",
+        "path": "public/textures/characters/voxel/expressions/host_happy.png",
+        "bytes": 690,
+        "sha256": "36166d9cd9cb9d4cffaa7947d5ff5ee281d9dbe9b70dc2408dee34b48943f14e",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "host",
+        "expression": "surprised",
+        "path": "public/textures/characters/voxel/expressions/host_surprised.png",
+        "bytes": 699,
+        "sha256": "9a5036c8d172ac75a6cb1bcf1ce6c2bef18ee007fba4b878ab4ae9b50646337c",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "host",
+        "expression": "thinking",
+        "path": "public/textures/characters/voxel/expressions/host_thinking.png",
+        "bytes": 696,
+        "sha256": "c5b603a6f9d6410d849acdbed15561b583b0194b44797c449782c3a31ae46b6b",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "person_01",
+        "expression": "neutral",
+        "path": "public/textures/characters/voxel/expressions/person_01_neutral.png",
+        "bytes": 672,
+        "sha256": "5e42335ad3fbd036f821fc256949dfe6bd0363df7f10078f22eb888bf5e6622a",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "person_01",
+        "expression": "happy",
+        "path": "public/textures/characters/voxel/expressions/person_01_happy.png",
+        "bytes": 694,
+        "sha256": "8393366aae7d03986986b11facb02a0197a0acaa6e54a17b8161576c8860dcc6",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "person_01",
+        "expression": "surprised",
+        "path": "public/textures/characters/voxel/expressions/person_01_surprised.png",
+        "bytes": 708,
+        "sha256": "9913089ac8aad5aaaa004f19c5b0e04d10e5e7ce3c73a46473286268d6fb64b3",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "person_01",
+        "expression": "thinking",
+        "path": "public/textures/characters/voxel/expressions/person_01_thinking.png",
+        "bytes": 701,
+        "sha256": "92f3ea28382962e0682b6737392fd8e29c348acdcd51c7a41acb295ea0cd2bc7",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "person_02",
+        "expression": "neutral",
+        "path": "public/textures/characters/voxel/expressions/person_02_neutral.png",
+        "bytes": 659,
+        "sha256": "05b95ce792081bea01af803a87da1529afe9d0fc0d39d4a4ec8ccd124266ba4b",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "person_02",
+        "expression": "happy",
+        "path": "public/textures/characters/voxel/expressions/person_02_happy.png",
+        "bytes": 688,
+        "sha256": "00ebcacabedeaca2a60c68e5dcafeab0d3009d39021f25c2c8ef03fb0e2ce0d3",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "person_02",
+        "expression": "surprised",
+        "path": "public/textures/characters/voxel/expressions/person_02_surprised.png",
+        "bytes": 692,
+        "sha256": "d3f68e2bf2804b63dedef4092bc8e6d4d19bc6dcfa70de88c9c83a7b94d257d4",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "person_02",
+        "expression": "thinking",
+        "path": "public/textures/characters/voxel/expressions/person_02_thinking.png",
+        "bytes": 685,
+        "sha256": "86bdd134858b626906fc68286c6f4dabfc212bed6e4e04f28ad9a6e54ef41023",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "person_03",
+        "expression": "neutral",
+        "path": "public/textures/characters/voxel/expressions/person_03_neutral.png",
+        "bytes": 631,
+        "sha256": "5b6a8ad5d19ffac80449b86205234e3cf645c789f275f87e58b8a6272b28651e",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "person_03",
+        "expression": "happy",
+        "path": "public/textures/characters/voxel/expressions/person_03_happy.png",
+        "bytes": 659,
+        "sha256": "cbaf9cc6f1d51c3c842cacaa8fb387aef69dca8421e62fc83f31a136955c6f96",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "person_03",
+        "expression": "surprised",
+        "path": "public/textures/characters/voxel/expressions/person_03_surprised.png",
+        "bytes": 668,
+        "sha256": "f758ff741acfa7601b2fe365831a8404afd86eaf1565dcd35a4c89b9179923cf",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "person_03",
+        "expression": "thinking",
+        "path": "public/textures/characters/voxel/expressions/person_03_thinking.png",
+        "bytes": 668,
+        "sha256": "d14f5073c7b6b1647f5c28d1809e3c05fe75b10b775932c9a613f5c445672beb",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "person_04",
+        "expression": "neutral",
+        "path": "public/textures/characters/voxel/expressions/person_04_neutral.png",
+        "bytes": 671,
+        "sha256": "c67ec301b4ddd112560ea91c4074efddf7509b5172e4b811f6d40b68869aa13f",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "person_04",
+        "expression": "happy",
+        "path": "public/textures/characters/voxel/expressions/person_04_happy.png",
+        "bytes": 703,
+        "sha256": "d89275a69aca6cfb4669721385d8db634819ec2cc71bd1c33a62f0ba0f007895",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "person_04",
+        "expression": "surprised",
+        "path": "public/textures/characters/voxel/expressions/person_04_surprised.png",
+        "bytes": 706,
+        "sha256": "43a9c7fd86fa431d753308f3b7325db1a454361ff52d68585a584998602ab035",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "person_04",
+        "expression": "thinking",
+        "path": "public/textures/characters/voxel/expressions/person_04_thinking.png",
+        "bytes": 701,
+        "sha256": "8089ab6aaf97f3111dcb7dfc674aef04a506ce59a593c8aa98cde5e2537491b2",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "person_05",
+        "expression": "neutral",
+        "path": "public/textures/characters/voxel/expressions/person_05_neutral.png",
+        "bytes": 620,
+        "sha256": "a871cf634492feff0d8fafc0b96bc9c359506f1083826864da175ef1a04a45b5",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "person_05",
+        "expression": "happy",
+        "path": "public/textures/characters/voxel/expressions/person_05_happy.png",
+        "bytes": 645,
+        "sha256": "8a1b00f3bd7bdc05477c24612e5d1d4a13dd719c0eef4598b7013f95f1551ce7",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "person_05",
+        "expression": "surprised",
+        "path": "public/textures/characters/voxel/expressions/person_05_surprised.png",
+        "bytes": 653,
+        "sha256": "bc7cb10e1a4735e336603280caae5158df476323c2d65b898bb14a068e9347ba",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "person_05",
+        "expression": "thinking",
+        "path": "public/textures/characters/voxel/expressions/person_05_thinking.png",
+        "bytes": 649,
+        "sha256": "f8496ce3b2bb319d93b2481f93a35b0699f38ea90af4f46c184abcf43b430192",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "person_06",
+        "expression": "neutral",
+        "path": "public/textures/characters/voxel/expressions/person_06_neutral.png",
+        "bytes": 654,
+        "sha256": "f75f73b04599f229398b022d5b19519a3e8b4e9bf2b51130b209d2e2df7173fa",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "person_06",
+        "expression": "happy",
+        "path": "public/textures/characters/voxel/expressions/person_06_happy.png",
+        "bytes": 682,
+        "sha256": "8bdd5ff53f9b1b703c8ffad06b1c95bff6858316c2097e19e83e99a5bf35c2b0",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "person_06",
+        "expression": "surprised",
+        "path": "public/textures/characters/voxel/expressions/person_06_surprised.png",
+        "bytes": 684,
+        "sha256": "f34a74d6362b8036f55b69ba326d9c7067eed9f6c2cb7627f3141a68b41be081",
+        "size": [
+          128,
+          128
+        ]
+      },
+      {
+        "slot": "person_06",
+        "expression": "thinking",
+        "path": "public/textures/characters/voxel/expressions/person_06_thinking.png",
+        "bytes": 679,
+        "sha256": "8a68d27e8a419f09646c7c4ca23ffb601a232b7e11a1df28a9a663736dd33fcb",
+        "size": [
+          128,
+          128
+        ]
+      }
+    ]
+  }
+}

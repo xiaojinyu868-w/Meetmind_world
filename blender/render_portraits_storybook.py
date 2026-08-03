@@ -197,6 +197,8 @@ def quantize_to_palette_png(source: Path, target: Path, colors: int = 256) -> in
     width, height = image.size
     pixels = np.asarray(image.pixels[:], dtype=np.float32).reshape(height, width, 4)[:, :, :3]
     bpy.data.images.remove(image)
+    # 8-bit sRGB PNGs load with display-referred float values (colorspace
+    # sRGB); no linear conversion needed — blur and quantize in sRGB space.
     smooth = box_blur3(pixels, passes=2)
     rgb = np.clip(np.rint(smooth.reshape(-1, 3) * 255.0), 0, 255).astype(np.uint8)
 
@@ -218,10 +220,11 @@ def quantize_to_palette_png(source: Path, target: Path, colors: int = 256) -> in
     indexed = np.zeros(len(rgb), dtype=np.uint8)
     for slot, box in enumerate(boxes):
         palette[slot] = np.rint(box.mean(axis=0)).astype(np.uint8)
-    # Nearest-palette assignment (chunked to bound memory).
+    # Nearest-palette assignment (chunked to bound memory). Distances must be
+    # int32: three squared channel deltas can reach ~196k and wrap int16.
     for start in range(0, len(rgb), 65536):
-        chunk = rgb[start : start + 65536].astype(np.int16)
-        distances = ((chunk[:, None, :] - palette[None, :, :].astype(np.int16)) ** 2).sum(axis=2)
+        chunk = rgb[start : start + 65536].astype(np.int32)
+        distances = ((chunk[:, None, :] - palette[None, :, :].astype(np.int32)) ** 2).sum(axis=2)
         indexed[start : start + 65536] = distances.argmin(axis=1).astype(np.uint8)
 
     # Blender pixel buffers are bottom-up; PNG rows are top-down.

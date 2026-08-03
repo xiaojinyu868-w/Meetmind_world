@@ -1,13 +1,17 @@
 import * as THREE from "three";
 import { currentUser, people, relationships } from "./data/demoPeople.js";
+import { personSignals } from "./data/demoSignals.js";
 import { AssetCatalog } from "./runtime/AssetCatalog.js";
 import { AssetStore } from "./runtime/AssetStore.js";
 import { BoothSystem, buildFallbackBooths } from "./runtime/BoothSystem.js";
 import { CAFE_LAYOUT, tableById } from "./runtime/CafeLayout.js";
+import { CharacterExpressionSystem } from "./runtime/CharacterExpressionSystem.js";
 import { CharacterSystem } from "./runtime/CharacterSystem.js";
 import { colliderShellFor } from "./runtime/ColliderRegistry.js";
+import { HeartSignalSystem } from "./runtime/HeartSignalSystem.js";
 import { LiveWorld } from "./runtime/LiveWorld.js";
 import { NpcAgentSystem } from "./runtime/NpcAgentSystem.js";
+import { PersonSignalStore } from "./runtime/PersonSignalStore.js";
 import {
   CHARACTER_VARIANT_OPTIONS,
   characterAssetId,
@@ -179,13 +183,12 @@ const pressedKeys = new Set();
 const moveInput = new THREE.Vector2();
 const touchInput = new THREE.Vector2();
 const moveDirection = new THREE.Vector3();
-const cameraForward = new THREE.Vector3();
-const cameraRight = new THREE.Vector3();
+const movementForward = new THREE.Vector3();
+const movementRight = new THREE.Vector3();
 const currentHeading = new THREE.Vector3(0, 0, -1);
 const desiredCameraPosition = new THREE.Vector3();
 const desiredLookTarget = new THREE.Vector3();
 const lookTarget = new THREE.Vector3(0, 0.85, 0);
-const followRight = new THREE.Vector3();
 const projected = new THREE.Vector3();
 const candidatePosition = new THREE.Vector3();
 const slidePosition = new THREE.Vector3();
@@ -209,6 +212,10 @@ let meetingMode = false;
 let roundtableNearby = false;
 let elapsed = 0;
 let diagnosticFrame = 0;
+const expressionSystem = new CharacterExpressionSystem();
+const heartSignalSystem = new HeartSignalSystem();
+const personSignalStore = new PersonSignalStore(personSignals);
+heartSignalSystem.setVisible(false);
 
 const packageNames = new Map();
 const liveTargets = new Map();
@@ -237,6 +244,7 @@ const appShell = createCafeShell({
   activeSceneVariant,
   characterVariants: CHARACTER_VARIANT_OPTIONS,
   activeCharacterVariant,
+  signalStore: personSignalStore,
   onViewChange: setExperienceMode,
   onSceneVariantChange: (variantId) => {
     if (variantId !== activeSceneVariant.id) navigateToSceneVariant(variantId);
@@ -249,6 +257,17 @@ const appShell = createCafeShell({
   onMeetingEnd: endMeeting,
   resolveMediaUrl,
   world: activeWorld.id,
+  onExpressionChange: (personId, expression, metadata) => {
+    void setCharacterExpression(personId, expression, metadata);
+  },
+  onProfileChange: updateRuntimeProfile,
+});
+
+const unsubscribePersonSignals = personSignalStore.subscribe((snapshot, metadata) => {
+  if (snapshot) heartSignalSystem.setSignal(snapshot.personId, snapshot);
+  else if (metadata.removed) heartSignalSystem.unregister(metadata.personId);
+  canvas.dataset.lastSignalUpdate = metadata.personId;
+  canvas.dataset.signalUpdateSource = metadata.source;
 });
 
 canvas.dataset.ready = "false";
@@ -256,6 +275,7 @@ canvas.dataset.appView = experienceMode;
 canvas.dataset.roundtableReserved = "true";
 canvas.dataset.characterVariant = activeCharacterVariant.id;
 canvas.dataset.world = activeWorld.id;
+canvas.dataset.expressionVariant = activeCharacterVariant.id;
 
 // Live overlay：气泡复用 CafeShell 的 world-speech-layer 与气泡样式，Toast/tick 为轻量内联样式
 const speechLayer = document.querySelector("#world-speech-layer");
@@ -392,6 +412,7 @@ async function spawnCharacters() {
   player = playerEntity.root;
   playerGroundY = player.position.y;
   currentHeading.copy(MODEL_FORWARD).applyQuaternion(player.quaternion).setY(0).normalize();
+  expressionSystem.register(playerEntity, currentUser.id, activeCharacterVariant.id);
 
   npcSystem = new NpcAgentSystem({
     people,
@@ -408,6 +429,12 @@ async function spawnCharacters() {
         `agent-${people[index].id}`,
         npcEntrySpawns[index],
       ),
+    );
+    expressionSystem.register(entity, people[index].id, activeCharacterVariant.id);
+    heartSignalSystem.register(
+      entity,
+      people[index].id,
+      personSignalStore.getSnapshot(people[index].id),
     );
     npcSystem.register(people[index], entity);
   }
@@ -493,6 +520,7 @@ function setExperienceMode(mode) {
   if (playerMarker) playerMarker.visible = mode === "cafe" && !meetingMode;
   if (mode !== "cafe") playerLabel.style.opacity = "0";
   tickBadge.style.display = mode === "cafe" ? "flex" : "none";
+  heartSignalSystem.setVisible(mode === "cafe");
   if (mode === "cafe") canvas.focus({ preventScroll: true });
 }
 
@@ -1104,15 +1132,12 @@ function updatePlayer(delta) {
   const moving = input.lengthSq() > 0.0025;
 
   if (moving) {
-    camera.getWorldDirection(cameraForward);
-    cameraForward.y = 0;
-    if (cameraForward.lengthSq() < 0.0001) cameraForward.copy(currentHeading);
-    cameraForward.normalize();
-    cameraRight.crossVectors(cameraForward, WORLD_UP).normalize();
+    movementForward.copy(currentHeading).setY(0).normalize();
+    movementRight.crossVectors(movementForward, WORLD_UP).normalize();
     moveDirection
-      .copy(cameraForward)
+      .copy(movementForward)
       .multiplyScalar(input.y)
-      .addScaledVector(cameraRight, input.x)
+      .addScaledVector(movementRight, input.x)
       .normalize();
     candidatePosition.copy(player.position).addScaledVector(moveDirection, MOVE_SPEED * delta);
 
@@ -1162,11 +1187,9 @@ function updatePlayerMarker() {
 
 
 function updateFollowCamera(delta) {
-  followRight.crossVectors(currentHeading, WORLD_UP).normalize();
   desiredCameraPosition
     .copy(player.position)
     .addScaledVector(currentHeading, -3.75)
-    .addScaledVector(followRight, 0.52)
     .addScaledVector(WORLD_UP, 2.35);
   desiredLookTarget
     .copy(player.position)
@@ -1272,6 +1295,19 @@ function refreshDiagnostics() {
   canvas.dataset.centralNpcCount = String(centralCount);
   canvas.dataset.meetingCount = String(meetingMode ? centralCount + 1 : 0);
   canvas.dataset.speechCount = String(appShell.speechPersonIds.length);
+  canvas.dataset.expressions = [currentUser, ...people]
+    .map((person) => `${person.id}:${expressionSystem.getExpression(person.id) ?? "unregistered"}`)
+    .join("|");
+  const heartSignals = heartSignalSystem.getDiagnostics();
+  canvas.dataset.heartSignalCount = String(heartSignals.length);
+  canvas.dataset.heartSignals = heartSignals
+    .map((signal) => {
+      const score = Number.isFinite(signal.heart.heartScore)
+        ? Math.round(signal.heart.heartScore)
+        : "na";
+      return `${signal.personId}:${score}:${signal.animation.beatBpm.toFixed(1)}`;
+    })
+    .join("|");
   canvas.dataset.renderCalls = String(renderer.info.render.calls);
   canvas.dataset.triangles = String(renderer.info.render.triangles);
   canvas.dataset.centerPixel = sampleCenterPixel().join(",");
@@ -1288,6 +1324,7 @@ function animate(timestamp) {
     boothSystem?.update(delta);
     if (liveEnabled) updateLiveAgents(delta);
     else npcSystem.update(delta, elapsed);
+    heartSignalSystem.update(elapsed);
     if (experienceMode === "cafe") {
       updatePlayer(delta);
       if (meetingMode) updateMeetingCamera(delta);
@@ -1440,6 +1477,12 @@ for (const eventName of ["pointerup", "pointercancel"]) {
 }
 
 window.addEventListener("resize", resizeRenderer);
+window.addEventListener("beforeunload", () => {
+  appShell.destroy();
+  unsubscribePersonSignals();
+  heartSignalSystem.dispose();
+  expressionSystem.dispose();
+}, { once: true });
 resizeRenderer();
 
 const assetStore = new AssetStore();
@@ -1511,6 +1554,36 @@ async function boot() {
   await configureWorld(environment);
 }
 
+
+async function setCharacterExpression(personId, expression, metadata = {}) {
+  const applied = await expressionSystem.setExpression(personId, expression);
+  canvas.dataset.lastExpression = `${personId}:${expression}:${applied ? "applied" : "fallback"}`;
+  canvas.dataset.expressionSource = metadata.source ?? "programmatic";
+  return applied;
+}
+
+
+function updateRuntimeProfile(personId, updatedProfile) {
+  const person = people.find((candidate) => candidate.id === personId);
+  if (!person) return false;
+  Object.assign(person, updatedProfile);
+  const entity = npcSystem?.getEntity(personId);
+  if (entity) {
+    entity.profile = {
+      ...entity.profile,
+      display_name: person.name,
+      relation: person.relation,
+      role: person.role,
+      city: person.city,
+      bio: person.bio,
+      tags: [...person.tags],
+    };
+    entity.root.userData.profile = entity.profile;
+  }
+  canvas.dataset.lastProfileUpdate = personId;
+  return true;
+}
+
 boot().catch(showFatalError);
 
 
@@ -1523,6 +1596,20 @@ window.__echoWorld = {
   get sceneVariant() { return activeSceneVariant; },
   get characterVariant() { return activeCharacterVariant; },
   get characters() { return characterSystem?.entities ?? []; },
+  get expressions() {
+    return Object.fromEntries(
+      [currentUser, ...people].map((person) => [
+        person.id,
+        expressionSystem.getExpression(person.id),
+      ]),
+    );
+  },
+  get personSignals() {
+    return Object.fromEntries(
+      personSignalStore.list().map((snapshot) => [snapshot.personId, snapshot]),
+    );
+  },
+  get heartSignals() { return heartSignalSystem.getDiagnostics(); },
   get agentStates() {
     return people.map((person) => npcSystem?.getState(person.id)).filter(Boolean);
   },
@@ -1535,6 +1622,9 @@ window.__echoWorld = {
   get integrations() { return integrations; },
   getAgentState: (personId) => worldAgentState(personId),
   selectPerson: selectWorldPerson,
+  setExpression: setCharacterExpression,
+  ingestPersonSignal: (event) => personSignalStore.ingestEvent(event),
+  setPersonSignal: (snapshot) => personSignalStore.upsert(snapshot),
   startMeeting,
   endMeeting,
   sampleCenterPixel,

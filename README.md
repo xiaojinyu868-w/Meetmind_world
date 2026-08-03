@@ -22,12 +22,26 @@ npm run build
 -> 3D Echo Cafe
 -> Agent 随机选择普通桌并同桌自主交谈
 -> 点选人物查看资料
+-> 手动编辑人物资料与切换表情
 -> 靠近中央六人圆桌，邀请人物入座并对话
 -> 关系 Map
 -> 从节点返回咖啡厅定位人物
 ```
 
-场景包含 1 个玩家和 6 个 Agent。六名 Agent 当前统一使用固定身体、五面头像的 MC 像素角色；绘本 Low-poly 角色资产仅作归档。中央六人桌只接受用户会议邀请，普通 Agent 调度不会占用它。
+场景包含 1 个玩家和 6 个 Agent。人物统一使用固定身体、五面头像的 MC 像素角色。中央六人桌只接受用户会议邀请，普通 Agent 调度不会占用它。
+
+## 人物信号数据链路
+
+```text
+眼镜照片/音频 + 戒指 HR/PPG/ACC/历史指标
+-> K3 统一时间轴、人物聚类、质量过滤与授权检查
+-> 按 personId 形成版本化 PersonPackage
+-> 照片生成 MC 像素贴图，声音进入服务端声音提炼，记忆与性格驱动 Agent
+-> 后端统计服务生成 PersonSignal 快照与有序事件
+-> Three.js 角色头顶心动值 + 咖啡厅/关系 Map 人物资料页
+```
+
+戒指记录的是佩戴者在一次相遇中的生理反应，并通过时间戳关联到当时识别到的人物；这是一种时间相关，不是情感因果判断。浏览器只接收聚合后的 `PersonSignal`，不会接收原始照片、音频或连续生理信号。完整字段、事件格式、实时/历史指标边界与隐私约束见 [`docs/PERSON_SIGNAL_PIPELINE.md`](docs/PERSON_SIGNAL_PIPELINE.md)。
 
 ## 代码边界
 
@@ -37,7 +51,12 @@ npm run build
 - `src/runtime/CafeLayout.js`：咖啡厅边界、5 张桌和 18 个 Blender 座位锚点。
 - `src/runtime/NpcAgentSystem.js`：普通桌随机分配、入座、同桌对话与会议调度。
 - `src/runtime/CharacterSystem.js`：人物 GLB 缓存、克隆、换色与实例生命周期。
-- `src/runtime/CharacterVariants.js`：两套人物生产方案、匿名人物槽位和 URL 状态。
+- `src/runtime/CharacterVariants.js`：人物生产方案、匿名人物槽位和 URL 状态。
+- `src/runtime/CharacterExpressionSystem.js`：按人物方案路由表情贴图、缓存和回退。
+- `src/runtime/ProfileStore.js`：可编辑人物资料的版本化本地覆盖层。
+- `src/runtime/PersonSignalStore.js`：按 `personId` 接收快照、拒绝过期/乱序事件并通知 UI。
+- `src/runtime/HeartSignalSystem.js`：角色头顶的心动值 Sprite 与随分值变化的双脉冲动画。
+- `src/data/demoSignals.js`：6 个 NPC 的 `person-signal.v1` 占位快照，正式接口可直接替换。
 - `src/main.js`：Three.js 场景、第三人称相机、移动、碰撞、射线选择和会议编排。
 - `public/data/asset-catalog.json`：环境、人物和资料资产白名单。
 
@@ -58,7 +77,7 @@ V2 几何场景资产仍归档保留，但不再出现在前端选择器中，�
 
 绘本人物资产仍归档保留，但不再出现在前端选择器中，旧 `?character=storybook` 地址会回落到 `voxel`。
 
-照片输入边界、匿名槽位、五面头部贴图和生产服务接口见 [`docs/PHOTO_CHARACTER_PIPELINES.md`](docs/PHOTO_CHARACTER_PIPELINES.md)。
+人物与表情生产契约、照片输入边界和服务接口见 [`docs/PHOTO_CHARACTER_PIPELINES.md`](docs/PHOTO_CHARACTER_PIPELINES.md)。运行时表情使用 `neutral / happy / surprised / thinking`，每次切换同一人物的完整 128x128 像素 atlas，并使用 nearest 采样。
 
 ![几何 Low-poly 版本](renders/echo_world_cafe_reference-lowpoly-v2_preview.png)
 
@@ -67,6 +86,7 @@ V2 几何场景资产仍归档保留，但不再出现在前端选择器中，�
 ## 当前限制
 
 - 世界动态由后端世界快照驱动（`GET /api/v0/world/snapshot`，2s 轮询；后端不可用时降级本地 mock/内置快照）；SSE/WebSocket 尚未启用。
-- 当前照片输入是合照，匿名槽位由主参考图从左到右确定；正式链路仍需要上游提供稳定的 `personId + boundingBox`。
+- 心动值、生理指标和 AI 解释当前是明确标注的演示数据；正式值必须由后端统计与推断服务提供，前端不自行判断喜欢、厌恶或医疗状态。
+- 当前照片输入是合照，技术槽位由主参考图从左到右确定，姓名映射由团队确认；正式链路仍需要上游提供稳定的 `personId + boundingBox`。
 - 人物暂时没有骨骼动画；移动和入座采用刚性模型的轻量表现。
 - 咖啡厅使用运行时圆形桌面碰撞，尚未从 Blender 导出完整碰撞壳。

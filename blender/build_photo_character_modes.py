@@ -19,12 +19,14 @@ WORKSPACE_ROOT = PROJECT_ROOT.parent
 SOURCE_SPEC_PATH = WORKSPACE_ROOT / "scenes" / "data" / "character_specs.json"
 MODEL_ROOT = PROJECT_ROOT / "public" / "models" / "characters" / "photo-derived"
 TEXTURE_ROOT = PROJECT_ROOT / "public" / "textures" / "characters"
+VOXEL_PORTRAIT_ROOT = PROJECT_ROOT / "public" / "portraits" / "photo-derived" / "voxel"
 EXPORT_ROOT = PROJECT_ROOT / "exports"
 RENDER_ROOT = PROJECT_ROOT / "renders"
 BLENDER_ROOT = PROJECT_ROOT / "blender"
 
 STORYBOOK_SIZE = 256
 VOXEL_SIZE = 128
+VOXEL_PORTRAIT_SIZE = 512
 STORY_TILE_SIZE = 64
 BASE_HEIGHT_M = 1.65
 ROOT_NODE_NAME = "ROOT_PhotoCharacter"
@@ -1406,6 +1408,98 @@ def look_at(obj: bpy.types.Object, target: tuple[float, float, float]) -> None:
     obj.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
 
 
+def set_material_color(material: bpy.types.Material, color: str) -> None:
+    rgba = (*hex_rgb(color), 1.0)
+    material.diffuse_color = rgba
+    bsdf = material.node_tree.nodes.get("Principled BSDF")
+    if bsdf is not None:
+        bsdf.inputs["Base Color"].default_value = rgba
+
+
+def set_character_render_visibility(root: bpy.types.Object, visible: bool) -> None:
+    for obj in descendants(root):
+        obj.hide_render = not visible
+
+
+def render_voxel_portraits(
+    roots: list[bpy.types.Object],
+    specs: list[PersonSpec],
+) -> dict[str, Path]:
+    portrait_collection = make_collection("PORTRAIT_ONLY")
+    backdrop_material = make_simple_material("MAT_PORTRAIT_Backdrop", "#DCE7DC")
+
+    bpy.ops.mesh.primitive_cube_add(location=(0.0, 0.72, 1.28), scale=(2.3, 0.05, 2.3))
+    backdrop = bpy.context.object
+    backdrop.name = "PORTRAIT_Backdrop"
+    move_to_collection(backdrop, portrait_collection)
+    assign_material(backdrop, backdrop_material)
+
+    bpy.ops.object.camera_add(location=(1.9, -6.8, 2.28))
+    camera = bpy.context.object
+    camera.name = "PORTRAIT_Camera"
+    camera.data.type = "ORTHO"
+    camera.data.ortho_scale = 1.34
+    move_to_collection(camera, portrait_collection)
+
+    bpy.ops.object.light_add(type="AREA", location=(-3.2, -4.2, 5.0))
+    key = bpy.context.object
+    key.name = "PORTRAIT_Key"
+    key.data.energy = 760
+    key.data.color = hex_rgb("#FFE0B2")
+    key.data.shape = "DISK"
+    key.data.size = 4.0
+    look_at(key, (0.0, 0.0, 1.3))
+    move_to_collection(key, portrait_collection)
+
+    bpy.ops.object.light_add(type="AREA", location=(3.8, -2.8, 3.2))
+    fill = bpy.context.object
+    fill.name = "PORTRAIT_Fill"
+    fill.data.energy = 500
+    fill.data.color = hex_rgb("#A9D8D0")
+    fill.data.size = 3.2
+    look_at(fill, (0.0, 0.0, 1.3))
+    move_to_collection(fill, portrait_collection)
+
+    scene = bpy.context.scene
+    for engine in ("BLENDER_EEVEE_NEXT", "BLENDER_EEVEE"):
+        try:
+            scene.render.engine = engine
+            break
+        except TypeError:
+            continue
+    scene.camera = camera
+    scene.render.resolution_x = VOXEL_PORTRAIT_SIZE
+    scene.render.resolution_y = VOXEL_PORTRAIT_SIZE
+    scene.render.resolution_percentage = 100
+    scene.render.image_settings.file_format = "PNG"
+    scene.render.image_settings.color_mode = "RGB"
+    scene.render.film_transparent = False
+    if scene.world is None:
+        scene.world = bpy.data.worlds.new("PORTRAIT_World")
+    scene.world.color = hex_rgb("#CAD8D0")
+    scene.view_settings.look = "AgX - Medium High Contrast"
+
+    portrait_paths: dict[str, Path] = {}
+    for active_root, spec in zip(roots, specs):
+        for root in roots:
+            set_character_render_visibility(root, root is active_root)
+        target_z = float(active_root.get("height_m", 1.65)) * 0.75
+        camera.location = (1.9, -6.8, target_z + 1.04)
+        camera.data.ortho_scale = 1.34 * float(active_root.get("height_m", 1.65)) / 1.65
+        look_at(camera, (0.0, 0.0, target_z))
+        set_material_color(backdrop_material, shade(spec.top_color, 0.78))
+        portrait_path = VOXEL_PORTRAIT_ROOT / f"{spec.person_id}.png"
+        portrait_path.parent.mkdir(parents=True, exist_ok=True)
+        scene.render.filepath = str(portrait_path)
+        bpy.ops.render.render(write_still=True)
+        portrait_paths[spec.person_id] = portrait_path
+
+    for root in roots:
+        set_character_render_visibility(root, True)
+    portrait_collection.hide_render = True
+    return portrait_paths
+
+
 def add_preview_scene(mode: str, roots: list[bpy.types.Object]) -> None:
     preview = make_collection("PREVIEW_ONLY")
     floor_material = make_simple_material(
@@ -1538,6 +1632,18 @@ def build_mode(mode: str, specs: list[PersonSpec]) -> list[dict[str, object]]:
                 "body_template": root.get("body_template", "feature-driven-lowpoly"),
             }
         )
+    if mode == "voxel":
+        portrait_paths = render_voxel_portraits(roots, specs)
+        for record in records:
+            portrait_path = portrait_paths[str(record["person_id"])]
+            record.update(
+                {
+                    "portrait": str(portrait_path.relative_to(PROJECT_ROOT)).replace("\\", "/"),
+                    "portrait_size": [VOXEL_PORTRAIT_SIZE, VOXEL_PORTRAIT_SIZE],
+                    "portrait_bytes": portrait_path.stat().st_size,
+                    "portrait_sha256": sha256(portrait_path),
+                }
+            )
     add_preview_scene(mode, roots)
     blend_path = BLENDER_ROOT / f"echo_world_photo_characters_{mode}.blend"
     bpy.ops.wm.save_as_mainfile(filepath=str(blend_path))
@@ -1569,7 +1675,14 @@ def main() -> None:
     source_spec_path = args.spec.resolve()
     if not source_spec_path.is_file():
         raise FileNotFoundError(f"CharacterSpec does not exist: {source_spec_path}")
-    for path in (MODEL_ROOT, TEXTURE_ROOT, EXPORT_ROOT, RENDER_ROOT, BLENDER_ROOT):
+    for path in (
+        MODEL_ROOT,
+        TEXTURE_ROOT,
+        VOXEL_PORTRAIT_ROOT,
+        EXPORT_ROOT,
+        RENDER_ROOT,
+        BLENDER_ROOT,
+    ):
         path.mkdir(parents=True, exist_ok=True)
     specs = load_person_specs(source_spec_path)
     if [spec.person_id for spec in specs[:-1]] != [f"person_{index:02d}" for index in range(1, 7)]:
@@ -1582,17 +1695,20 @@ def main() -> None:
         "source_spec_sha256": sha256(source_spec_path),
         "identity_policy": {
             "raw_photos_copied_to_public": False,
+            "source_photo_crops_in_public": False,
             "photo_projection": False,
             "storybook": "structured visible features plus generated painterly swatches",
             "voxel": "fixed body template plus abstract pixel atlas",
             "unknown_side_and_back_views": "shared design defaults",
             "logos_and_readable_text": "omitted",
+            "voxel_portraits": "Blender renders of generated models, never source-photo crops",
         },
         "counts": {
             "photo_subjects": 6,
             "generic_hosts": 1,
             "modes": 2,
             "character_glbs": len(records),
+            "voxel_portraits": sum(1 for record in records if record["mode"] == "voxel"),
         },
         "modes": {
             "storybook": {
@@ -1606,6 +1722,11 @@ def main() -> None:
                 "geometry": "regular or tall fixed cuboid body",
                 "head_faces": ["front", "left", "right", "back", "top"],
                 "head_bottom": "design-default solid color",
+                "portrait": {
+                    "size": [VOXEL_PORTRAIT_SIZE, VOXEL_PORTRAIT_SIZE],
+                    "path_pattern": "public/portraits/photo-derived/voxel/{person_id}.png",
+                    "source": "Blender render of the generated voxel model; no source-photo crop",
+                },
             },
         },
         "assets": records,
