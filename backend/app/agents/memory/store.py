@@ -33,6 +33,25 @@ class MemoryStore:
         self._guard = guard or DEFAULT_GUARD
         # 短期工作记忆：进程内、会话级、可丢弃
         self._short_term: dict = {}
+        # 互动注册表（frozenset({a,b}) -> {last_interaction_at, count}）：
+        # hall/cafe 两个 runtime 共享本实例即共享互动历史。
+        # TODO(§4 关系强度落地时)：迁移到 relations.md/独立文件持久化（重启不丢）。
+        self._interactions: dict = {}
+
+    # ---------- 互动记录（对话/串门/会议发生时更新） ----------
+
+    def record_interaction(self, person_a: str, person_b: str, at: str | None = None) -> dict:
+        """记录一次互动（发布时间默认当前）。返回更新后的条目。"""
+        key = frozenset((person_a, person_b))
+        entry = dict(self._interactions.get(key) or {"count": 0})
+        entry["count"] += 1
+        entry["last_interaction_at"] = at or time.strftime("%Y-%m-%dT%H:%M:%S%z")
+        self._interactions[key] = entry
+        return entry
+
+    def last_interaction(self, person_a: str, person_b: str) -> dict | None:
+        entry = self._interactions.get(frozenset((person_a, person_b)))
+        return dict(entry) if entry else None
 
     # ---------- 场景记忆（某次相遇的完整上下文）：只能新增 ----------
 

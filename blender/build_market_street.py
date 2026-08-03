@@ -22,8 +22,16 @@ SEED = 26080501
 
 
 def srgb(hex_value: str) -> tuple[float, float, float, float]:
+    # Palette hexes are display-referred sRGB; glTF baseColorFactor and
+    # Blender node sockets are linear, so convert properly (three.js would
+    # otherwise render the raw byte fractions washed out).
     value = hex_value.lstrip("#")
-    return tuple(int(value[index : index + 2], 16) / 255.0 for index in (0, 2, 4)) + (1.0,)
+
+    def to_linear(channel: int) -> float:
+        c = channel / 255.0
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+    return tuple(to_linear(int(value[index : index + 2], 16)) for index in (0, 2, 4)) + (1.0,)
 
 
 def reset_scene() -> None:
@@ -1002,7 +1010,7 @@ def configure_preview(collection: bpy.types.Collection) -> None:
     bpy.context.scene.camera = camera
 
     sun_data = bpy.data.lights.new("PREVIEW_SoftSun", type="SUN")
-    sun_data.energy = 1.9
+    sun_data.energy = 2.2
     sun_data.angle = math.radians(10.0)
     sun_data.color = srgb("#FFE3B0")[:3]
     sun = bpy.data.objects.new("PREVIEW_SoftSun", sun_data)
@@ -1045,7 +1053,7 @@ def configure_preview(collection: bpy.types.Collection) -> None:
             break
         except TypeError:
             continue
-    scene.view_settings.exposure = -0.25
+    scene.view_settings.exposure = 0.0
     scene.view_settings.gamma = 1.0
 
 
