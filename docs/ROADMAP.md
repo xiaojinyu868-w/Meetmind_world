@@ -30,7 +30,7 @@
 - [x] 1.C.1 世界快照 schema `echo-snapshot.v1` 定义与校验（ARCHITECTURE.md §4）
 - [x] 1.C.2 前端从"读本地 mock"切换为"读快照 API"（轮询即可）（LiveWorld 2s 轮询 + 插值驱动，live/mock/内置兜底三级降级）
 - [ ] 1.C.3 体素小人接入：Package 注册 → 世界中出现对应 MC 体素 + AI 图片贴图小人（FR-1.5；方向 2026-08-03 定为体素+贴图，原 lowpoly 有脸管线废弃）
-- [ ] 1.C.4 场景模块模板：展位/桌位模板 + 现场照片贴图（FR-1.6）
+- [x] 1.C.4 场景模块模板：展位/桌位模板 + 现场照片贴图（FR-1.6）（展位按 `environment-module` 加载真实 GLB，命名展示面由快照 display 驱动，失败保留占位回退）
 - [x] 1.C.5 资料包面板：点击小人 → 真实人脸、相遇时间地点、谈话要点、现场照片（FR-1.8，**核心价值时刻**）（事实/推断分区 + 置信度标签，已接入点选流程）
 
 ### 1.D 检索与恢复
@@ -145,3 +145,4 @@
 - 2026-08-03 | 决策落档：TBD-F2 已决（场域 = "我与 TA 的关系"，2.G.2 更新）；TBD-S1 已决（三类场景同期制作、分步交付）；TBD-P3 已决（首版不做隐私授权/修改流程） | 人（决策）+ AI（记录）
 - 2026-08-03 | M1.4 头像 storybook 风格重渲染（render_portraits_storybook.py 管线，7 张胸像 76-117KB，旧图备份 portraits/legacy/）+ 身份全链路对齐（队友真实身份：backend seed 姓名/voxel 肖像、mock packages、测试同步，前后端 demoPeople 一致）；114 backend tests 绿 | AI
 - 2026-08-03 | ART-BRIEF v4（体素+AI 贴图契约，P-6/ADR-6）+ 首版不执行权限过滤（TBD-P3：展位上墙/对话上下文/资料包读取全量放开，privacy 字段保留默认 L1，身份确认 FR-1.3 与 harness 权限矩阵保留；115 backend tests 绿）+ 2.F.1/2.F.2 勾掉（市集街道与咖啡厅双世界已在线） | 人（决策）+ AI（实现）
+- 2026-08-04 | 修复展位模板资产 kind 不一致与跨模块 Lucide 重复扫描；真实 `module.market-stall.v1` 在桌面/移动端加载，6 展位、画布像素和零 warning/error 浏览器验收通过；1.C.4 完成 | AI

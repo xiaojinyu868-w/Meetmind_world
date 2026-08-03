@@ -226,6 +226,7 @@ export class BoothSystem {
     this.placeholderRef = placeholderRef;
     this.templateAssetId = templateAssetId;
     this.template = null;
+    this.templateSource = "pending";
     this.booths = new Map();
     this.textureLoader = new THREE.TextureLoader();
     this.textureCache = new Map();
@@ -233,11 +234,13 @@ export class BoothSystem {
 
   async prepare() {
     try {
-      const asset = this.assetCatalog.resolve(this.templateAssetId, "module");
+      const asset = this.assetCatalog.resolve(this.templateAssetId, "environment-module");
       this.template = await this.assetStore.loadScene(asset.resolvedUrl);
+      this.templateSource = "asset";
     } catch (error) {
       console.warn(`[BoothSystem] 展位模板 ${this.templateAssetId} 未就绪，使用简易占位展位`, error);
       this.template = buildFallbackTemplate();
+      this.templateSource = "fallback";
     }
     return this;
   }

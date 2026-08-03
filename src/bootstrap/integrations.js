@@ -274,7 +274,10 @@ export function mountIntegrations({
     `<strong>${navToCafe ? "去咖啡厅坐坐" : "回到我的集市"}</strong></span>`;
   navFab.addEventListener("click", () => navigateToWorld(navToCafe ? "cafe" : "hall"));
   mountRoot.append(navFab);
-  createIcons({ icons: INTEGRATIONS_ICONS, root: mountRoot, attrs: { "stroke-width": 1.8 } });
+  // 只扫描本模块新增的按钮，避免用窄图标表重复处理子模块已生成的 SVG。
+  for (const button of [fab, navFab]) {
+    createIcons({ icons: INTEGRATIONS_ICONS, root: button, attrs: { "stroke-width": 1.8 } });
+  }
 
   return {
     api: unifiedApi,

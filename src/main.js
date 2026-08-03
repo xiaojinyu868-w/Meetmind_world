@@ -1540,6 +1540,8 @@ async function boot() {
       templateAssetId: HALL_LAYOUT.boothTemplateAssetId,
     });
     await boothSystem.prepare();
+    canvas.dataset.boothTemplate = boothSystem.templateSource;
+    canvas.dataset.boothTemplateAsset = boothSystem.templateAssetId;
   }
   let environment = null;
   try {
