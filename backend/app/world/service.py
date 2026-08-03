@@ -29,13 +29,16 @@ EVENT_BUFFER_SIZE = 20
 class WorldService:
     """世界状态的唯一权威；唯一输出通道是版本化快照（ADR-3）。"""
 
-    def __init__(self, seed: dict):
+    def __init__(self, seed: dict, *, blockers=None, bounds=None):
         self.tick = 0
+        # 可行走约束：None 表示用 tables 的咖啡厅默认值；大厅实例传空阻挡 + 大厅边界
+        self._blockers = blockers
+        self._bounds = bounds
         # agent 内部状态：id -> {name, position, state, palette}
         # 种子位置同样过可行走钳制（防止初始就站进桌子）
         self._agents = {}
         for agent in seed.get("agents", []):
-            clamped = clamp_to_walkable(agent["position"])
+            clamped = clamp_to_walkable(agent["position"], self._blockers, self._bounds)
             clamped["yaw"] = agent["position"].get("yaw", 0.0)
             self._agents[agent["id"]] = {
                 "name": agent["name"],
@@ -109,7 +112,7 @@ class WorldService:
         if isinstance(position, dict):
             # 统一钳制：任何来源（规则兜底/LLM 决策/外部注入）的目标点
             # 都不允许落入阻挡圆或走出边界（防穿模的唯一闸口）
-            clamped = clamp_to_walkable(position)
+            clamped = clamp_to_walkable(position, self._blockers, self._bounds)
             clamped["yaw"] = float(position.get("yaw", agent["position"]["yaw"]))
             agent["position"] = clamped
         if event.get("state"):

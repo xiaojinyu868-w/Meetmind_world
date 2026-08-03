@@ -64,14 +64,14 @@ def test_hall_registry_idempotent():
 
 # ---------- 大厅快照（启动种子注册） ----------
 
-def test_hall_snapshot_has_six_booths_and_no_events(client):
+def test_hall_snapshot_has_six_booths(client):
     snapshot = client.get("/api/v0/world/snapshot", params={"world": "hall"}).json()
     validate_snapshot(snapshot)
-    # agents 只含 at-booth 站位
+    # agents 只含 at-booth 站位（未触发串门时）
     assert len(snapshot["agents"]) == 6
     assert all(a["state"] == "at-booth" for a in snapshot["agents"])
-    # events 恒为空（大厅无对话）
-    assert snapshot["events"] == []
+    # events 为大厅事件滚动缓冲（静态时为空列表，串门时出现 move/talk）
+    assert isinstance(snapshot["events"], list)
     # 6 个 booth module，display 结构完整
     booths = [m for m in snapshot["modules"] if m["type"] == "booth"]
     assert len(booths) == 6

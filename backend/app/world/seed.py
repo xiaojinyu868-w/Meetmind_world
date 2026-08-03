@@ -100,6 +100,17 @@ SEED_MODULES = [
 ]
 
 
+# 与前端 demoPeople.js relationships 同源的熟人关系（大厅串门配对的"理由"来源）
+SEED_RELATIONSHIPS = (
+    ("lin-che", "chen-mo"),
+    ("lin-che", "zhou-ning"),
+    ("zhou-ning", "xu-an"),
+    ("chen-mo", "su-he"),
+    ("su-he", "tang-ke"),
+    ("xu-an", "tang-ke"),
+)
+
+
 def seed_world() -> dict:
     """返回深拷贝语义的种子数据（调用方可安全修改）。"""
     agents = [
@@ -197,4 +208,22 @@ def seed_demo_packages(store) -> int:
         }
         store.save_package(package)
         created += 1
+    _seed_relations_md(store)
     return created
+
+
+def _seed_relations_md(store) -> None:
+    """把熟人关系写进 relations.md（格式：人名 | 关系 | 关键词 | 来源事件）。
+
+    幂等：目标行已存在则跳过。关键词取对方的前两个标签（demo 语料）。
+    """
+    names = {agent["id"]: agent["name"] for agent in SEED_AGENTS}
+    tags = {agent["id"]: agent["tags"] for agent in SEED_AGENTS}
+    for first, second in SEED_RELATIONSHIPS:
+        for person, other in ((first, second), (second, first)):
+            relations_md = store.ensure_person_dir(person) / "relations.md"
+            line = (f"{names[other]} | 旧识 | {', '.join(tags[other][:2])} | enc_seed\n")
+            existing = relations_md.read_text(encoding="utf-8")
+            if line not in existing:
+                with relations_md.open("a", encoding="utf-8") as fh:
+                    fh.write(line)

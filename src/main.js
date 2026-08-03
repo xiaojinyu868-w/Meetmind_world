@@ -94,6 +94,8 @@ const NPC_ENTRY_SPAWNS = Object.freeze([
 ]);
 const LIVE_WALK_SPEED = 1.5;
 const LIVE_BUBBLE_DURATION = 4;
+const HALL_GLANCE_DURATION = 0.9;
+const HALL_GLANCE_ANGLE = Math.PI / 12; // 主理人回眸幅度 15°
 
 // 运行时注入（window.__ECHOWORLD_OPTIONS__）：api / onPersonSelected / live / snapshotPollMs
 const runtimeOptions = globalThis.__ECHOWORLD_OPTIONS__ ?? {};
@@ -206,6 +208,12 @@ let liveMeetingSeatIndices = [];
 let liveWorld = null;
 let liveWorldTick = null;
 let boothSystem = null;
+const hallGlances = new Map();
+const hoverNdc = new THREE.Vector2();
+let hoverClientX = 0;
+let hoverClientY = 0;
+let hoverActive = false;
+let hoverBooth = null;
 
 const appShell = createCafeShell({
   root: document.querySelector("#ui-root"),
@@ -251,6 +259,15 @@ tickBadge.style.cssText =
   "background:rgba(20,54,47,.72);backdrop-filter:blur(14px);color:#fffdf4;" +
   "font-size:10px;font-weight:700;letter-spacing:.08em;";
 document.body.append(tickBadge);
+
+// 大厅展位 hover 的跟随鼠标小标签（仅桌面指针；移动端无 pointermove hover 不受影响）
+const hoverTooltip = document.createElement("div");
+hoverTooltip.style.cssText =
+  "position:fixed;z-index:35;display:none;pointer-events:none;padding:6px 10px;border-radius:10px;" +
+  "border:1px solid rgba(255,255,255,.5);background:rgba(20,54,47,.82);color:#fffdf4;" +
+  "font-size:10px;font-weight:700;letter-spacing:.05em;backdrop-filter:blur(10px);" +
+  "transform:translate(14px,-130%);white-space:nowrap;";
+document.body.append(hoverTooltip);
 
 
 function resizeRenderer() {
@@ -455,7 +472,7 @@ function setExperienceMode(mode) {
   touchKnob.style.transform = "translate(0, 0)";
   if (playerMarker) playerMarker.visible = mode === "cafe" && !meetingMode;
   if (mode !== "cafe") playerLabel.style.opacity = "0";
-  tickBadge.style.display = mode === "cafe" && !isHallWorld ? "flex" : "none";
+  tickBadge.style.display = mode === "cafe" ? "flex" : "none";
   if (mode === "cafe") canvas.focus({ preventScroll: true });
 }
 
@@ -595,8 +612,9 @@ function selectPersonInWorld(personId) {
 }
 
 
-function pushLiveToast(message) {
-  if (isHallWorld) return; // 大厅模式：Toast 静默
+function pushLiveToast(message, { level = "info" } = {}) {
+  // 大厅模式：Toast 轻量化，仅 meeting 级别提示（agent-talk 串门防噪）
+  if (isHallWorld && level !== "meeting") return;
   const toast = document.createElement("div");
   toast.style.cssText =
     "max-width:min(320px,calc(100vw - 36px));padding:9px 14px;border-radius:14px;" +
@@ -625,16 +643,16 @@ const TICK_SOURCE_STYLE = {
 };
 
 function setTickBadge(tick, source) {
-  if (isHallWorld) return; // 大厅模式：tick 徽标静默
   const style = TICK_SOURCE_STYLE[source] ?? { color: "#9fb4ad", label: "离线" };
+  const momentLabel = isHallWorld ? "集市时刻" : "世界时刻";
   tickBadge.innerHTML =
     `<span style="width:7px;height:7px;border-radius:50%;background:${style.color}"></span>` +
-    `<span>世界时刻 #${tick ?? "—"} · ${style.label}</span>`;
+    `<span>${momentLabel} #${tick ?? "—"} · ${style.label}</span>`;
 }
 
 
 function showLiveTalk(personId, text, duration = LIVE_BUBBLE_DURATION) {
-  if (!speechLayer || isHallWorld) return; // 大厅模式：气泡静默
+  if (!speechLayer) return;
   let entry = liveBubbles.get(personId);
   if (!entry) {
     const element = document.createElement("div");
@@ -678,6 +696,40 @@ function updateLiveBubbles() {
 }
 
 
+// 大厅展位 hover：展位整体高亮（emissive + 地环 + 名牌放大）+ 姓名小标签跟随鼠标
+function updateHallHover() {
+  if (!boothSystem) return;
+  let booth = null;
+  if (hoverActive && experienceMode === "cafe" && !meetingMode) {
+    raycaster.setFromCamera(hoverNdc, camera);
+    const pickTargets = [
+      ...boothSystem.pickRoots,
+      ...characterSystem.entities.map((entity) => entity.root),
+    ];
+    const hits = raycaster.intersectObjects(pickTargets, true);
+    const root = hits.length > 0 ? personRootFromHit(hits[0].object) : null;
+    const personId = root?.userData.personId;
+    if (personId && personId !== currentUser.id) {
+      booth = boothSystem.boothForPerson(personId);
+    }
+  }
+  if (booth !== hoverBooth) {
+    if (hoverBooth) boothSystem.setHighlighted(hoverBooth, false);
+    hoverBooth = booth;
+    if (hoverBooth) boothSystem.setHighlighted(hoverBooth, true);
+    canvas.style.cursor = hoverBooth ? "pointer" : "";
+  }
+  if (hoverBooth) {
+    hoverTooltip.textContent = `${hoverBooth.displayName ?? "展位"} · 查看资料包`;
+    hoverTooltip.style.left = `${hoverClientX}px`;
+    hoverTooltip.style.top = `${hoverClientY}px`;
+    hoverTooltip.style.display = "block";
+  } else {
+    hoverTooltip.style.display = "none";
+  }
+}
+
+
 function applyLiveSnapshot(rawSnapshot) {
   const adapted = adaptSnapshot(rawSnapshot, {
     people,
@@ -703,16 +755,27 @@ function applyLiveSnapshot(rawSnapshot) {
     const entity = npcSystem?.getEntity(agent.id);
     if (!entity) continue;
     if (isHallWorld) {
-      // 大厅：人物站位 = 展位锚点（快照 position 即锚点；本地 fallback 用 BoothSystem 锚点）
-      const anchor = boothSystem?.personAnchorFor(agent.id) ?? agent.position;
-      if (anchor) {
+      if (agent.state === "walking" && agent.position) {
+        // 串门途中：按快照位置插值行走（WalkSlide 绕开展位）
         liveTargets.set(agent.id, {
-          x: anchor.x,
-          z: anchor.z,
-          yaw: anchor.yaw ?? 0,
-          state: "at-booth",
+          x: agent.position.x,
+          z: agent.position.z,
+          yaw: agent.position.yaw,
+          state: "walking",
           seat: null,
         });
+      } else {
+        // 到位：吸附展位站位锚点（快照 position 即锚点；本地 fallback 用 BoothSystem 锚点）
+        const anchor = boothSystem?.personAnchorFor(agent.id) ?? agent.position;
+        if (anchor) {
+          liveTargets.set(agent.id, {
+            x: anchor.x,
+            z: anchor.z,
+            yaw: anchor.yaw ?? 0,
+            state: "at-booth",
+            seat: null,
+          });
+        }
       }
     } else if (agent.position) {
       liveTargets.set(agent.id, {
@@ -748,12 +811,29 @@ function handleLiveEvent(rawEvent) {
   }
   if (event.type === "meeting-started") {
     const names = event.participants.map(nameOf).join("、");
-    pushLiveToast(names ? `圆桌会议开始：${names}` : "圆桌会议开始了");
+    pushLiveToast(names ? `圆桌会议开始：${names}` : "圆桌会议开始了", { level: "meeting" });
     return;
   }
   if (event.type === "meeting-ended") {
-    pushLiveToast("圆桌会议结束，大家回到各自的座位");
+    pushLiveToast("圆桌会议结束，大家回到各自的座位", { level: "meeting" });
   }
+}
+
+
+// 主理人回眸状态（按 personId 错相，hash 分散首次回眸时刻）
+function hallGlanceFor(personId) {
+  let glance = hallGlances.get(personId);
+  if (!glance) {
+    let hash = 0;
+    for (const char of personId) hash = (hash * 31 + char.charCodeAt(0)) % 997;
+    glance = {
+      nextAt: elapsed + 2 + (hash / 997) * 8,
+      until: 0,
+      side: 1,
+    };
+    hallGlances.set(personId, glance);
+  }
+  return glance;
 }
 
 
@@ -765,16 +845,37 @@ function updateLiveAgents(delta) {
     if (!target || !entity) continue;
     const root = entity.root;
     if (target.state === "at-booth") {
-      // 大厅展位站位：直接吸附展位锚点，不做插值走动（仍平滑转身/起身）
+      // 大厅展位站位：直接吸附展位锚点，不做插值走动；主理人微动作——
+      // 加重呼吸起伏（±0.01）+ 错相回眸 + 玩家走近（<2.5m）转身面向玩家
       root.position.x = target.x;
       root.position.z = target.z;
-      liveFacing.set(Math.sin(target.yaw), 0, Math.cos(target.yaw));
+      entity.spec.behavior.idle_bob = 0.01;
+      let facingYaw = target.yaw;
+      const playerDistance = player
+        ? Math.hypot(player.position.x - target.x, player.position.z - target.z)
+        : Infinity;
+      if (playerDistance < 2.5) {
+        facingYaw = Math.atan2(player.position.x - target.x, player.position.z - target.z);
+      } else {
+        const glance = hallGlanceFor(personId);
+        if (elapsed >= glance.nextAt) {
+          glance.until = elapsed + HALL_GLANCE_DURATION;
+          glance.side = Math.random() < 0.5 ? -1 : 1;
+          glance.nextAt = elapsed + 6 + Math.random() * 4;
+        }
+        if (elapsed < glance.until) {
+          const progress = 1 - (glance.until - elapsed) / HALL_GLANCE_DURATION;
+          facingYaw += glance.side * HALL_GLANCE_ANGLE * Math.sin(progress * Math.PI);
+        }
+      }
+      liveFacing.set(Math.sin(facingYaw), 0, Math.cos(facingYaw));
       targetQuaternion.setFromUnitVectors(MODEL_FORWARD, liveFacing);
       root.quaternion.slerp(targetQuaternion, 1 - Math.exp(-10 * delta));
       root.scale.y += (1 - root.scale.y) * (1 - Math.exp(-7 * delta));
       entity.baseY = 0;
       continue;
     }
+    entity.spec.behavior.idle_bob = 0.005;
     const dx = target.x - root.position.x;
     const dz = target.z - root.position.z;
     const distance = Math.hypot(dx, dz);
@@ -791,7 +892,7 @@ function updateLiveAgents(delta) {
         root.position.z,
         (dx / distance) * stepLength,
         (dz / distance) * stepLength,
-        TABLE_BLOCKERS,
+        currentBlockers(),
         { targetX: target.x, targetZ: target.z },
       );
       root.position.x += stepX;
@@ -1084,6 +1185,7 @@ function animate(timestamp) {
     updateSelectionMarker();
     updateSpeechPositions();
     updateLiveBubbles();
+    if (isHallWorld) updateHallHover();
   }
 
   renderer.render(scene, camera);
@@ -1130,6 +1232,22 @@ function personRootFromHit(object) {
 
 canvas.addEventListener("pointerdown", (event) => {
   pointerStart.set(event.clientX, event.clientY);
+});
+
+// 大厅展位 hover：指针位置跟踪（射线在每帧 animate 中做，避免 pointermove 高频触发）
+canvas.addEventListener("pointermove", (event) => {
+  if (!isHallWorld) return;
+  const bounds = canvas.getBoundingClientRect();
+  hoverNdc.set(
+    ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
+    -((event.clientY - bounds.top) / bounds.height) * 2 + 1,
+  );
+  hoverClientX = event.clientX;
+  hoverClientY = event.clientY;
+  hoverActive = true;
+});
+canvas.addEventListener("pointerleave", () => {
+  hoverActive = false;
 });
 
 canvas.addEventListener("pointerup", (event) => {

@@ -52,6 +52,9 @@ app/
                           （JSON 约束 move/visit/sit/talk），失败回退规则驱动；
                           对话生成只用授权视图（≥ L2）；圆桌会议周期调度；
                           一切输出只发事件且先过 guard 事件白名单
+    hall_runtime.py       大厅串门调度器：有目的的稀疏活动（默认 1/8 概率），
+                          配对由 ≥L2 共同 tags / relations.md 关联驱动，
+                          状态机 going→talking→returning，对话围绕共同标签
     llm/base.py           LLMProvider 抽象（OpenAI 兼容模板 + 审计留痕）+ 按角色注册表
     llm/deepseek.py       chat 角色（deepseek-chat，决策/对话/摘要），未配置降级 mock
     llm/qwen.py           vision 角色（qwen-vl 图像理解：人脸候选/场景标签）
@@ -91,7 +94,7 @@ data/                     运行期数据（.gitkeep 占位，内容被 .gitigno
 | IF-1 | POST | `/api/v0/ingest` | 输入：multipart（media[]/captured_at/device/note?/place_hint?）→ 201 `{input_id, facts_refs, status:"stored"}`，落盘即只读 |
 | IF-2 | POST | `/api/v0/pipeline` | 处理「pipeline」：`{input_id, mode, steps?}`；`mode=stream`（默认）SSE 流式产出 preprocess/faces/transcript/scene 中间特征 + result 返回 encounter_draft；`mode=once` 一次性返回合并 JSON |
 | IF-3 | POST | `/api/v0/confirm` | 确认：`{encounter_draft, identity{name, match_person_id}, privacy}` → `{person_id, encounter_id, package_ref, avatar_status}`；match_person_id 为 null 新建 Person，否则并入；长期记忆唯一写入入口 |
-| IF-4 | GET | `/api/v0/world/snapshot?world=hall\|cafe&advance=1` | echo-snapshot.v1 世界快照。world=cafe（默认）：活动世界，events 为最近 20 条缓冲；world=hall：展位大厅，agents 只含 at-booth 站位、events 恒空、modules 含 booth（display 名牌/人像/相框/标签）。advance=1 默认推进 tick，=0 只读 |
+| IF-4 | GET | `/api/v0/world/snapshot?world=hall\|cafe&advance=1` | echo-snapshot.v1 世界快照。world=cafe（默认）：活动世界，events 为最近 20 条缓冲；world=hall：展位大厅，agents 以 at-booth 站位为主，events 为大厅事件缓冲（稀疏串门：agent-move/agent-state/agent-talk），modules 含 booth（display 名牌/人像/相框/标签）。advance=1 默认推进 tick，=0 只读 |
 | IF-5 | GET | `/api/v0/packages` | Package 摘要列表 |
 | IF-5 | GET | `/api/v0/packages/{person_id}?viewer=self\|agent\|org\|public` | 按权限圈层过滤的详情（agent 视角要求已确认） |
 | IF-5 | POST | `/api/v0/search` | 检索（FR-1.9）：`{by:"face"\|"name"\|"keyword", query/photo}` → `{results:[{person_id,name,score,last_encounter}]}`；face 为 stub |

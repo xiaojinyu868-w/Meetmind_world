@@ -59,11 +59,17 @@ NPC_TABLE_SEATS = (
 SEATS = ROUNDTABLE_SEATS + NPC_TABLE_SEATS
 
 
-def clamp_to_walkable(position: dict) -> dict:
-    """把点钳制到可行走区域：先边界，再逐阻挡圆外投影（沿圆心方向推到 radius+0.3）。"""
-    x = min(max(float(position.get("x", 0.0)), WALK_BOUNDS["min_x"]), WALK_BOUNDS["max_x"])
-    z = min(max(float(position.get("z", 0.0)), WALK_BOUNDS["min_z"]), WALK_BOUNDS["max_z"])
-    for blocker in TABLE_BLOCKERS:
+def clamp_to_walkable(position: dict, blockers=None, bounds=None) -> dict:
+    """把点钳制到可行走区域：先边界，再逐阻挡圆外投影（沿圆心方向推到 radius+0.3）。
+
+    blockers/bounds 缺省为咖啡厅配置；展位大厅传入自己的边界与空阻挡列表
+    （展位本身就是站位点，不是阻挡体）。
+    """
+    blockers = TABLE_BLOCKERS if blockers is None else blockers
+    bounds = WALK_BOUNDS if bounds is None else bounds
+    x = min(max(float(position.get("x", 0.0)), bounds["min_x"]), bounds["max_x"])
+    z = min(max(float(position.get("z", 0.0)), bounds["min_z"]), bounds["max_z"])
+    for blocker in blockers:
         dx, dz = x - blocker["x"], z - blocker["z"]
         distance = math.hypot(dx, dz)
         keepout = blocker["radius"] + BLOCKER_MARGIN

@@ -317,6 +317,23 @@ export class BoothSystem {
         displayMaterials.push(object.material);
       }
     });
+    // hover 提示地环（初始隐藏，setHighlighted 控制）
+    const hoverRing = new THREE.Mesh(
+      new THREE.RingGeometry(BOOTH_BLOCKER_RADIUS + 0.06, BOOTH_BLOCKER_RADIUS + 0.2, 40),
+      new THREE.MeshBasicMaterial({
+        color: "#f2c55f",
+        transparent: true,
+        opacity: 0.55,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
+    );
+    hoverRing.name = "BOOTH_HoverRing";
+    hoverRing.rotation.x = -Math.PI * 0.5;
+    hoverRing.position.y = 0.02;
+    hoverRing.renderOrder = 4;
+    hoverRing.visible = false;
+    root.add(hoverRing);
     const record = {
       id: booth.id,
       personId: booth.personId,
@@ -325,6 +342,9 @@ export class BoothSystem {
       displayMaterials,
       ownedTextures: new Map(),
       displaySignature: null,
+      displayName: null,
+      hoverRing,
+      namePlate: root.getObjectByName("MESH_NamePlate") ?? null,
       entrance: 0,
     };
     this.#applyDisplay(record, booth.display);
@@ -344,13 +364,26 @@ export class BoothSystem {
 
   #remove(record) {
     record.root.removeFromParent();
+    record.hoverRing?.geometry.dispose();
+    record.hoverRing?.material.dispose();
     for (const texture of record.ownedTextures.values()) texture.dispose();
     for (const material of record.displayMaterials) material.dispose();
     this.booths.delete(record.id);
   }
 
+  // hover 高亮：展示面 emissive 增强 + 地环 + 名牌放大（仅动 per-booth 独立材质，共享材质不受影响）
+  setHighlighted(record, highlighted) {
+    if (!record) return;
+    for (const material of record.displayMaterials) {
+      material.emissive?.set(highlighted ? "#4a3d20" : "#000000");
+    }
+    if (record.hoverRing) record.hoverRing.visible = highlighted;
+    if (record.namePlate) record.namePlate.scale.setScalar(highlighted ? 1.15 : 1);
+  }
+
   #applyDisplay(record, rawDisplay) {
     const display = normalizeDisplay(rawDisplay, record.personId);
+    record.displayName = display.name;
     const signature = JSON.stringify(display);
     if (signature === record.displaySignature) return;
     record.displaySignature = signature;
