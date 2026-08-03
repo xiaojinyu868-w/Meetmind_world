@@ -56,12 +56,14 @@ class AgentRuntime:
     """skill + LLM 决策、规则兜底的 Agent 运行时。"""
 
     def __init__(self, bus: EventBus, rng: random.Random | None = None,
-                 chat_provider=None, memory=None, guard=None):
+                 chat_provider=None, memory=None, guard=None,
+                 capability_provider=None):
         self.bus = bus
         self.rng = rng or random.Random(42)  # 固定种子，demo 可复现
         self._chat = chat_provider           # None 或未配置 → 纯规则驱动
         self._memory = memory                # MemoryStore（授权上下文视图来源）
         self._guard = guard or DEFAULT_GUARD
+        self._capability_provider = capability_provider
         self._last_talk_tick: dict = {}      # agent_id -> 最近交谈 tick
         self._last_meeting_end = -MEETING_INTERVAL_TICKS
         self._meeting: dict | None = None    # runtime 侧会议记账 {id, participants, ticks_left}
@@ -73,11 +75,23 @@ class AgentRuntime:
         agents = {a["id"]: a for a in world_snapshot.get("agents", [])}
         if not agents:
             return
-        self._tick_meeting(tick_no, agents)
+        if self._meeting is not None or self._capability_enabled("agent.roundtable"):
+            self._tick_meeting(tick_no, agents)
         # 会议事件已被 World 同步消费，但本 tick 的快照是会前拍的：
         # 日常调度必须按 runtime 记账跳过与会者，不能凭过期快照
         skip = set(self._meeting["participants"]) if self._meeting else set()
-        self._tick_daily(tick_no, agents, skip)
+        self._tick_daily(
+            tick_no,
+            agents,
+            skip,
+            allow_interactions=self._capability_enabled("agent.interaction"),
+        )
+
+    def _capability_enabled(self, capability_id: str) -> bool:
+        """未注入能力服务时保持单元运行时向后兼容；应用装配时由服务端权威判断。"""
+        if self._capability_provider is None:
+            return True
+        return bool(self._capability_provider(capability_id))
 
     # ---------- 圆桌会议调度（skills/meeting.md） ----------
 
@@ -110,13 +124,23 @@ class AgentRuntime:
 
     # ---------- 咖啡厅日常（skills/cafe_daily.md） ----------
 
-    def _tick_daily(self, tick_no: int, agents: dict, skip: set | None = None) -> None:
+    def _tick_daily(self, tick_no: int, agents: dict, skip: set | None = None,
+                    allow_interactions: bool = True) -> None:
         skip = skip or set()
         idle = [a for a in agents.values()
                 if a["id"] not in skip and a.get("state") != "in-meeting"]
         if not idle:
             return
-        actions = self._decide_with_llm(idle) or self._decide_with_rules(tick_no, idle)
+        if allow_interactions:
+            actions = self._decide_with_llm(idle) or self._decide_with_rules(tick_no, idle)
+        else:
+            # 量能不足时保留个体走动/入座，让世界有呼吸，但禁止 visit/talk。
+            actions = [
+                {"agent_id": agent["id"],
+                 "action": "move" if self.rng.random() < 0.7 else "sit",
+                 "target": None}
+                for agent in idle
+            ]
         for action in actions:
             self._apply_action(tick_no, agents, action)
 

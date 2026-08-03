@@ -1,5 +1,6 @@
 import { CloudUpload, Coffee, Store, createIcons } from "lucide";
 import * as MockApi from "../runtime/mock/MockApi.js";
+import { CapabilityStore } from "../runtime/CapabilityStore.js";
 import { publicUrl } from "../runtime/WorldSpec.js";
 import { navigateToWorld } from "../runtime/WorldSwitch.js";
 import { mountPackagePanel } from "../ui/package-panel/PackagePanel.js";
@@ -128,6 +129,10 @@ export function createUnifiedApi(base = MockApi) {
     fetchSnapshot() {
       return base.fetchSnapshot();
     },
+    getCapabilities(context) {
+      const provider = typeof base.getCapabilities === "function" ? base : MockApi;
+      return provider.getCapabilities(context);
+    },
     // IF-5
     getPackage(personId) {
       return base.getPackage(personId);
@@ -182,7 +187,7 @@ function fallbackToast(message) {
  * @param {(message: string) => void} [options.onToastHook] Toast 输出（缺省用内置小 Toast）
  * @param {(personId: string) => { status?: string, state?: string } | null} [options.presenceProvider]
  *   在场状态提供者（LiveWorld 快照缓存），注入资料包面板的头部状态行
- * @returns {{ api: object, flow: object, panel: object, searchBar: null,
+ * @returns {{ api: object, capabilities: CapabilityStore, flow: object, panel: object, searchBar: null,
  *   openPipeline(): void, refreshPackages(): Promise<object[]> }}
  *   （searchBar 已下线置 null，SearchBar.js 能力保留在 src/ui/package-panel/ 备用）
  */
@@ -194,6 +199,10 @@ export function mountIntegrations({
   presenceProvider = null,
 } = {}) {
   const unifiedApi = api ?? createUnifiedApi();
+  const capabilityApi = typeof unifiedApi.getCapabilities === "function"
+    ? unifiedApi
+    : createUnifiedApi();
+  const capabilities = new CapabilityStore(capabilityApi);
   const notifyToast = typeof onToastHook === "function" ? onToastHook : fallbackToast;
   const locatePerson =
     typeof onPersonSelectedHook === "function" ? onPersonSelectedHook : () => false;
@@ -224,6 +233,9 @@ export function mountIntegrations({
       refreshPackages().catch((error) => {
         console.warn("[integrations] confirm 后刷新资料包列表失败", error);
       });
+      capabilities.refresh().catch((error) => {
+        console.warn("[integrations] confirm 后刷新功能开关失败", error);
+      });
       notifyToast("TA 已住进你的世界");
       try {
         locatePerson(person_id);
@@ -248,6 +260,9 @@ export function mountIntegrations({
   }
   refreshPackages().catch((error) => {
     console.warn("[integrations] getPackages 首次拉取失败", error);
+  });
+  capabilities.refresh().catch((error) => {
+    console.warn("[integrations] capabilities 首次拉取失败，增量能力保持关闭", error);
   });
 
   // 「记录相遇」入口按钮（仅 cafe 视图显示，样式见 INTEGRATION_STYLES）
@@ -278,6 +293,7 @@ export function mountIntegrations({
 
   return {
     api: unifiedApi,
+    capabilities,
     flow,
     panel,
     searchBar,

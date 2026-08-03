@@ -17,8 +17,10 @@ from app.agents.llm import get_provider
 from app.agents.memory.store import MemoryStore
 from app.agents.runtime import AgentRuntime, EventBus
 from app.api import confirm as confirm_api
-from app.api import admin, ingest, media, packages, pipeline, search as search_api
+from app.api import admin, capabilities as capabilities_api
+from app.api import ingest, media, packages, pipeline, search as search_api
 from app.api import world as world_api
+from app.capabilities import CapabilityService
 from app.harness.permissions.guard import DEFAULT_GUARD, PermissionDenied
 from app.packages.store import PackageStore
 from app.world.hall import HALL_BOUNDS, build_display_from_package
@@ -36,6 +38,7 @@ def create_app() -> FastAPI:
     store = PackageStore()  # 数据目录由 ECHO_DATA_DIR 控制，默认 backend/data
     seed_demo_packages(store)  # 6 个 demo Package（幂等），检索/资料包开箱有数据
     memory = MemoryStore(store, guard=DEFAULT_GUARD)
+    capabilities = CapabilityService(store)
 
     # 展位大厅（MVP1.5 两级世界）：静态陈列实例 + 稀疏串门调度器；
     # 启动时把 seed 6 人全部注册（display 从各自 Package 组装，首版全量上墙）
@@ -58,14 +61,17 @@ def create_app() -> FastAPI:
     app.state.runtime = AgentRuntime(
         bus, rng=random.Random(42),
         chat_provider=get_provider("chat"), memory=memory, guard=DEFAULT_GUARD,
+        capability_provider=capabilities.enabled,
     )
     # 大厅串门调度器：有目的的稀疏活动（共同 tags/relations 驱动，默认 1/8 概率）
     app.state.hall_runtime = HallRuntime(
         hall_bus, rng=random.Random(7),
         chat_provider=get_provider("chat"), memory=memory, guard=DEFAULT_GUARD,
+        capability_provider=capabilities.enabled,
     )
     app.state.store = store
     app.state.memory = memory
+    app.state.capabilities = capabilities
 
     # 自进化写入越权 → 403（ADR-4：权限失控是最大的产品风险）
     @app.exception_handler(PermissionDenied)
@@ -85,6 +91,7 @@ def create_app() -> FastAPI:
     app.include_router(world_api.router)
     app.include_router(media.router)
     app.include_router(admin.router)
+    app.include_router(capabilities_api.router)
     return app
 
 

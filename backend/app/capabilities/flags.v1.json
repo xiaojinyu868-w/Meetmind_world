@@ -1,0 +1,118 @@
+{
+  "schema": "echo-capability-config.v1",
+  "high_inference_coverage": 0.8,
+  "flags": [
+    {
+      "id": "base.world_browse",
+      "label": "世界浏览",
+      "scope": "base",
+      "rollout": "enabled",
+      "requires": { "min_packages": 1 }
+    },
+    {
+      "id": "base.package_view",
+      "label": "资料包查看",
+      "scope": "base",
+      "rollout": "enabled",
+      "requires": { "min_packages": 1 }
+    },
+    {
+      "id": "base.scene_hotspots",
+      "label": "场景语言点位",
+      "scope": "base",
+      "rollout": "enabled",
+      "requires": { "min_packages": 1 }
+    },
+    {
+      "id": "base.person_search",
+      "label": "人物检索",
+      "scope": "base",
+      "rollout": "enabled",
+      "requires": { "min_packages": 1 }
+    },
+    {
+      "id": "agent.interaction",
+      "label": "Agent 互相访问",
+      "scope": "context",
+      "rollout": "enabled",
+      "requires": { "min_packages": 10 }
+    },
+    {
+      "id": "agent.roundtable",
+      "label": "圆桌会议",
+      "scope": "context",
+      "rollout": "enabled",
+      "requires": { "min_packages": 10 }
+    },
+    {
+      "id": "market.scene",
+      "label": "市集场景",
+      "scope": "context",
+      "rollout": "enabled",
+      "requires": { "min_packages": 10 }
+    },
+    {
+      "id": "field.personal",
+      "label": "个人场域",
+      "scope": "context",
+      "rollout": "enabled",
+      "requires": { "min_packages": 10 }
+    },
+    {
+      "id": "group.impressions",
+      "label": "第一印象互写",
+      "scope": "group",
+      "rollout": "enabled",
+      "requires": { "min_group_participants": 5 }
+    },
+    {
+      "id": "group.presence",
+      "label": "现场位置同步",
+      "scope": "group",
+      "rollout": "enabled",
+      "requires": { "min_group_participants": 5 }
+    },
+    {
+      "id": "group.icebreaker",
+      "label": "破冰互动",
+      "scope": "group",
+      "rollout": "enabled",
+      "requires": { "min_group_participants": 5 }
+    },
+    {
+      "id": "group.display",
+      "label": "现场大屏",
+      "scope": "group",
+      "rollout": "enabled",
+      "requires": { "min_group_participants": 5 }
+    },
+    {
+      "id": "value.matching",
+      "label": "价值匹配推送",
+      "scope": "deferred",
+      "rollout": "deferred",
+      "requires": { "min_packages": 10, "high_inference_coverage": true }
+    },
+    {
+      "id": "value.wechat_actions",
+      "label": "微信行动建议",
+      "scope": "deferred",
+      "rollout": "deferred",
+      "requires": { "min_packages": 10, "high_inference_coverage": true }
+    },
+    {
+      "id": "network.cross_user",
+      "label": "跨用户网络",
+      "scope": "future",
+      "rollout": "future",
+      "requires": { "multi_user": true, "owner_confirmation": true }
+    },
+    {
+      "id": "network.organization_space",
+      "label": "组织空间",
+      "scope": "future",
+      "rollout": "future",
+      "requires": { "multi_user": true, "owner_confirmation": true }
+    }
+  ]
+}

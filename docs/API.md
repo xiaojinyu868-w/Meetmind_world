@@ -18,12 +18,46 @@
 | IF-6 | `POST /api/v0/agents/meeting` 等 | MVP2 | 互动：发起圆桌、Agent 事件流 |
 | IF-7 | `GET /api/v0/notifications` `POST /api/v0/feedback` `POST /api/v0/refill` | MVP2 | 推送：价值事件通知、有用/无用反馈、微信行动回填 |
 | IF-8 | 授权/组织/网络接口 | MVP3 | 本人确认、权限级别变更、组织空间、网络互联（届时另立详节） |
+| IF-C | `GET /api/v0/capabilities` | 跨阶段 | 上下文量能：统一返回已解锁、未解锁、暂缓和未来能力 |
 
 设计要点：
 
 - **IF-1 与 IF-2 分离**：输入可能长时间持续（眼镜常开），处理按需触发；输入只管可靠落盘（事实层，只增不改），处理只管从事实层提取特征。
 - **中间特征是一等公民**：IF-2 不只产出最终结果，还有关键帧、人脸候选、转写片段——前端用它们做实时反馈（"拍到了谁、正在识别什么"），它们也是推断层数据的来源指针。
 - **一切人物数据写入都必须经过 IF-3 用户确认**（P-3：事实层只能由采集管线 + 用户确认写入）。
+
+## IF-C 上下文量能 `GET /api/v0/capabilities`
+
+返回版本化的 `echo-capabilities.v1` 能力快照。前端只消费快照，不复制 Package
+阈值；服务端 Agent Runtime 也读取同一能力服务，避免 UI 隐藏但后台仍在运行。
+
+```jsonc
+{
+  "schema": "echo-capabilities.v1",
+  "metrics": {
+    "confirmed_package_count": 6,
+    "inference_coverage": 1.0,
+    "group_participant_count": 0
+  },
+  "capabilities": {
+    "base.world_browse": { "enabled": true, "status": "enabled", "unmet": [] },
+    "agent.roundtable": {
+      "enabled": false,
+      "status": "locked",
+      "unmet": ["package-count"],
+      "reason": "已确认 Package 数量不足"
+    },
+    "value.matching": { "enabled": false, "eligible": false, "status": "deferred" }
+  }
+}
+```
+
+- `confirmed_package_count` 只统计完成身份确认的 Package，未确认草稿不参与解锁。
+- `status` 为 `enabled | locked | deferred | future`；`eligible` 仅代表数据条件达标，
+  `deferred/future` 即使达标也保持 `enabled=false`。
+- 可传 `?group_participants=5` 预览现场群体能力；范围为 0-8。该参数只用于 UI
+  预览，群体业务端必须以房间权威 roster 再次计算，不能把客户端人数当授权依据。
+- 响应不包含原始照片、音视频、事实内容或内部记忆，只包含计数和开关状态。
 
 ---
 
@@ -148,7 +182,7 @@ booth module 结构（快照 modules 内，`type: "booth"`）：
 
 ## 前端 mock 约定（先前端阶段）
 
-- mock 数据放 `public/data/mock/`：`ingest.response.json`、`pipeline.stream.jsonl`（按行模拟 SSE 事件，前端定时器逐条播放模拟流式）、`snapshot.demo.json`、`packages.demo.json`、`search.demo.json`。
+- mock 数据放 `public/data/mock/`：`ingest.response.json`、`pipeline.stream.jsonl`（按行模拟 SSE 事件，前端定时器逐条播放模拟流式）、`snapshot.demo.json`、`packages.demo.json`、`search.demo.json`、`capabilities.demo.json`。
 - 前端 mock 只准消费本契约字段；对齐效果后，后端实现到"前端零改动切 baseURL 即可用"。
 - mock 场景素材两条核心路径：黑客松展位（新人，`match_person_id: null`）+ 老朋友重逢（非空）。
 
@@ -163,3 +197,4 @@ booth module 结构（快照 modules 内，`type: "booth"`）：
 - 2026-08-03 | v0.1：扩展为全量接口地图（IF-1~IF-8，按 MVP 阶段分组），IF-1~IF-5 出详节，IF-6/7/8 先行登记 | 人（指正接口不止两个）+ AI（补全）
 - 2026-08-03 | v0.2：IF-2 接口更名为 `pipeline`（原 paipai 为语音转写错误） | 人 + AI
 - 2026-08-03 | v0.3（加性）：IF-4 增加 `?world=hall|cafe` 参数与 booth module 结构；新增媒体路由 `GET /api/v0/media/{ref}`；IF-3 confirm 响应增加 `booth_id` | AI
+- 2026-08-04 | v0.4（加性）：新增 IF-C `GET /api/v0/capabilities` 与 `echo-capabilities.v1`，编码上下文量能及暂缓/未来状态 | 人（边界）+ AI（实现）

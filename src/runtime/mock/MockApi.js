@@ -21,6 +21,7 @@ import { publicUrl } from "../WorldSpec.js";
 const LIVE_BASE_URL = `${import.meta.env.BASE_URL}api/v0`;
 const MOCK_DIR = "data/mock";
 const SNAPSHOT_SCHEMA = "echo-snapshot.v1";
+const CAPABILITIES_SCHEMA = "echo-capabilities.v1";
 
 /** pipeline mock 播放节奏：每条 SSE 事件之间的间隔（毫秒），模拟真实处理耗时。 */
 const PIPELINE_STEP_DELAY_MIN_MS = 600;
@@ -146,6 +147,16 @@ function validateSnapshot(snapshot) {
   }
   if (!Array.isArray(snapshot.modules)) snapshot.modules = [];
   if (!Array.isArray(snapshot.events)) snapshot.events = [];
+  return snapshot;
+}
+
+function validateCapabilities(snapshot) {
+  if (!snapshot || snapshot.schema !== CAPABILITIES_SCHEMA) {
+    throw new Error(`不支持的 capabilities schema：${snapshot?.schema}`);
+  }
+  if (!snapshot.metrics || !snapshot.capabilities) {
+    throw new Error("capabilities 必须包含 metrics 与 capabilities");
+  }
   return snapshot;
 }
 
@@ -418,4 +429,19 @@ export async function fetchSnapshot() {
     console.warn("[MockApi] snapshot.demo.json 加载失败，使用内置 fallback 快照：", error);
     return SNAPSHOT_FALLBACK;
   }
+}
+
+/**
+ * 上下文量能功能开关：服务端按已确认 Package、推断覆盖率与现场人数计算。
+ * @param {{groupParticipants?: number}} context
+ * @returns {Promise<object>} echo-capabilities.v1
+ */
+export async function getCapabilities({ groupParticipants = 0 } = {}) {
+  if (isLiveMode()) {
+    const params = new URLSearchParams({
+      group_participants: String(Math.max(0, Number(groupParticipants) || 0)),
+    });
+    return validateCapabilities(await fetchJson(`${LIVE_BASE_URL}/capabilities?${params}`));
+  }
+  return validateCapabilities(await fetchJson(mockUrl("capabilities.demo.json")));
 }

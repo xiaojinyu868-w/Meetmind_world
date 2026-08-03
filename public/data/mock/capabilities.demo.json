@@ -1,0 +1,175 @@
+{
+  "schema": "echo-capabilities.v1",
+  "metrics": {
+    "total_package_count": 6,
+    "confirmed_package_count": 6,
+    "inferred_package_count": 6,
+    "inference_coverage": 1.0,
+    "high_inference_coverage": 0.8,
+    "group_participant_count": 0,
+    "multi_user_enabled": false,
+    "owner_confirmation_enabled": false
+  },
+  "capabilities": {
+    "base.world_browse": {
+      "enabled": true,
+      "eligible": true,
+      "status": "enabled",
+      "label": "世界浏览",
+      "scope": "base",
+      "requires": { "min_packages": 1 },
+      "unmet": [],
+      "reason": null
+    },
+    "base.package_view": {
+      "enabled": true,
+      "eligible": true,
+      "status": "enabled",
+      "label": "资料包查看",
+      "scope": "base",
+      "requires": { "min_packages": 1 },
+      "unmet": [],
+      "reason": null
+    },
+    "base.scene_hotspots": {
+      "enabled": true,
+      "eligible": true,
+      "status": "enabled",
+      "label": "场景语言点位",
+      "scope": "base",
+      "requires": { "min_packages": 1 },
+      "unmet": [],
+      "reason": null
+    },
+    "base.person_search": {
+      "enabled": true,
+      "eligible": true,
+      "status": "enabled",
+      "label": "人物检索",
+      "scope": "base",
+      "requires": { "min_packages": 1 },
+      "unmet": [],
+      "reason": null
+    },
+    "agent.interaction": {
+      "enabled": false,
+      "eligible": false,
+      "status": "locked",
+      "label": "Agent 互相访问",
+      "scope": "context",
+      "requires": { "min_packages": 10 },
+      "unmet": ["package-count"],
+      "reason": "已确认 Package 数量不足"
+    },
+    "agent.roundtable": {
+      "enabled": false,
+      "eligible": false,
+      "status": "locked",
+      "label": "圆桌会议",
+      "scope": "context",
+      "requires": { "min_packages": 10 },
+      "unmet": ["package-count"],
+      "reason": "已确认 Package 数量不足"
+    },
+    "market.scene": {
+      "enabled": false,
+      "eligible": false,
+      "status": "locked",
+      "label": "市集场景",
+      "scope": "context",
+      "requires": { "min_packages": 10 },
+      "unmet": ["package-count"],
+      "reason": "已确认 Package 数量不足"
+    },
+    "field.personal": {
+      "enabled": false,
+      "eligible": false,
+      "status": "locked",
+      "label": "个人场域",
+      "scope": "context",
+      "requires": { "min_packages": 10 },
+      "unmet": ["package-count"],
+      "reason": "已确认 Package 数量不足"
+    },
+    "group.impressions": {
+      "enabled": false,
+      "eligible": false,
+      "status": "locked",
+      "label": "第一印象互写",
+      "scope": "group",
+      "requires": { "min_group_participants": 5 },
+      "unmet": ["group-participants"],
+      "reason": "现场已建档参与者不足 5 人"
+    },
+    "group.presence": {
+      "enabled": false,
+      "eligible": false,
+      "status": "locked",
+      "label": "现场位置同步",
+      "scope": "group",
+      "requires": { "min_group_participants": 5 },
+      "unmet": ["group-participants"],
+      "reason": "现场已建档参与者不足 5 人"
+    },
+    "group.icebreaker": {
+      "enabled": false,
+      "eligible": false,
+      "status": "locked",
+      "label": "破冰互动",
+      "scope": "group",
+      "requires": { "min_group_participants": 5 },
+      "unmet": ["group-participants"],
+      "reason": "现场已建档参与者不足 5 人"
+    },
+    "group.display": {
+      "enabled": false,
+      "eligible": false,
+      "status": "locked",
+      "label": "现场大屏",
+      "scope": "group",
+      "requires": { "min_group_participants": 5 },
+      "unmet": ["group-participants"],
+      "reason": "现场已建档参与者不足 5 人"
+    },
+    "value.matching": {
+      "enabled": false,
+      "eligible": false,
+      "status": "deferred",
+      "label": "价值匹配推送",
+      "scope": "deferred",
+      "requires": { "min_packages": 10, "high_inference_coverage": true },
+      "unmet": ["package-count"],
+      "reason": "能力已暂缓，MVP2 验收后重新评审"
+    },
+    "value.wechat_actions": {
+      "enabled": false,
+      "eligible": false,
+      "status": "deferred",
+      "label": "微信行动建议",
+      "scope": "deferred",
+      "requires": { "min_packages": 10, "high_inference_coverage": true },
+      "unmet": ["package-count"],
+      "reason": "能力已暂缓，MVP2 验收后重新评审"
+    },
+    "network.cross_user": {
+      "enabled": false,
+      "eligible": false,
+      "status": "future",
+      "label": "跨用户网络",
+      "scope": "future",
+      "requires": { "multi_user": true, "owner_confirmation": true },
+      "unmet": ["multi-user", "owner-confirmation"],
+      "reason": "能力属于多用户后续阶段"
+    },
+    "network.organization_space": {
+      "enabled": false,
+      "eligible": false,
+      "status": "future",
+      "label": "组织空间",
+      "scope": "future",
+      "requires": { "multi_user": true, "owner_confirmation": true },
+      "unmet": ["multi-user", "owner-confirmation"],
+      "reason": "能力属于多用户后续阶段"
+    }
+  }
+}

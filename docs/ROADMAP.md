@@ -94,7 +94,7 @@
 - [x] X.3 模型接口抽象层（qwen3.7PLUS 默认，可替换）
 - [x] X.4 模型调用审计日志（输入摘要/输出/耗时/费用）
 - [ ] X.5 数据迁移评估：文件 → 数据库（触发条件见 ARCHITECTURE.md TBD-ARCH-2）
-- [ ] X.6 上下文量能 feature flag：把 CONTEXT-AND-MEMORY.md §8 对照表编码为功能开关配置（P-1 的执行机制，替代口头约定）
+- [x] X.6 上下文量能 feature flag：版本化配置 + `echo-capabilities.v1` 能力快照已落地；按已确认 Package、推断覆盖率、现场人数计算，Agent 串门/圆桌由服务端强制执行，暂缓/未来能力不能因数据达标而误开
 
 ---
 
@@ -145,3 +145,4 @@
 - 2026-08-03 | 决策落档：TBD-F2 已决（场域 = "我与 TA 的关系"，2.G.2 更新）；TBD-S1 已决（三类场景同期制作、分步交付）；TBD-P3 已决（首版不做隐私授权/修改流程） | 人（决策）+ AI（记录）
 - 2026-08-03 | M1.4 头像 storybook 风格重渲染（render_portraits_storybook.py 管线，7 张胸像 76-117KB，旧图备份 portraits/legacy/）+ 身份全链路对齐（队友真实身份：backend seed 姓名/voxel 肖像、mock packages、测试同步，前后端 demoPeople 一致）；114 backend tests 绿 | AI
 - 2026-08-03 | ART-BRIEF v4（体素+AI 贴图契约，P-6/ADR-6）+ 首版不执行权限过滤（TBD-P3：展位上墙/对话上下文/资料包读取全量放开，privacy 字段保留默认 L1，身份确认 FR-1.3 与 harness 权限矩阵保留；115 backend tests 绿）+ 2.F.1/2.F.2 勾掉（市集街道与咖啡厅双世界已在线） | 人（决策）+ AI（实现）
+- 2026-08-04 | X.6 落地：`flags.v1.json` 成为上下文量能唯一规则源；新增能力服务/API/前端 Store，6 个种子 Package 时禁止 Agent 间互动，累计 10 个已确认 Package 后动态解锁；群体模式按上游已建档人数判断，视觉与音视频处理继续由外部链路负责 | 人（边界）+ AI（实现）

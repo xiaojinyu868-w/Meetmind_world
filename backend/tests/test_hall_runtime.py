@@ -218,6 +218,12 @@ def client(tmp_path, monkeypatch):
 
 
 def test_hall_visit_via_api(client, monkeypatch):
+    # 量能规则：累计到 10 个已确认 Package 才允许 Agent 串门。
+    store = client.app.state.store
+    for index in range(4):
+        person_id = f"context-{index}"
+        store.create_draft_package(person_id, {})
+        store.confirm_identity(person_id, person_id)
     # 种子熟人经 relations.md 配对；概率拉满保证当场触发
     monkeypatch.setattr(client.app.state.hall_runtime, "visit_probability", 1.0)
     snapshots = []

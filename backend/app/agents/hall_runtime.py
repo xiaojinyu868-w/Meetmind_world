@@ -39,12 +39,14 @@ class HallRuntime:
     """展位大厅的稀疏串门调度器。"""
 
     def __init__(self, bus, rng: random.Random | None = None, chat_provider=None,
-                 memory=None, guard=None, visit_probability: float = VISIT_PROBABILITY):
+                 memory=None, guard=None, visit_probability: float = VISIT_PROBABILITY,
+                 capability_provider=None):
         self.bus = bus
         self.rng = rng or random.Random(7)
         self._chat = chat_provider
         self._memory = memory
         self._guard = guard or DEFAULT_GUARD
+        self._capability_provider = capability_provider
         self.visit_probability = visit_probability
         self._visit: dict | None = None   # 进行中的串门（状态机）
         self._cooldown = 0
@@ -58,6 +60,9 @@ class HallRuntime:
         if self._visit is not None:
             self._advance_visit()
             return
+        if self._capability_provider is not None:
+            if not self._capability_provider("agent.interaction"):
+                return
         if self._cooldown > 0:
             self._cooldown -= 1
             return
