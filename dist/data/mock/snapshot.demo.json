@@ -100,11 +100,11 @@
     }
   ],
   "modules": [
-    { "id": "roundtable-six", "type": "roundtable", "position": { "x": 0, "z": 0 } },
-    { "id": "table-window-two", "type": "table", "position": { "x": -3.65, "z": -1.55 } },
-    { "id": "table-poster-two", "type": "table", "position": { "x": -3.65, "z": 1.55 } },
-    { "id": "table-library-four", "type": "table", "position": { "x": 3.28, "z": -1.35 } },
-    { "id": "table-counter-four", "type": "table", "position": { "x": 3.28, "z": 1.65 } }
+    { "id": "roundtable-six", "type": "roundtable", "position": { "x": 0, "z": 0, "yaw": 0 }, "interaction": { "label": "中央六人圆桌", "radius": 2.72, "primary": { "key": "E", "action": "context-menu", "label": "坐下" }, "secondary": { "key": "F", "action": "meeting", "label": "发起圆桌" } } },
+    { "id": "table-window-two", "type": "table", "position": { "x": -3.65, "z": -1.55, "yaw": 0 }, "interaction": { "label": "窗边双人桌", "radius": 1.65, "primary": { "key": "E", "action": "context-menu", "label": "坐下" }, "secondary": { "key": "F", "action": "recall-memory", "label": "共同记忆" } } },
+    { "id": "table-poster-two", "type": "table", "position": { "x": -3.65, "z": 1.55, "yaw": 0 }, "interaction": { "label": "海报双人桌", "radius": 1.65, "primary": { "key": "E", "action": "context-menu", "label": "坐下" }, "secondary": { "key": "F", "action": "recall-memory", "label": "共同记忆" } } },
+    { "id": "table-library-four", "type": "table", "position": { "x": 3.28, "z": -1.35, "yaw": 0 }, "interaction": { "label": "书架四人桌", "radius": 1.8, "primary": { "key": "E", "action": "context-menu", "label": "坐下" }, "secondary": { "key": "F", "action": "recall-memory", "label": "共同记忆" } } },
+    { "id": "table-counter-four", "type": "table", "position": { "x": 3.28, "z": 1.65, "yaw": 0 }, "interaction": { "label": "吧台侧四人桌", "radius": 1.8, "primary": { "key": "E", "action": "context-menu", "label": "坐下" }, "secondary": { "key": "F", "action": "recall-memory", "label": "共同记忆" } } }
   ],
   "events": [
     {

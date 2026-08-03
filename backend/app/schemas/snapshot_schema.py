@@ -11,6 +11,9 @@ SCHEMA_VERSION = "echo-snapshot.v1"
 
 # ARCHITECTURE.md §4 示例中的状态枚举 + MVP1.5 展位大厅的 at-booth
 AGENT_STATES = ("walking", "seated", "talking", "in-meeting", "at-booth")
+HOTSPOT_ACTIONS = (
+    "context-menu", "meeting", "recall-memory", "open-package", "invite-to-cafe",
+)
 
 
 class SnapshotSchemaError(ValueError):
@@ -100,6 +103,34 @@ def _validate_module(module, field: str) -> None:
         raise SnapshotSchemaError(f"Snapshot module type must be a non-empty string: {field}.type")
     if module_type == "booth":
         _validate_booth_module(module, field)
+    interaction = module.get("interaction")
+    if interaction is not None:
+        _validate_position(module.get("position"), f"{field}.position")
+        _validate_interaction(interaction, f"{field}.interaction")
+
+
+def _validate_interaction(interaction, field: str) -> None:
+    if not isinstance(interaction, dict):
+        raise SnapshotSchemaError(f"Module interaction must be an object: {field}")
+    label = interaction.get("label")
+    if not isinstance(label, str) or not label.strip() or len(label) > 40:
+        raise SnapshotSchemaError(f"Module interaction label is invalid: {field}.label")
+    radius = interaction.get("radius")
+    if (not isinstance(radius, (int, float)) or isinstance(radius, bool)
+            or not 0.5 <= float(radius) <= 5.0):
+        raise SnapshotSchemaError(f"Module interaction radius must be 0.5..5: {field}.radius")
+    for slot, expected_key in (("primary", "E"), ("secondary", "F")):
+        command = interaction.get(slot)
+        if not isinstance(command, dict):
+            raise SnapshotSchemaError(f"Module interaction requires {slot}: {field}.{slot}")
+        if command.get("key") != expected_key:
+            raise SnapshotSchemaError(
+                f"Module interaction {slot} key must be {expected_key}: {field}.{slot}.key")
+        if command.get("action") not in HOTSPOT_ACTIONS:
+            raise SnapshotSchemaError(f"Unsupported hotspot action: {field}.{slot}.action")
+        command_label = command.get("label")
+        if not isinstance(command_label, str) or not command_label.strip() or len(command_label) > 24:
+            raise SnapshotSchemaError(f"Hotspot action label is invalid: {field}.{slot}.label")
 
 
 def _validate_booth_module(module, field: str) -> None:

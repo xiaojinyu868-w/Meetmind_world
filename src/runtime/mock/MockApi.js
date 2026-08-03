@@ -172,11 +172,11 @@ export const SNAPSHOT_FALLBACK = Object.freeze({
       avatar: { palette: { hair: "#4a352d", jacket: "#2f7d7b", MAT_Jacket_Light: "#52a09b", shirt: "#efe5ca", pants: "#383e48", shoes: "#cc7548", skin: "#d79a73" } } },
   ]),
   modules: Object.freeze([
-    { id: "roundtable-six", type: "roundtable", position: { x: 0, z: 0 } },
-    { id: "table-window-two", type: "table", position: { x: -3.65, z: -1.55 } },
-    { id: "table-poster-two", type: "table", position: { x: -3.65, z: 1.55 } },
-    { id: "table-library-four", type: "table", position: { x: 3.28, z: -1.35 } },
-    { id: "table-counter-four", type: "table", position: { x: 3.28, z: 1.65 } },
+    { id: "roundtable-six", type: "roundtable", position: { x: 0, z: 0 }, interaction: { label: "中央六人圆桌", radius: 2.72, primary: { key: "E", action: "context-menu", label: "坐下" }, secondary: { key: "F", action: "meeting", label: "发起圆桌" } } },
+    { id: "table-window-two", type: "table", position: { x: -3.65, z: -1.55 }, interaction: { label: "窗边双人桌", radius: 1.65, primary: { key: "E", action: "context-menu", label: "坐下" }, secondary: { key: "F", action: "recall-memory", label: "共同记忆" } } },
+    { id: "table-poster-two", type: "table", position: { x: -3.65, z: 1.55 }, interaction: { label: "海报双人桌", radius: 1.65, primary: { key: "E", action: "context-menu", label: "坐下" }, secondary: { key: "F", action: "recall-memory", label: "共同记忆" } } },
+    { id: "table-library-four", type: "table", position: { x: 3.28, z: -1.35 }, interaction: { label: "书架四人桌", radius: 1.8, primary: { key: "E", action: "context-menu", label: "坐下" }, secondary: { key: "F", action: "recall-memory", label: "共同记忆" } } },
+    { id: "table-counter-four", type: "table", position: { x: 3.28, z: 1.65 }, interaction: { label: "吧台侧四人桌", radius: 1.8, primary: { key: "E", action: "context-menu", label: "坐下" }, secondary: { key: "F", action: "recall-memory", label: "共同记忆" } } },
   ]),
   events: Object.freeze([]),
 });
@@ -418,4 +418,28 @@ export async function fetchSnapshot() {
     console.warn("[MockApi] snapshot.demo.json 加载失败，使用内置 fallback 快照：", error);
     return SNAPSHOT_FALLBACK;
   }
+}
+
+
+/** 用户主动发起圆桌；mock 只回契约结果，场景位置由调用方本地演出。 */
+export async function startMeeting({ topic, participants } = {}) {
+  const selected = [...new Set(Array.isArray(participants) ? participants : [])].filter(Boolean).slice(0, 5);
+  const normalizedTopic = String(topic ?? "").trim();
+  if (!normalizedTopic || selected.length === 0) {
+    throw new Error("圆桌需要话题和至少一位参与者");
+  }
+  if (isLiveMode()) return postJson("/agents/meeting", { topic: normalizedTopic, participants: selected });
+  return {
+    accepted: true,
+    meeting_id: `meeting_mock_${Date.now()}`,
+    participants: selected,
+    topic: normalizedTopic,
+  };
+}
+
+
+export async function endMeeting(meetingId) {
+  if (!meetingId) throw new Error("meetingId 必填");
+  if (isLiveMode()) return postJson(`/agents/meeting/${encodeURIComponent(meetingId)}/end`, {});
+  return { ended: true, meeting_id: meetingId };
 }

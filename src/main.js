@@ -12,6 +12,7 @@ import { HeartSignalSystem } from "./runtime/HeartSignalSystem.js";
 import { LiveWorld } from "./runtime/LiveWorld.js";
 import { NpcAgentSystem } from "./runtime/NpcAgentSystem.js";
 import { PersonSignalStore } from "./runtime/PersonSignalStore.js";
+import { nearestSceneHotspot, normalizeSceneHotspots } from "./runtime/SceneHotspots.js";
 import {
   CHARACTER_VARIANT_OPTIONS,
   characterAssetId,
@@ -26,7 +27,7 @@ import {
 } from "./runtime/SceneVariants.js";
 import { adaptSnapshot, normalizeEvent } from "./runtime/SnapshotAdapter.js";
 import { slideStepAroundBlockers } from "./runtime/WalkSlide.js";
-import { CAFE_WORLD, HALL_LAYOUT, worldFromLocation } from "./runtime/WorldSwitch.js";
+import { CAFE_WORLD, HALL_LAYOUT, navigateToWorld, worldFromLocation } from "./runtime/WorldSwitch.js";
 import {
   adaptMaterialToProfile,
   adaptSceneMaterials,
@@ -209,7 +210,10 @@ let selectionMarker = null;
 let selectedPersonId = null;
 let experienceMode = "intro";
 let meetingMode = false;
-let roundtableNearby = false;
+let sceneHotspots = [];
+let activeSceneHotspot = null;
+let activeMeetingId = null;
+let playerSeated = false;
 let elapsed = 0;
 let diagnosticFrame = 0;
 const expressionSystem = new CharacterExpressionSystem();
@@ -255,6 +259,7 @@ const appShell = createCafeShell({
   onLocatePerson: (person) => selectWorldPerson(person.id),
   onMeetingStart: startMeeting,
   onMeetingEnd: endMeeting,
+  onSceneAction: handleSceneAction,
   resolveMediaUrl,
   world: activeWorld.id,
   onExpressionChange: (personId, expression, metadata) => {
@@ -554,13 +559,15 @@ function updateSelectionMarker() {
 }
 
 
-function startMeeting(personIds) {
+async function startMeeting({ participants: personIds, topic }) {
   if (!worldReady || meetingMode) return [];
+  const request = await api.startMeeting({ participants: personIds, topic });
+  activeMeetingId = request.meeting_id ?? request.meetingId ?? null;
   let accepted = [];
   if (liveEnabled) {
     // live 模式：不走 NpcAgentSystem 本地调度，改为快照驱动层上的会议覆盖目标
     accepted = [...new Set(personIds)]
-      .filter((personId) => npcSystem.getEntity(personId))
+      .filter((personId) => (request.participants ?? personIds).includes(personId) && npcSystem.getEntity(personId))
       .slice(0, 5);
     accepted.forEach((personId, index) => {
       const seat = CAFE_LAYOUT.roundtable.seats[index + 1];
@@ -585,9 +592,13 @@ function startMeeting(personIds) {
       });
     });
   } else {
-    accepted = npcSystem.startMeeting(personIds);
+    accepted = npcSystem.startMeeting(request.participants ?? personIds);
   }
-  if (accepted.length === 0) return [];
+  if (accepted.length === 0) {
+    if (activeMeetingId) await api.endMeeting(activeMeetingId).catch(() => {});
+    activeMeetingId = null;
+    return [];
+  }
   liveMeetingSeatIndices = [0, ...accepted.map((_, index) => index + 1)];
   meetingMode = true;
   const playerSeat = CAFE_LAYOUT.roundtable.seats[0];
@@ -600,14 +611,17 @@ function startMeeting(personIds) {
   touchInput.set(0, 0);
   canvas.dataset.meetingActive = "true";
   canvas.dataset.meetingInvited = accepted.join(",");
-  return accepted;
+  canvas.dataset.meetingId = activeMeetingId ?? "";
+  return { participants: accepted, meetingId: activeMeetingId, topic: request.topic ?? topic };
 }
 
 
-function endMeeting() {
+async function endMeeting() {
   if (!worldReady) return;
+  if (activeMeetingId) await api.endMeeting(activeMeetingId);
   meetingMode = false;
   player.scale.set(1, 1, 1);
+  playerSeated = false;
   playerMarker.visible = experienceMode === "cafe";
   playerEntity.spec.behavior.idle_bob = 0;
   actorAt(playerEntity, 0, 3.12, Math.PI);
@@ -622,6 +636,46 @@ function endMeeting() {
   liveMeetingSeatIndices = [];
   canvas.dataset.meetingActive = "false";
   canvas.dataset.meetingInvited = "";
+  canvas.dataset.playerSeatedAt = "";
+  canvas.dataset.meetingId = "";
+  activeMeetingId = null;
+}
+
+
+function seatPlayerAtHotspot(hotspot) {
+  if (isHallWorld || !hotspot) return false;
+  const table = tableById(hotspot.id);
+  if (!table?.seats?.length) return false;
+  const seat = [...table.seats].sort((left, right) => (
+    Math.hypot(left.x - player.position.x, left.z - player.position.z) -
+    Math.hypot(right.x - player.position.x, right.z - player.position.z)
+  ))[0];
+  actorAt(playerEntity, seat.x, seat.z, seat.yaw, SEATED_ROOT_Y);
+  playerGroundY = surfaceHeightAt(seat.x, seat.z) ?? 0;
+  player.scale.set(1, SEATED_SCALE_Y, 1);
+  playerSeated = true;
+  currentHeading.set(Math.sin(seat.yaw), 0, Math.cos(seat.yaw));
+  pressedKeys.clear();
+  touchInput.set(0, 0);
+  canvas.dataset.playerSeatedAt = hotspot.id;
+  updatePlayerMarker();
+  return true;
+}
+
+
+async function handleSceneAction({ hotspot, action, personId = null }) {
+  if (!hotspot) return false;
+  if (action === "drink-coffee") return seatPlayerAtHotspot(hotspot);
+  if (action === "recall-memory") {
+    if (personId) integrations.panel.openPerson(personId);
+    return Boolean(personId);
+  }
+  if (action === "open-package") {
+    if (hotspot.personId) integrations.panel.openPerson(hotspot.personId);
+    return Boolean(hotspot.personId);
+  }
+  if (action === "invite-to-cafe") return navigateToWorld("cafe");
+  return false;
 }
 
 
@@ -796,7 +850,11 @@ function applyLiveSnapshot(rawSnapshot) {
         ? boothModules
         : (liveWorld?.source === "live" ? [] : buildFallbackBooths(people));
     canvas.dataset.boothCount = String(boothSystem.sync(booths));
+    sceneHotspots = normalizeSceneHotspots(booths);
+  } else {
+    sceneHotspots = normalizeSceneHotspots(adapted.modules);
   }
+  canvas.dataset.hotspotCount = String(sceneHotspots.length);
 
   for (const agent of adapted.agents) {
     if (agent.id === currentUser.id || liveMeetingOverrides.has(agent.id)) continue;
@@ -1132,6 +1190,12 @@ function updatePlayer(delta) {
   const moving = input.lengthSq() > 0.0025;
 
   if (moving) {
+    if (playerSeated) {
+      playerSeated = false;
+      player.scale.set(1, 1, 1);
+      playerEntity.spec.behavior.idle_bob = 0;
+      canvas.dataset.playerSeatedAt = "";
+    }
     movementForward.copy(currentHeading).setY(0).normalize();
     movementRight.crossVectors(movementForward, WORLD_UP).normalize();
     moveDirection
@@ -1260,23 +1324,16 @@ function updateSpeechPositions() {
 }
 
 
-function updateRoundtablePrompt() {
-  if (isHallWorld) {
-    // 大厅没有圆桌会议
-    if (roundtableNearby) {
-      roundtableNearby = false;
-      appShell.setRoundtableNearby(false);
-      canvas.dataset.roundtableNearby = "false";
-    }
-    return;
-  }
-  const distance = Math.hypot(
-    player.position.x - CAFE_LAYOUT.roundtable.center.x,
-    player.position.z - CAFE_LAYOUT.roundtable.center.z,
-  );
-  roundtableNearby = experienceMode === "cafe" && !meetingMode && distance <= CAFE_LAYOUT.roundtable.interactionRadius;
-  appShell.setRoundtableNearby(roundtableNearby);
-  canvas.dataset.roundtableNearby = String(roundtableNearby);
+function updateSceneHotspot() {
+  const next = experienceMode === "cafe" && !meetingMode
+    ? nearestSceneHotspot(sceneHotspots, player.position)
+    : null;
+  activeSceneHotspot = next;
+  appShell.setSceneHotspot(next);
+  canvas.dataset.activeHotspot = next?.id ?? "";
+  tickBadge.style.display = experienceMode === "cafe" && !(next && window.innerWidth <= 700)
+    ? "flex"
+    : "none";
 }
 
 
@@ -1330,7 +1387,7 @@ function animate(timestamp) {
       if (meetingMode) updateMeetingCamera(delta);
       else updateFollowCamera(delta);
       updatePlayerLabel();
-      updateRoundtablePrompt();
+      updateSceneHotspot();
     } else {
       updateCinematicCamera(delta);
     }
@@ -1428,6 +1485,15 @@ canvas.addEventListener("pointerup", (event) => {
 
 
 window.addEventListener("keydown", (event) => {
+  if (
+    experienceMode === "cafe" && !meetingMode && !event.repeat &&
+    ["KeyE", "KeyF"].includes(event.code) &&
+    !event.target.closest?.("input, textarea, select")
+  ) {
+    void appShell.triggerSceneAction(event.code === "KeyE" ? "primary" : "secondary");
+    event.preventDefault();
+    return;
+  }
   if (
     experienceMode === "cafe" &&
     !meetingMode &&
@@ -1615,6 +1681,7 @@ window.__echoWorld = {
   },
   get appView() { return experienceMode; },
   get meetingActive() { return meetingMode; },
+  get activeHotspot() { return activeSceneHotspot; },
   get liveSource() { return liveWorld?.source ?? null; },
   get worldTick() { return liveWorldTick; },
   get world() { return activeWorld.id; },

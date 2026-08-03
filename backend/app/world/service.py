@@ -101,6 +101,12 @@ class WorldService:
                 "person_id": person_id,
                 "position": dict(anchor["position"]),
                 "display": display,
+                "interaction": {
+                    "label": display.get("name") or "人物展位",
+                    "radius": 2.0,
+                    "primary": {"key": "E", "action": "open-package", "label": "查看资料"},
+                    "secondary": {"key": "F", "action": "invite-to-cafe", "label": "去咖啡厅"},
+                },
             }
             self._modules.append(booth)
         else:
@@ -249,7 +255,8 @@ class WorldService:
 
     def _on_meeting_start(self, event: dict) -> None:
         """发起圆桌会议：参与者按占用分配入座圆桌锚点（6 座不重复，
-        座位已满的候选人无法入座；不足 2 人则会议流产并回退）。"""
+        座位已满的候选人无法入座；Agent 自主发起至少 2 人，用户发起至少 1 个
+        Agent（用户自己占前端保留座）即可成立。"""
         if self.current_meeting is not None:
             return  # 圆桌同时只容纳一场会议
         candidates = [
@@ -269,7 +276,8 @@ class WorldService:
             agent["position"] = {"x": seat["x"], "z": seat["z"], "yaw": seat["yaw"]}
             agent["state"] = "in-meeting"
             participants.append(pid)
-        if len(participants) < 2:
+        minimum = 1 if event.get("initiated_by") == "self" else 2
+        if len(participants) < minimum:
             # 会议流产：回退已入座者的状态与座位占用
             for pid in participants:
                 self._release_seat(pid)
@@ -277,10 +285,13 @@ class WorldService:
             return
         self.current_meeting = {
             "id": meeting_id, "participants": participants, "started_tick": self.tick,
+            "topic": str(event.get("topic") or "围桌聊聊")[:120],
+            "initiated_by": event.get("initiated_by") or "agent",
         }
         self._events.append(
             {"type": "meeting-started", "meeting_id": meeting_id,
-             "participants": participants, "tick": self.tick}
+             "participants": participants, "topic": self.current_meeting["topic"],
+             "initiated_by": self.current_meeting["initiated_by"], "tick": self.tick}
         )
 
     def _on_meeting_end(self, event: dict) -> None:
@@ -325,7 +336,9 @@ class WorldService:
         # 进行中的圆桌会议（附加信息，校验器对额外字段宽容）
         snapshot["meeting"] = (
             {"id": self.current_meeting["id"],
-             "participants": list(self.current_meeting["participants"])}
+             "participants": list(self.current_meeting["participants"]),
+             "topic": self.current_meeting["topic"],
+             "initiated_by": self.current_meeting["initiated_by"]}
             if self.current_meeting else None
         )
         return snapshot

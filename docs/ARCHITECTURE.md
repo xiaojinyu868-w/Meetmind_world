@@ -93,7 +93,19 @@ MVP2（2026-08-03 重设后）增加三条线：场景语言（点位交互/播�
       "avatar": { "palette": { "jacket": "#...", "hair": "#..." } }
     }
   ],
-  "modules": [ { "id": "booth_xxx", "type": "booth", "position": {} } ],
+  "modules": [
+    {
+      "id": "roundtable-six",
+      "type": "roundtable",
+      "position": { "x": 0, "z": 0, "yaw": 0 },
+      "interaction": {
+        "label": "中央六人圆桌",
+        "radius": 2.72,
+        "primary": { "key": "E", "action": "context-menu", "label": "坐下" },
+        "secondary": { "key": "F", "action": "meeting", "label": "发起圆桌" }
+      }
+    }
+  ],
   "events": [ { "type": "agent-talk", "agent_id": "person_x", "to_agent_id": "person_y", "text": "...", "tick": 12340 }, { "type": "meeting-start", "meeting_id": "meeting_1", "participants": [] } ]
   // events 为最近 N=20 条滚动缓冲；类型枚举：agent-move / agent-state / agent-talk / meeting-start / meeting-end
 }
@@ -102,6 +114,8 @@ MVP2（2026-08-03 重设后）增加三条线：场景语言（点位交互/播�
 - 前端不推断状态，只渲染；快照未包含的信息前端无权知道。
 - 资料包内容（人脸照片、谈话记录）**不走快照**，由用户点击后经 API 按权限单独拉取。
 - 场景语言（FR-2.8/2.9）的点位与播报内容：热点定义走 `modules`，播报文本走 `events`，均从快照消费，前端不自行编造。
+- 热点动作白名单：`context-menu`、`meeting`、`recall-memory`、`open-package`、`invite-to-cafe`；E/F 键和移动端按钮消费同一命令。
+- 图像到贴图/人脸、音视频上下文提取由上游团队负责；本运行时只消费其输出的 `PersonPackage`、`CharacterAsset` 与事实指针。
 
 ## 5. 自进化权限矩阵（harness 圈层管理）
 

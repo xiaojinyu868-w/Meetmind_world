@@ -23,6 +23,7 @@ def test_snapshot_has_schema_tick_agents_and_validates():
     assert isinstance(snapshot["tick"], int)
     assert len(snapshot["agents"]) == 6
     assert snapshot["modules"][0]["id"] == "cafe-main"
+    assert len([module for module in snapshot["modules"] if module.get("interaction")]) == 5
     assert snapshot["events"] == []  # 缺省空数组（向后兼容）
     assert validate_snapshot(snapshot) is snapshot
 

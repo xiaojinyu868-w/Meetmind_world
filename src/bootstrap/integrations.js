@@ -57,6 +57,7 @@ const INTEGRATION_STYLES = `
 }
 .echo-integrations .record-fab strong { font-size: 12px; font-weight: 800; }
 body[data-view="cafe"] .echo-integrations .record-fab { display: flex; }
+body[data-scene-actions="open"] .echo-integrations .record-fab { display: none; }
 
 /* 世界切换导航：叠放在「记录相遇」之上，两个世界各显示对应的出口 */
 .echo-integrations .nav-world-fab {
@@ -127,6 +128,12 @@ export function createUnifiedApi(base = MockApi) {
     // IF-4
     fetchSnapshot() {
       return base.fetchSnapshot();
+    },
+    startMeeting(payload) {
+      return base.startMeeting(payload);
+    },
+    endMeeting(meetingId) {
+      return base.endMeeting(meetingId);
     },
     // IF-5
     getPackage(personId) {
@@ -275,6 +282,7 @@ export function mountIntegrations({
   navFab.addEventListener("click", () => navigateToWorld(navToCafe ? "cafe" : "hall"));
   mountRoot.append(navFab);
   createIcons({ icons: INTEGRATIONS_ICONS, root: mountRoot, attrs: { "stroke-width": 1.8 } });
+  for (const svg of mountRoot.querySelectorAll("svg[data-lucide]")) svg.removeAttribute("data-lucide");
 
   return {
     api: unifiedApi,

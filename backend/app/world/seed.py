@@ -92,9 +92,38 @@ SEED_AGENTS = [
     },
 ]
 
-# 1 个咖啡厅模块；桌位/座位概念预留（World Service 后续做入座调度）
+# 咖啡厅热点是快照契约的一部分；前端只消费这些动作，不按场景类型自行推断。
+def _interaction(label: str, radius: float, primary: tuple[str, str], secondary: tuple[str, str]) -> dict:
+    return {
+        "label": label,
+        "radius": radius,
+        "primary": {"key": "E", "action": primary[0], "label": primary[1]},
+        "secondary": {"key": "F", "action": secondary[0], "label": secondary[1]},
+    }
+
+
 SEED_MODULES = [
     {"id": "cafe-main", "type": "cafe", "position": {"x": 0.0, "z": 0.0, "yaw": 0.0}},
+    {"id": "roundtable-six", "type": "roundtable",
+     "position": {"x": 0.0, "z": 0.0, "yaw": 0.0},
+     "interaction": _interaction("中央六人圆桌", 2.72,
+                                 ("context-menu", "坐下"), ("meeting", "发起圆桌"))},
+    {"id": "table-window-two", "type": "table",
+     "position": {"x": -3.65, "z": -1.55, "yaw": 0.0},
+     "interaction": _interaction("窗边双人桌", 1.65,
+                                 ("context-menu", "坐下"), ("recall-memory", "共同记忆"))},
+    {"id": "table-poster-two", "type": "table",
+     "position": {"x": -3.65, "z": 1.55, "yaw": 0.0},
+     "interaction": _interaction("海报双人桌", 1.65,
+                                 ("context-menu", "坐下"), ("recall-memory", "共同记忆"))},
+    {"id": "table-library-four", "type": "table",
+     "position": {"x": 3.28, "z": -1.35, "yaw": 0.0},
+     "interaction": _interaction("书架四人桌", 1.8,
+                                 ("context-menu", "坐下"), ("recall-memory", "共同记忆"))},
+    {"id": "table-counter-four", "type": "table",
+     "position": {"x": 3.28, "z": 1.65, "yaw": 0.0},
+     "interaction": _interaction("吧台侧四人桌", 1.8,
+                                 ("context-menu", "坐下"), ("recall-memory", "共同记忆"))},
 ]
 
 
@@ -121,10 +150,17 @@ def seed_world() -> dict:
         }
         for agent in SEED_AGENTS
     ]
-    modules = [
-        {"id": module["id"], "type": module["type"], "position": dict(module["position"])}
-        for module in SEED_MODULES
-    ]
+    modules = []
+    for module in SEED_MODULES:
+        copied = {"id": module["id"], "type": module["type"],
+                  "position": dict(module["position"])}
+        if "interaction" in module:
+            copied["interaction"] = {
+                **module["interaction"],
+                "primary": dict(module["interaction"]["primary"]),
+                "secondary": dict(module["interaction"]["secondary"]),
+            }
+        modules.append(copied)
     return {"agents": agents, "modules": modules}
 
 

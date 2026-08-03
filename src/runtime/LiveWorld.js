@@ -32,7 +32,13 @@ export const FALLBACK_SNAPSHOT = Object.freeze({
     Object.freeze({ id: "su-he", position: Object.freeze({ x: 2.89, z: -0.53, yaw: Math.PI * 0.86 }), state: "seated" }),
     Object.freeze({ id: "tang-ke", position: Object.freeze({ x: 3.67, z: -0.53, yaw: -Math.PI * 0.86 }), state: "seated" }),
   ]),
-  modules: Object.freeze([]),
+  modules: Object.freeze([
+    Object.freeze({ id: "roundtable-six", type: "roundtable", position: Object.freeze({ x: 0, z: 0 }), interaction: Object.freeze({ label: "中央六人圆桌", radius: 2.72, primary: Object.freeze({ key: "E", action: "context-menu", label: "坐下" }), secondary: Object.freeze({ key: "F", action: "meeting", label: "发起圆桌" }) }) }),
+    Object.freeze({ id: "table-window-two", type: "table", position: Object.freeze({ x: -3.65, z: -1.55 }), interaction: Object.freeze({ label: "窗边双人桌", radius: 1.65, primary: Object.freeze({ key: "E", action: "context-menu", label: "坐下" }), secondary: Object.freeze({ key: "F", action: "recall-memory", label: "共同记忆" }) }) }),
+    Object.freeze({ id: "table-poster-two", type: "table", position: Object.freeze({ x: -3.65, z: 1.55 }), interaction: Object.freeze({ label: "海报双人桌", radius: 1.65, primary: Object.freeze({ key: "E", action: "context-menu", label: "坐下" }), secondary: Object.freeze({ key: "F", action: "recall-memory", label: "共同记忆" }) }) }),
+    Object.freeze({ id: "table-library-four", type: "table", position: Object.freeze({ x: 3.28, z: -1.35 }), interaction: Object.freeze({ label: "书架四人桌", radius: 1.8, primary: Object.freeze({ key: "E", action: "context-menu", label: "坐下" }), secondary: Object.freeze({ key: "F", action: "recall-memory", label: "共同记忆" }) }) }),
+    Object.freeze({ id: "table-counter-four", type: "table", position: Object.freeze({ x: 3.28, z: 1.65 }), interaction: Object.freeze({ label: "吧台侧四人桌", radius: 1.8, primary: Object.freeze({ key: "E", action: "context-menu", label: "坐下" }), secondary: Object.freeze({ key: "F", action: "recall-memory", label: "共同记忆" }) }) }),
+  ]),
   events: Object.freeze([]),
 });
 
@@ -66,7 +72,7 @@ function seatKey(tableId, seatIndex) {
 
 
 // 世界快照轮询器：优先实时接口，失败自动降级 mock 文件，再兜底内置快照。
-// 非 live 数据源下由内置演化器驱动世界持续运转（走动/交谈/圆桌）。
+// 非 live 数据源下由内置演化器驱动走动与交谈；圆桌只由用户/预约事件发起。
 export class LiveWorld {
   constructor({
     snapshotUrl = DEFAULT_SNAPSHOT_URL,
@@ -373,37 +379,7 @@ export class LiveWorld {
       sim.lastMeetingTick = sim.tick;
     }
 
-    // 3. 偶尔发起一场圆桌会议
-    if (!sim.meeting && sim.tick - sim.lastMeetingTick >= 8 && Math.random() < 0.16) {
-      const freeRoundtableSeats = CAFE_LAYOUT.roundtable.seats.filter(
-        (_, index) => !sim.occupied.has(seatKey(CAFE_LAYOUT.roundtable.id, index)),
-      ).length;
-      const candidates = [...sim.agents.values()].filter(
-        (agent) =>
-          !agent.target &&
-          agent.state !== "in-meeting" &&
-          agent.tableId !== CAFE_LAYOUT.roundtable.id,
-      );
-      const count = Math.min(3, candidates.length, freeRoundtableSeats);
-      if (count >= 2) {
-        const participants = [];
-        while (participants.length < count) {
-          const pick = candidates.splice(Math.floor(Math.random() * candidates.length), 1)[0];
-          participants.push(pick);
-        }
-        for (const agent of participants) {
-          this.#freeSeat(sim, agent);
-          const seat = this.#claimRoundtableSeat(sim, agent);
-          agent.target = { ...seat, meeting: true };
-          agent.state = "walking";
-        }
-        const participantIds = participants.map((agent) => agent.id);
-        events.push({ type: "meeting-started", participants: participantIds });
-        sim.meeting = { endsAtTick: sim.tick + 9, participantIds };
-      }
-    }
-
-    // 4. 同桌交谈（含圆桌上已入座的会议参与者）
+    // 3. 同桌交谈（含由外部事件安排到圆桌的参与者）
     if (sim.tick % 2 === 0) {
       const groups = new Map();
       for (const agent of sim.agents.values()) {
@@ -428,7 +404,7 @@ export class LiveWorld {
       }
     }
 
-    // 5. 偶尔有人换桌走动
+    // 4. 偶尔有人换桌走动
     for (const agent of sim.agents.values()) {
       if (agent.target || agent.state === "in-meeting" || !agent.tableId) continue;
       if (Math.random() < 0.05) this.#sendToNpcSeat(sim, agent, agent.tableId);
@@ -443,7 +419,7 @@ export class LiveWorld {
         state: agent.state,
         ...(agent.avatar ? { avatar: agent.avatar } : {}),
       })),
-      modules: [],
+      modules: Array.isArray(this.baseSnapshot?.modules) ? this.baseSnapshot.modules : [],
       events,
     };
   }

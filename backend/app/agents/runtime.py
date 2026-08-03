@@ -35,7 +35,7 @@ WORLD_BOUND = 6.0          # 咖啡厅边界（与前端 CafeLayout 同一量级
 
 MEETING_INTERVAL_TICKS = 20   # 两场圆桌会议的最小间隔
 MEETING_DURATION_TICKS = 6    # 一场会议持续的 tick 数
-MEETING_START_PROBABILITY = 0.5  # 间隔满足后每 tick 发起会议的概率
+MEETING_START_PROBABILITY = 0.0  # 产品约定：默认由用户/预约/匹配事件发起
 
 
 class EventBus:
@@ -65,6 +65,7 @@ class AgentRuntime:
         self._last_talk_tick: dict = {}      # agent_id -> 最近交谈 tick
         self._last_meeting_end = -MEETING_INTERVAL_TICKS
         self._meeting: dict | None = None    # runtime 侧会议记账 {id, participants, ticks_left}
+        self._meeting_sequence = 0
 
     # ---------- 主循环 ----------
 
@@ -83,6 +84,8 @@ class AgentRuntime:
 
     def _tick_meeting(self, tick_no: int, agents: dict) -> bool:
         if self._meeting is not None:
+            if self._meeting.get("manual"):
+                return True
             # 进行中：与会者轮流发言，倒数结束
             participants = [p for p in self._meeting["participants"] if p in agents]
             if len(participants) >= 2:
@@ -107,6 +110,33 @@ class AgentRuntime:
                              "ticks_left": MEETING_DURATION_TICKS}
             return True
         return False
+
+    def request_meeting(self, world_snapshot: dict, topic: str, participants: list[str]) -> dict:
+        """用户主动发起圆桌；只发布事件，座位与最终参与者仍由 World Service 权威结算。"""
+        if self._meeting is not None or world_snapshot.get("meeting"):
+            raise ValueError("圆桌已有进行中的会议")
+        known = {agent["id"] for agent in world_snapshot.get("agents", [])}
+        selected = []
+        for person_id in participants:
+            if person_id in known and person_id not in selected:
+                selected.append(person_id)
+        if not selected:
+            raise ValueError("至少邀请一位在场的人")
+        selected = selected[:5]
+        self._meeting_sequence += 1
+        meeting_id = f"meeting_user_{world_snapshot.get('tick', 0)}_{self._meeting_sequence}"
+        self._emit({"type": "meeting-start", "meeting_id": meeting_id,
+                    "participants": selected, "topic": topic, "initiated_by": "self"})
+        self._meeting = {"id": meeting_id, "participants": selected,
+                         "ticks_left": None, "manual": True}
+        return {"meeting_id": meeting_id, "participants": selected, "topic": topic}
+
+    def end_requested_meeting(self, meeting_id: str) -> bool:
+        if self._meeting is None or self._meeting["id"] != meeting_id:
+            return False
+        self._emit({"type": "meeting-end", "meeting_id": meeting_id})
+        self._meeting = None
+        return True
 
     # ---------- 咖啡厅日常（skills/cafe_daily.md） ----------
 

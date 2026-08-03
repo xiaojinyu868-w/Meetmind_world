@@ -56,6 +56,12 @@ export function buildFallbackBooths(people) {
         photos: person.portrait ? [person.portrait] : [],
         tags: Array.isArray(person.tags) ? person.tags : [],
       },
+      interaction: {
+        label: person.name,
+        radius: 2,
+        primary: { key: "E", action: "open-package", label: "查看资料" },
+        secondary: { key: "F", action: "invite-to-cafe", label: "去咖啡厅" },
+      },
     };
   });
 }

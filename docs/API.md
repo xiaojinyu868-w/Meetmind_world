@@ -135,10 +135,23 @@ booth module 结构（快照 modules 内，`type: "booth"`）：
 { "results": [ { "person_id": "person_01JXXX", "name": "陈某", "score": 0.93, "last_encounter": { "time": "...", "place": "..." } } ] }
 ```
 
-## IF-6 互动接口（MVP2，详节届时补）
+## IF-6 互动接口（MVP2）
 
-- `POST /api/v0/agents/meeting`：发起圆桌（主题 + 参与者）。
+- `POST /api/v0/agents/meeting`：用户发起圆桌（主题 + 1~5 位在场参与者）。
+- `POST /api/v0/agents/meeting/{meeting_id}/end`：结束由用户发起的圆桌。
 - `GET /api/v0/agents/events`：Agent 事件流（SSE）：走动、访问、讨论开始/结束。
+
+```jsonc
+// POST /api/v0/agents/meeting
+{ "topic": "周末一起做什么", "participants": ["person_01", "person_02"] }
+// 201
+{ "accepted": true, "meeting_id": "meeting_user_88_1", "participants": ["person_01", "person_02"], "topic": "周末一起做什么" }
+
+// POST /api/v0/agents/meeting/meeting_user_88_1/end → 200
+{ "ended": true, "meeting_id": "meeting_user_88_1" }
+```
+
+同一圆桌同时只有一场会议；冲突或座位不可用返回 `409`，未知参与者返回 `404`。会议请求只发布白名单事件，最终座位与参与者由 World Service 权威结算。
 
 ## IF-7 推送与回填接口（MVP2，详节届时补）
 
@@ -163,3 +176,4 @@ booth module 结构（快照 modules 内，`type: "booth"`）：
 - 2026-08-03 | v0.1：扩展为全量接口地图（IF-1~IF-8，按 MVP 阶段分组），IF-1~IF-5 出详节，IF-6/7/8 先行登记 | 人（指正接口不止两个）+ AI（补全）
 - 2026-08-03 | v0.2：IF-2 接口更名为 `pipeline`（原 paipai 为语音转写错误） | 人 + AI
 - 2026-08-03 | v0.3（加性）：IF-4 增加 `?world=hall|cafe` 参数与 booth module 结构；新增媒体路由 `GET /api/v0/media/{ref}`；IF-3 confirm 响应增加 `booth_id` | AI
+- 2026-08-04 | v0.4（加性）：IF-4 module 增加热点 interaction；IF-6 落地用户圆桌开始/结束接口 | AI

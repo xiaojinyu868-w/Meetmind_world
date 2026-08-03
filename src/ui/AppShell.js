@@ -63,6 +63,7 @@ function icon(name, className = "") {
 
 function hydrateIcons(root) {
   createIcons({ icons: ICONS, root, attrs: { "stroke-width": 1.8 } });
+  for (const svg of root.querySelectorAll("svg[data-lucide]")) svg.removeAttribute("data-lucide");
 }
 
 function profileMarkup(person) {

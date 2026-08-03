@@ -9,6 +9,7 @@ import {
   Coffee,
   Info,
   Heart,
+  History,
   LocateFixed,
   MapPin,
   MessageCircle,
@@ -42,6 +43,7 @@ const ICONS = {
   Coffee,
   Info,
   Heart,
+  History,
   LocateFixed,
   MapPin,
   MessageCircle,
@@ -92,6 +94,7 @@ function icon(name, className = "") {
 
 function hydrateIcons(root) {
   createIcons({ icons: ICONS, root, attrs: { "stroke-width": 1.8 } });
+  for (const svg of root.querySelectorAll("svg[data-lucide]")) svg.removeAttribute("data-lucide");
 }
 
 function finiteNumber(value) {
@@ -428,6 +431,7 @@ export function createCafeShell({
   onLocatePerson = () => {},
   onMeetingStart = async () => {},
   onMeetingEnd = async () => {},
+  onSceneAction = async () => {},
   resolveMediaUrl = (ref) => ref,
   world = "cafe",
   onExpressionChange = () => {},
@@ -437,12 +441,15 @@ export function createCafeShell({
 }) {
   let currentView = "intro";
   let worldReady = false;
-  let roundtableNearby = false;
+  let activeSceneHotspot = null;
+  let sceneHotspotSignature = "";
+  let sceneActionSheetOpen = false;
   let selectedWorldPerson = null;
   let selectedMapPerson = null;
   let meetingSheetOpen = false;
   let meetingActive = false;
   let meetingCursor = 0;
+  let meetingTopic = "最近发生的一件事";
   const invitedIds = new Set();
   const agentStates = new Map();
   const meetingMessages = [];
@@ -530,13 +537,17 @@ export function createCafeShell({
 
         <div id="world-speech-layer" class="world-speech-layer" aria-live="polite"></div>
 
-        <div id="roundtable-prompt" class="roundtable-prompt" aria-hidden="true">
-          <span class="roundtable-symbol">${icon("users")}</span>
-          <span><small>中央六人圆桌</small><strong>发起一次圆桌会议</strong></span>
-          <button type="button" data-action="open-meeting">开始</button>
+        <div id="scene-hotspot-prompt" class="scene-hotspot-prompt" aria-hidden="true">
+          <span class="scene-hotspot-symbol">${icon("map-pin")}</span>
+          <span><small data-hotspot-label>场景热点</small><strong>选择一个动作</strong></span>
+          <div class="scene-hotspot-actions">
+            <button type="button" data-scene-slot="primary"><kbd>E</kbd><span data-hotspot-primary>操作</span></button>
+            <button type="button" data-scene-slot="secondary"><kbd>F</kbd><span data-hotspot-secondary>更多</span></button>
+          </div>
         </div>
 
         <aside id="world-inspector" class="world-inspector glass-panel" aria-label="人物资料" aria-hidden="true"></aside>
+        <aside id="scene-action-sheet" class="scene-action-sheet glass-panel" aria-label="场景动作" aria-hidden="true"></aside>
         <aside id="meeting-sheet" class="meeting-sheet glass-panel" aria-label="圆桌会议" aria-hidden="true"></aside>
 
         <div class="cafe-bottom-status glass-control" aria-label="${worldLabel}状态">
@@ -562,7 +573,8 @@ export function createCafeShell({
   const graph = root.querySelector("#cafe-relationship-graph");
   const worldInspector = root.querySelector("#world-inspector");
   const mapInspector = root.querySelector("#map-inspector");
-  const roundtablePrompt = root.querySelector("#roundtable-prompt");
+  const sceneHotspotPrompt = root.querySelector("#scene-hotspot-prompt");
+  const sceneActionSheet = root.querySelector("#scene-action-sheet");
   const meetingSheet = root.querySelector("#meeting-sheet");
   const speechLayer = root.querySelector("#world-speech-layer");
   const toast = root.querySelector("#cafe-toast");
@@ -763,6 +775,10 @@ export function createCafeShell({
         <div><small>中央六人圆桌</small><h2>邀请谁一起坐下？</h2></div>
         <button class="glass-icon-button" type="button" data-action="close-meeting" title="关闭" aria-label="关闭圆桌会议">${icon("x")}</button>
       </header>
+      <label class="meeting-topic-field">
+        <span>这次想聊什么</span>
+        <input data-meeting-topic-input value="${escapeHtml(meetingTopic)}" maxlength="120" autocomplete="off" />
+      </label>
       ${renderRoundtableSeats()}
       <div class="meeting-invite-list">
         ${people.map((person) => {
@@ -792,7 +808,7 @@ export function createCafeShell({
           ${avatarImg(currentUser)}
           ${participants.map((person) => avatarImg(person)).join("")}
         </div>
-        <div><small>${participants.length + 1} 人已入座</small><h2>圆桌会议进行中</h2></div>
+        <div><small>${participants.length + 1} 人已入座</small><h2>${escapeHtml(meetingTopic)}</h2></div>
         <button class="glass-icon-button" type="button" data-action="end-meeting" title="结束会议" aria-label="结束圆桌会议">${icon("x")}</button>
       </header>
       <div class="meeting-thread" data-meeting-thread>
@@ -826,6 +842,77 @@ export function createCafeShell({
     meetingSheet.innerHTML = "";
     meetingSheet.setAttribute("aria-hidden", "true");
     shell.classList.remove("has-meeting-sheet");
+    syncSceneHotspotPrompt();
+  }
+
+  function syncSceneHotspotPrompt() {
+    const visible = Boolean(
+      currentView === "cafe" && activeSceneHotspot &&
+      !meetingActive && !meetingSheetOpen && !sceneActionSheetOpen
+    );
+    sceneHotspotPrompt.setAttribute("aria-hidden", String(!visible));
+    if (!activeSceneHotspot) return;
+    sceneHotspotPrompt.querySelector("[data-hotspot-label]").textContent = activeSceneHotspot.label;
+    sceneHotspotPrompt.querySelector("[data-hotspot-primary]").textContent = activeSceneHotspot.primary.label;
+    sceneHotspotPrompt.querySelector("[data-hotspot-secondary]").textContent = activeSceneHotspot.secondary.label;
+  }
+
+  function closeSceneActionSheet() {
+    sceneActionSheetOpen = false;
+    sceneActionSheet.innerHTML = "";
+    sceneActionSheet.setAttribute("aria-hidden", "true");
+    shell.classList.remove("has-scene-action-sheet");
+    delete document.body.dataset.sceneActions;
+    syncSceneHotspotPrompt();
+  }
+
+  function openSceneActionSheet(mode = "context") {
+    if (!activeSceneHotspot) return;
+    sceneActionSheetOpen = true;
+    document.body.dataset.sceneActions = "open";
+    shell.classList.add("has-scene-action-sheet");
+    const memoryMode = mode === "memory";
+    sceneActionSheet.innerHTML = `
+      <header class="scene-action-header">
+        <span>${icon(memoryMode ? "history" : "coffee")}</span>
+        <div><small>${escapeHtml(activeSceneHotspot.label)}</small><h2>${memoryMode ? "和谁调取共同记忆？" : "在这里做什么？"}</h2></div>
+        <button class="glass-icon-button" type="button" data-action="close-scene-actions" title="关闭" aria-label="关闭场景动作">${icon("x")}</button>
+      </header>
+      ${memoryMode ? `
+        <div class="scene-person-list">
+          ${people.map((person) => `
+            <button type="button" data-scene-memory-person="${person.id}">
+              ${avatarImg(person)}<span><strong>${person.name}</strong><small>${person.relation}</small></span>${icon("arrow-right")}
+            </button>`).join("")}
+        </div>` : `
+        <div class="scene-command-list">
+          <button type="button" data-context-action="drink-coffee">${icon("coffee")}<span><strong>坐下喝杯咖啡</strong><small>在最近的空座停留</small></span></button>
+          <button type="button" data-context-action="meeting">${icon("users")}<span><strong>邀请人来坐坐</strong><small>选择话题并发起圆桌</small></span></button>
+          <button type="button" data-context-action="recall-memory">${icon("history")}<span><strong>调取共同记忆</strong><small>从资料包查看相遇事实</small></span></button>
+        </div>`}
+    `;
+    sceneActionSheet.setAttribute("aria-hidden", "false");
+    hydrateIcons(sceneActionSheet);
+    syncSceneHotspotPrompt();
+  }
+
+  async function triggerSceneAction(slot) {
+    if (!activeSceneHotspot || meetingActive || meetingSheetOpen) return false;
+    const command = slot === "secondary" ? activeSceneHotspot.secondary : activeSceneHotspot.primary;
+    if (command.action === "context-menu") {
+      openSceneActionSheet("context");
+    } else if (command.action === "meeting") {
+      meetingSheetOpen = true;
+      invitedIds.clear();
+      shell.classList.add("has-meeting-sheet");
+      renderMeetingSetup();
+      syncSceneHotspotPrompt();
+    } else if (command.action === "recall-memory") {
+      openSceneActionSheet("memory");
+    } else {
+      await onSceneAction({ hotspot: activeSceneHotspot, action: command.action, source: command.key });
+    }
+    return true;
   }
 
   function submitMeetingMessage(message) {
@@ -945,6 +1032,43 @@ export function createCafeShell({
       invitedIds.clear();
       shell.classList.add("has-meeting-sheet");
       renderMeetingSetup();
+      syncSceneHotspotPrompt();
+      return;
+    }
+    if (target.dataset.sceneSlot) {
+      await triggerSceneAction(target.dataset.sceneSlot);
+      return;
+    }
+    if (target.dataset.action === "close-scene-actions") {
+      closeSceneActionSheet();
+      return;
+    }
+    if (target.dataset.contextAction === "drink-coffee") {
+      await onSceneAction({ hotspot: activeSceneHotspot, action: "drink-coffee", source: "menu" });
+      closeSceneActionSheet();
+      showToast("已经在桌边坐下");
+      return;
+    }
+    if (target.dataset.contextAction === "meeting") {
+      closeSceneActionSheet();
+      meetingSheetOpen = true;
+      invitedIds.clear();
+      shell.classList.add("has-meeting-sheet");
+      renderMeetingSetup();
+      return;
+    }
+    if (target.dataset.contextAction === "recall-memory") {
+      openSceneActionSheet("memory");
+      return;
+    }
+    if (target.dataset.sceneMemoryPerson) {
+      await onSceneAction({
+        hotspot: activeSceneHotspot,
+        action: "recall-memory",
+        personId: target.dataset.sceneMemoryPerson,
+        source: "menu",
+      });
+      closeSceneActionSheet();
       return;
     }
     if (target.dataset.action === "close-meeting") {
@@ -962,7 +1086,12 @@ export function createCafeShell({
     if (target.dataset.action === "start-meeting" && invitedIds.size > 0) {
       target.disabled = true;
       try {
-        const acceptedIds = await onMeetingStart([...invitedIds]);
+        const result = await onMeetingStart({
+          participants: [...invitedIds],
+          topic: meetingTopic,
+        });
+        const acceptedIds = Array.isArray(result) ? result : (result?.participants ?? []);
+        if (acceptedIds.length === 0) throw new Error("没有参与者接受邀请");
         invitedIds.clear();
         acceptedIds.forEach((personId) => invitedIds.add(personId));
         meetingActive = true;
@@ -976,6 +1105,7 @@ export function createCafeShell({
           duration: 4.5,
         });
         renderMeetingActive();
+        syncSceneHotspotPrompt();
       } catch (error) {
         console.error(error);
         target.disabled = false;
@@ -1016,6 +1146,12 @@ export function createCafeShell({
     input.value = "";
   });
 
+  root.addEventListener("input", (event) => {
+    if (event.target.matches("[data-meeting-topic-input]")) {
+      meetingTopic = event.target.value.slice(0, 120);
+    }
+  });
+
   refreshGraph();
   hydrateIcons(root);
 
@@ -1050,11 +1186,18 @@ export function createCafeShell({
       if (selectedWorldPerson?.id === state.personId) renderWorldInspector();
       if (selectedMapPerson?.id === state.personId) renderMapInspector();
     },
-    setRoundtableNearby(nearby) {
-      roundtableNearby = Boolean(nearby);
-      const visible = currentView === "cafe" && roundtableNearby && !meetingActive && !meetingSheetOpen;
-      roundtablePrompt.setAttribute("aria-hidden", String(!visible));
+    setSceneHotspot(hotspot) {
+      const nextSignature = hotspot
+        ? [hotspot.id, hotspot.label, hotspot.primary.action, hotspot.primary.label,
+            hotspot.secondary.action, hotspot.secondary.label].join("|")
+        : "";
+      if (nextSignature === sceneHotspotSignature) return;
+      sceneHotspotSignature = nextSignature;
+      activeSceneHotspot = hotspot ?? null;
+      if (!activeSceneHotspot && sceneActionSheetOpen) closeSceneActionSheet();
+      syncSceneHotspotPrompt();
     },
+    triggerSceneAction,
     showNpcConversation({ speakerId, text, duration = 4.5 }) {
       const person = people.find((candidate) => candidate.id === speakerId);
       if (!person) return;
@@ -1116,6 +1259,7 @@ export function createCafeShell({
       return worldReady;
     },
     destroy() {
+      delete document.body.dataset.sceneActions;
       unsubscribeSignalStore();
     },
   };

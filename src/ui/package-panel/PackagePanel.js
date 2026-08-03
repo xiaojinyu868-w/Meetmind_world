@@ -184,6 +184,7 @@ export function mountPackagePanel(container, api) {
 
   function hydrateIcons() {
     createIcons({ icons: ICONS, root: layer, attrs: { "stroke-width": 1.8 } });
+    for (const svg of layer.querySelectorAll("svg[data-lucide]")) svg.removeAttribute("data-lucide");
   }
 
   function showToast(message) {
