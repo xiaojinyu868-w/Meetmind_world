@@ -7,7 +7,7 @@ import * as THREE from "three";
  *   { id, type: "booth", person_id, position: {x, z, yaw},
  *     display: { name, headline, face_ref, photos[], tags[] } }
  *
- * 资产契约：模板 GLB（module.booth-template.v1）的展示面网格按约定命名——
+ * 资产契约：模板 GLB（module.market-stall.v1）的展示面网格按约定命名——
  *   MESH_NamePlate / MESH_Portrait / MESH_PhotoFrame_01 / MESH_PhotoFrame_02 / MESH_Backdrop
  * 克隆实例时展示面材质独立克隆再贴图（贴图经 integrations.resolveMediaUrl 映射，
  * live → 媒体路由，失败回退占位肖像）；NamePlate/Backdrop 用 CanvasTexture 绘制。
@@ -17,7 +17,7 @@ import * as THREE from "three";
  */
 
 export const BOOTH_BLOCKER_RADIUS = 0.9;
-export const BOOTH_TEMPLATE_ASSET_ID = "module.booth-template.v1";
+export const BOOTH_TEMPLATE_ASSET_ID = "module.market-stall.v1";
 
 const ENTRANCE_DURATION = 0.3;
 const PLACEHOLDER_PORTRAIT = "portraits/person-self.png";
@@ -26,14 +26,14 @@ const DISPLAY_MESH_NAMES = Object.freeze(
 );
 const CANVAS_FONT = '"PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif';
 
-// mock 快照缺 booth 时的内置演示锚点：后排一字排开面向入口，间距 2.5m（≥2.2m 约定）
+// mock 快照缺 booth 时的内置演示锚点：集市街道两侧两排，面向街道中心（间距 4m ≥ 2.2m 约定）
 const FALLBACK_BOOTH_POSITIONS = Object.freeze([
-  Object.freeze({ x: -6.25, z: -3.4, yaw: 0 }),
-  Object.freeze({ x: -3.75, z: -3.4, yaw: 0 }),
-  Object.freeze({ x: -1.25, z: -3.4, yaw: 0 }),
-  Object.freeze({ x: 1.25, z: -3.4, yaw: 0 }),
-  Object.freeze({ x: 3.75, z: -3.4, yaw: 0 }),
-  Object.freeze({ x: 6.25, z: -3.4, yaw: 0 }),
+  Object.freeze({ x: -3.5, z: -5, yaw: Math.PI / 2 }),
+  Object.freeze({ x: 3.5, z: -5, yaw: -Math.PI / 2 }),
+  Object.freeze({ x: -3.5, z: -1, yaw: Math.PI / 2 }),
+  Object.freeze({ x: 3.5, z: -1, yaw: -Math.PI / 2 }),
+  Object.freeze({ x: -3.5, z: 3, yaw: Math.PI / 2 }),
+  Object.freeze({ x: 3.5, z: 3, yaw: -Math.PI / 2 }),
 ]);
 
 // 人物站位在展位正前方（出展人面向访客），与展位中心保持 0.85m
@@ -217,13 +217,14 @@ function buildFallbackTemplate() {
 
 
 export class BoothSystem {
-  constructor({ scene, assetStore, assetCatalog, resolveMediaUrl, placeholderRef = PLACEHOLDER_PORTRAIT }) {
+  constructor({ scene, assetStore, assetCatalog, resolveMediaUrl, placeholderRef = PLACEHOLDER_PORTRAIT, templateAssetId = BOOTH_TEMPLATE_ASSET_ID }) {
     this.scene = scene;
     this.assetStore = assetStore;
     this.assetCatalog = assetCatalog;
     this.resolveMediaUrl =
       typeof resolveMediaUrl === "function" ? resolveMediaUrl : (ref) => String(ref ?? "");
     this.placeholderRef = placeholderRef;
+    this.templateAssetId = templateAssetId;
     this.template = null;
     this.booths = new Map();
     this.textureLoader = new THREE.TextureLoader();
@@ -232,10 +233,10 @@ export class BoothSystem {
 
   async prepare() {
     try {
-      const asset = this.assetCatalog.resolve(BOOTH_TEMPLATE_ASSET_ID, "module");
+      const asset = this.assetCatalog.resolve(this.templateAssetId, "module");
       this.template = await this.assetStore.loadScene(asset.resolvedUrl);
     } catch (error) {
-      console.warn(`[BoothSystem] 展位模板 ${BOOTH_TEMPLATE_ASSET_ID} 未就绪，使用简易占位展位`, error);
+      console.warn(`[BoothSystem] 展位模板 ${this.templateAssetId} 未就绪，使用简易占位展位`, error);
       this.template = buildFallbackTemplate();
     }
     return this;

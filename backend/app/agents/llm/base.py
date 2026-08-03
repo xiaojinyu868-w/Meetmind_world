@@ -68,23 +68,26 @@ class LLMProvider(ABC):
     # ---------- 统一对话接口（OpenAI 兼容 /chat/completions 模板方法） ----------
 
     def chat(self, messages: list, tools: list | None = None,
-             response_format: dict | None = None) -> LLMResponse:
-        """统一对话接口。未配置或调用异常一律降级 mock，绝不上抛。"""
+             response_format: dict | None = None, model: str | None = None) -> LLMResponse:
+        """统一对话接口。未配置或调用异常一律降级 mock，绝不上抛。
+        model：单次调用覆盖默认模型（如转写走 qwen-audio-turbo）。"""
         started_at = time.monotonic()
+        use_model = model or self.model
         if not self.config.get("configured"):
             response = self._mock_response(messages, reason="未配置 LLM API 中转")
         else:
             try:
-                response = self._chat_http(messages, tools, response_format)
+                response = self._chat_http(messages, tools, response_format, use_model)
             except Exception as exc:  # 网络/协议任何异常都降级 mock，绝不上抛
                 response = self._mock_response(messages, reason=f"调用失败已降级：{type(exc).__name__}")
         response.latency_ms = (time.monotonic() - started_at) * 1000
-        self._record(self.model, messages, response, started_at)
+        response.model = use_model
+        self._record(use_model, messages, response, started_at)
         return response
 
     def _chat_http(self, messages: list, tools: list | None,
-                   response_format: dict | None) -> LLMResponse:
-        payload = {"model": self.model, "messages": messages}
+                   response_format: dict | None, model: str) -> LLMResponse:
+        payload = {"model": model, "messages": messages}
         if tools:
             payload["tools"] = tools
         if response_format:
@@ -98,7 +101,7 @@ class LLMProvider(ABC):
             resp.raise_for_status()
             data = resp.json()
         text = data["choices"][0]["message"]["content"] or ""
-        return LLMResponse(text=text, model=self.model, mock=False, raw=data)
+        return LLMResponse(text=text, model=model, mock=False, raw=data)
 
     def _mock_response(self, messages: list, reason: str) -> LLMResponse:
         last = ""
@@ -127,9 +130,12 @@ class LLMProvider(ABC):
         """生图（三视图生成等用途）。接口预留。"""
         raise NotImplementedError("image_gen 尚未接入 provider")
 
-    def transcribe(self, audio_path: str) -> str:
-        """语音转写。转写文本与原始音频双份留存（防线 #2）。接口预留。"""
-        raise NotImplementedError("transcribe 尚未接入 provider")
+    def transcribe(self, audio_path: str) -> LLMResponse:
+        """语音转写。转写文本与原始音频双份留存（防线 #2）。基类默认未接入。"""
+        return LLMResponse(
+            text=f"[mock:{self.model}] transcribe 未接入 provider（原始音频：{audio_path}）",
+            model=self.model, mock=True,
+        )
 
     # ---------- 调用留痕（不含 key 与请求头） ----------
 

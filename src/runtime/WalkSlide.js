@@ -26,7 +26,7 @@ export function slideStepAroundBlockers(
   let sx = stepX;
   let sz = stepZ;
   for (const blocker of blockers ?? []) {
-    const radius = (blocker?.radius ?? 0) + margin;
+    const radius = (blocker?.r ?? blocker?.radius ?? 0) + margin;
     if (radius <= 0) continue;
 
     if (targetX !== null && targetZ !== null) {

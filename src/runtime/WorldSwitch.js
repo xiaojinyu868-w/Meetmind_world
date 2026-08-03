@@ -5,20 +5,20 @@ export const WORLDS = Object.freeze([
 
 export const DEFAULT_WORLD_ID = "hall";
 
-// 展位大厅布局：16×12m，出生点在入口、面向大厅中心（-Z）
+// 集市街道布局：街道尺度（南北纵深 20m），出生点在街道南端、向北望（-Z）
 export const HALL_LAYOUT = Object.freeze({
-  bounds: Object.freeze({ minX: -7.5, maxX: 7.5, minZ: -5.5, maxZ: 5.5 }),
-  playerSpawn: Object.freeze({ x: 0, z: 4.5, yaw: Math.PI }),
+  bounds: Object.freeze({ minX: -5.5, maxX: 5.5, minZ: -10, maxZ: 10 }),
+  playerSpawn: Object.freeze({ x: 0, z: 9, yaw: Math.PI }),
   npcEntrySpawns: Object.freeze([
-    Object.freeze({ x: -2.55, z: 4.2, yaw: Math.PI }),
-    Object.freeze({ x: -1.55, z: 4.35, yaw: Math.PI }),
-    Object.freeze({ x: -0.55, z: 4.2, yaw: Math.PI }),
-    Object.freeze({ x: 0.55, z: 4.2, yaw: Math.PI }),
-    Object.freeze({ x: 1.55, z: 4.35, yaw: Math.PI }),
-    Object.freeze({ x: 2.55, z: 4.2, yaw: Math.PI }),
+    Object.freeze({ x: -2.55, z: 8.3, yaw: Math.PI }),
+    Object.freeze({ x: -1.55, z: 8.5, yaw: Math.PI }),
+    Object.freeze({ x: -0.55, z: 8.3, yaw: Math.PI }),
+    Object.freeze({ x: 0.55, z: 8.3, yaw: Math.PI }),
+    Object.freeze({ x: 1.55, z: 8.5, yaw: Math.PI }),
+    Object.freeze({ x: 2.55, z: 8.3, yaw: Math.PI }),
   ]),
-  environmentAssetId: "environment.expo-hall.v1",
-  boothTemplateAssetId: "module.booth-template.v1",
+  environmentAssetId: "environment.market-street.v1",
+  boothTemplateAssetId: "module.market-stall.v1",
   // 大厅静止陈列，快照轮询低频即可；咖啡厅维持 2s 实时感
   snapshotPollMs: 10000,
   snapshotUrl: "/api/v0/world/snapshot?world=hall&advance=1",

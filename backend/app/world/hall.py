@@ -1,39 +1,48 @@
-"""展位大厅（Expo Hall）：展位锚点布局 + 展位注册表 + 展示内容组装。
+"""展位大厅（Expo Hall / 露天集市街道）：展位锚点布局 + 展位注册表 + 展示内容组装。
 
 目的：落地 MVP1.5 的两级世界之一 —— 大厅负责陈列与找回（每个 Package 一个
-      展位，人静立展位上不走动，呼应"无增量信息不演化"）。
+      展位，人静立展位上不走动，呼应"无增量信息不演化"；串门见 hall_runtime）。
 输入：展位序号（布局按需扩容）；person_id（HallRegistry 幂等分配）。
 输出：booth_anchor(index) -> {"x","z","yaw"}；HallRegistry.assign -> 展位分配；
       build_display_from_package -> 展位展示数据（名牌/人像/相框/标签）。
-验收：tests/test_hall.py —— 布局间距 ≥2.2m、边界内、出生区留空、面向大厅中心；
-      注册幂等；display 的 tags 只含 ≥L2 推断（绝不带 self-only）。
+验收：tests/test_hall.py —— 两排交替、朝向街道中心、间距 ≥2.2m、边界内、
+      出生区留空；注册幂等；display 的 tags 只含 ≥L2 推断（绝不带 self-only）。
 
-布局算法（双排网格，沿大厅远墙向中心排布）：
-  - 大厅有效区域 x∈[-7,7]、z∈[-5,5]；出生区 z>4 留空（入口侧）；
-  - 6 列 x∈{-6,-3.6,-1.2,1.2,3.6,6}（列距 2.4m），行从 z=-4.2 起、行距 2.2m，
-    最近邻间距 ≥2.2m；容量 6 列×4 行=24 展位，超出后行继续向入口方向扩容；
-  - 每个展位面向大厅中心：yaw = atan2(-x, -z)（与 MODEL_FORWARD (0,0,1) 一致）。
+布局算法（露天集市街道：主通道 x∈[-3,3]，摊位街道两侧两排）：
+  - 左排 x=-3.8（yaw=+90°，朝 +x 即街道中心），右排 x=+3.8（yaw=-90°）；
+  - z 从 -9 起，每侧行距 2.4m 交替填充（第 0 个左排 z=-9，第 1 个右排 z=-9，
+    第 2 个左排 z=-6.6……）；同侧相邻 2.4m、对街 7.6m，间距 ≥2.2m；
+  - 容量两侧各 8 排 = 16（z ≤ 8 为止），出生区 z>8.5 留空；
+  - 大厅边界 x∈[-6,6]、z∈[-10.5,10.5]（WorldService 实例化处同步传入）。
 """
 
 import math
 
-# 大厅有效区域（前端大厅地坪 16×12m 留边）
-HALL_BOUNDS = {"min_x": -7.0, "max_x": 7.0, "min_z": -5.0, "max_z": 5.0}
-SPAWN_FREE_Z = 4.0  # 出生区 z>4 留空，不放展位
+# 大厅有效区域（露天集市街道：主通道 x∈[-3,3]、z∈[-10,10] 留边；
+# 街道边界 x∈[-5.5,5.5]，摊位后方由摊位圆壳覆盖，见 world/colliders.py）
+HALL_BOUNDS = {"min_x": -5.5, "max_x": 5.5, "min_z": -10.5, "max_z": 10.5}
+SPAWN_FREE_Z = 8.5  # 出生区 z>8.5 留空，不放展位
 
-BOOTH_COLUMNS = (-6.0, -3.6, -1.2, 1.2, 3.6, 6.0)  # 列距 2.4m
-BOOTH_ROW_Z_START = -4.2                            # 第一排贴远墙
-BOOTH_ROW_STEP = 2.2                                # 行距（保证最近邻 ≥2.2m）
+BOOTH_SIDE_X = 3.8          # 两侧摊位到街道中心线的距离（主通道半宽 3 + 摊位退线 0.8）
+BOOTH_ROW_Z_START = -9.0    # 第一排（街道尽头）起跑线
+BOOTH_ROW_STEP = 2.4        # 同侧行距（≥2.2m 间距要求）
+BOOTH_ROW_Z_MAX = 8.0       # 摊位最远 z（出生区留空）
+BOOTH_CAPACITY = 16         # 两侧各 8 排
+
+_LEFT, _RIGHT = 0, 1  # 交替填充：偶数序号左排，奇数序号右排
 
 
 def booth_anchor(index: int) -> dict:
-    """第 index 个展位锚点（0 起）：双排网格按行填充，面向大厅中心。"""
+    """第 index 个展位锚点（0 起）：街道两侧交替填充，面向街道中心。"""
     if index < 0:
         raise ValueError("展位序号必须 ≥ 0")
-    row, col = divmod(index, len(BOOTH_COLUMNS))
-    x = BOOTH_COLUMNS[col]
+    row, side = divmod(index, 2)
     z = BOOTH_ROW_Z_START + row * BOOTH_ROW_STEP
-    return {"x": x, "z": z, "yaw": math.atan2(-x, -z)}
+    if z > BOOTH_ROW_Z_MAX:
+        raise ValueError(f"展位容量已满（{BOOTH_CAPACITY} 个），等待美术扩容街道")
+    x = -BOOTH_SIDE_X if side == _LEFT else BOOTH_SIDE_X
+    yaw = math.pi / 2 if side == _LEFT else -math.pi / 2  # 左排朝 +x，右排朝 -x
+    return {"x": x, "z": z, "yaw": yaw}
 
 
 class HallRegistry:

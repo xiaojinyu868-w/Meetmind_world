@@ -5,6 +5,7 @@ import { AssetStore } from "./runtime/AssetStore.js";
 import { BoothSystem, buildFallbackBooths } from "./runtime/BoothSystem.js";
 import { CAFE_LAYOUT, tableById } from "./runtime/CafeLayout.js";
 import { CharacterSystem } from "./runtime/CharacterSystem.js";
+import { colliderShellFor } from "./runtime/ColliderRegistry.js";
 import { LiveWorld } from "./runtime/LiveWorld.js";
 import { NpcAgentSystem } from "./runtime/NpcAgentSystem.js";
 import {
@@ -66,7 +67,9 @@ const activeVisualProfile = isHallWorld
 const environmentAssetId = isHallWorld
   ? HALL_LAYOUT.environmentAssetId
   : activeSceneVariant.environmentAssetId;
-const worldBounds = isHallWorld ? HALL_LAYOUT.bounds : CAFE_LAYOUT.bounds;
+// 静态碰撞壳（边界 + 静态圆）统一从注册表取数；大厅动态摊位圆由 BoothSystem 注入
+const worldShell = colliderShellFor(environmentAssetId);
+const worldBounds = worldShell.bounds;
 const worldPlayerSpawn = isHallWorld ? HALL_LAYOUT.playerSpawn : CAFE_LAYOUT.playerSpawn;
 const worldTitle = isHallWorld ? activeWorld.title : activeSceneVariant.title;
 document.body.dataset.world = activeWorld.id;
@@ -77,13 +80,6 @@ const SEATED_SCALE_Y = 0.82;
 const SEATED_ROOT_Y = 0.025;
 const MODEL_FORWARD = new THREE.Vector3(0, 0, 1);
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
-const TABLE_BLOCKERS = Object.freeze([
-  { x: 0, z: 0, radius: 1.27 },
-  { x: -3.65, z: -1.55, radius: 0.72 },
-  { x: -3.65, z: 1.55, radius: 0.72 },
-  { x: 3.28, z: -1.35, radius: 0.94 },
-  { x: 3.28, z: 1.65, radius: 0.94 },
-]);
 const NPC_ENTRY_SPAWNS = Object.freeze([
   { x: -2.55, z: 4.05, yaw: Math.PI },
   { x: -1.75, z: 4.25, yaw: Math.PI },
@@ -96,6 +92,16 @@ const LIVE_WALK_SPEED = 1.5;
 const LIVE_BUBBLE_DURATION = 4;
 const HALL_GLANCE_DURATION = 0.9;
 const HALL_GLANCE_ANGLE = Math.PI / 12; // 主理人回眸幅度 15°
+const NPC_COLLIDER_RADIUS = 0.35; // 玩家 ↔ NPC 软碰撞圆半径
+
+// 快照新人（confirm 第 7 人+）缺调色板时，按 id 哈希从六人调色板确定性取一个
+const FALLBACK_PALETTES = Object.freeze(people.map((person) => person.palette));
+
+function hashString(value) {
+  let hash = 0;
+  for (const char of String(value)) hash = (hash * 31 + char.charCodeAt(0)) % 9973;
+  return hash;
+}
 
 // 运行时注入（window.__ECHOWORLD_OPTIONS__）：api / onPersonSelected / live / snapshotPollMs
 const runtimeOptions = globalThis.__ECHOWORLD_OPTIONS__ ?? {};
@@ -155,6 +161,11 @@ const renderer = new THREE.WebGLRenderer({
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.shadowMap.enabled = true;
 installVisualProfile(scene, renderer, activeVisualProfile);
+if (isHallWorld) {
+  // 集市民谣氛围，待视觉 profile 正式化：亮蓝天背景 + 轻雾远景（在 current profile 基础上覆盖）
+  scene.background = new THREE.Color("#7ec8e3");
+  scene.fog = new THREE.Fog("#a8d8ec", 16, 42);
+}
 
 const timer = new THREE.Timer();
 timer.connect(document);
@@ -209,6 +220,8 @@ let liveWorld = null;
 let liveWorldTick = null;
 let boothSystem = null;
 const hallGlances = new Map();
+const dynamicPeople = new Map();
+const pendingAgentSpawns = new Set();
 const hoverNdc = new THREE.Vector2();
 let hoverClientX = 0;
 let hoverClientY = 0;
@@ -235,6 +248,7 @@ const appShell = createCafeShell({
   onMeetingStart: startMeeting,
   onMeetingEnd: endMeeting,
   resolveMediaUrl,
+  world: activeWorld.id,
 });
 
 canvas.dataset.ready = "false";
@@ -478,7 +492,7 @@ function setExperienceMode(mode) {
 
 
 function selectWorldPerson(personId) {
-  const person = people.find((candidate) => candidate.id === personId) ?? null;
+  const person = personLikeFor(personId);
   selectedPersonId = person?.id ?? null;
   appShell.selectWorldPerson(selectedPersonId);
   canvas.dataset.selectedPerson = selectedPersonId ?? "";
@@ -606,7 +620,7 @@ function fillPackageNames(packages) {
 // 在 3D 世界中选中/定位人物；不在世界中（如刚确认的新人）返回 false 且不影响当前选中
 function selectPersonInWorld(personId) {
   if (typeof personId !== "string" || personId === "") return false;
-  if (!people.some((person) => person.id === personId)) return false;
+  if (!personLikeFor(personId)) return false;
   selectWorldPerson(personId);
   return true;
 }
@@ -753,7 +767,11 @@ function applyLiveSnapshot(rawSnapshot) {
   for (const agent of adapted.agents) {
     if (agent.id === currentUser.id || liveMeetingOverrides.has(agent.id)) continue;
     const entity = npcSystem?.getEntity(agent.id);
-    if (!entity) continue;
+    if (!entity) {
+      // 新面孔（confirm 新人等）：异步现场生成实体，后续快照接管站位与状态
+      void ensureAgentEntity(agent);
+      continue;
+    }
     if (isHallWorld) {
       if (agent.state === "walking" && agent.position) {
         // 串门途中：按快照位置插值行走（WalkSlide 绕开展位）
@@ -796,6 +814,8 @@ function applyLiveSnapshot(rawSnapshot) {
       meeting: agent.state === "in-meeting",
     });
   }
+
+  syncDynamicAgents(adapted.agents);
 }
 
 
@@ -885,8 +905,9 @@ function updateLiveAgents(delta) {
     if (moving) {
       // 匀速逼近快照目标：轮询节拍之间保持连续走动，而不是脉冲式追赶
       const stepLength = Math.min(distance, LIVE_WALK_SPEED * delta);
-      // 轻量避障：下一步进入桌面圆形阻挡时沿切线滑动，缓解快照直线路径穿模；
-      // yaw 跟随实际（滑动后的）移动方向
+      // 轻量避障：下一步进入静态壳/摊位圆时沿切线滑动，缓解快照直线路径穿模；
+      // yaw 跟随实际（滑动后的）移动方向。
+      // 注意：此处不加入其他 NPC 圆——NPC↔NPC 分离解算权威在后端，前端只做静态壳保险
       const [stepX, stepZ] = slideStepAroundBlockers(
         root.position.x,
         root.position.z,
@@ -914,6 +935,65 @@ function updateLiveAgents(delta) {
     const targetScaleY = seated ? SEATED_SCALE_Y : 1;
     root.scale.y += (targetScaleY - root.scale.y) * (1 - Math.exp(-7 * delta));
     entity.baseY = seated ? SEATED_ROOT_Y : 0;
+  }
+}
+
+
+// demoPeople 或快照动态生成的人
+function personLikeFor(personId) {
+  return people.find((person) => person.id === personId) ?? dynamicPeople.get(personId) ?? null;
+}
+
+
+// 快照里的新面孔：用 CharacterSystem 克隆/换色现场生成实体，注册进既有驱动链路
+async function ensureAgentEntity(agent) {
+  if (!characterSystem || !npcSystem) return;
+  if (pendingAgentSpawns.has(agent.id) || npcSystem.getEntity(agent.id)) return;
+  pendingAgentSpawns.add(agent.id);
+  try {
+    const palette =
+      agent.palette ?? FALLBACK_PALETTES[hashString(agent.id) % FALLBACK_PALETTES.length];
+    const name = nameOf(agent.id);
+    const personLike = {
+      id: agent.id,
+      name,
+      displayName: name,
+      relation: "刚搬进世界的新朋友",
+      palette,
+      conversation: { replies: ["（TA 还在整理自己的故事。）"] },
+    };
+    dynamicPeople.set(agent.id, personLike);
+    const spawn = agent.position
+      ? { x: agent.position.x, z: agent.position.z, yaw: agent.position.yaw ?? 0 }
+      : worldPlayerSpawn;
+    const entity = await characterSystem.spawn(
+      characterSpec(personLike, `agent-${agent.id}`, spawn, 0.005),
+    );
+    npcSystem.register(personLike, entity);
+    canvas.dataset.npcCount = String(npcSystem.agents.size);
+    canvas.dataset.characterCount = String(characterSystem.entities.length);
+  } catch (error) {
+    dynamicPeople.delete(agent.id);
+    console.warn(`[EchoWorld] 新人 ${agent.id} 的实体生成失败`, error);
+  } finally {
+    pendingAgentSpawns.delete(agent.id);
+  }
+}
+
+
+// 快照中消失的动态生成实体：despawn 回收（原始 6 人不在 dynamicPeople 中，永不回收）
+function syncDynamicAgents(agents) {
+  if (dynamicPeople.size === 0) return;
+  const presentIds = new Set(agents.map((agent) => agent.id));
+  for (const personId of [...dynamicPeople.keys()]) {
+    if (presentIds.has(personId) || pendingAgentSpawns.has(personId)) continue;
+    const entity = npcSystem?.getEntity(personId);
+    if (entity) characterSystem?.despawn(entity);
+    npcSystem?.agents.delete(personId);
+    liveTargets.delete(personId);
+    hallGlances.delete(personId);
+    dynamicPeople.delete(personId);
+    canvas.dataset.npcCount = String(npcSystem?.agents.size ?? 0);
   }
 }
 
@@ -968,8 +1048,23 @@ function readMovementInput() {
 
 
 function currentBlockers() {
-  // 大厅的碰撞阻挡由展位锚点提供（BoothSystem 同步后填充），咖啡厅用桌位圆形阻挡
-  return isHallWorld ? (boothSystem?.blockers ?? []) : TABLE_BLOCKERS;
+  // 静态壳来自 ColliderRegistry；大厅摊位圆为动态锚点，由 BoothSystem 快照同步后注入。
+  // 注意：不含 NPC 圆——NPC↔NPC 分离解算权威在后端，前端只保静态壳与玩家软碰撞，防双权威打架
+  return isHallWorld
+    ? [...worldShell.staticCircles, ...(boothSystem?.blockers ?? [])]
+    : worldShell.staticCircles;
+}
+
+
+// 当前世界 NPC 实体的动态碰撞圆（含动态生成的新人；玩家自身不在 npcSystem 中，天然排除）
+function npcColliders() {
+  if (!npcSystem) return [];
+  const circles = [];
+  for (const agent of npcSystem.agents.values()) {
+    const position = agent.entity.root.position;
+    circles.push({ x: position.x, z: position.z, r: NPC_COLLIDER_RADIUS });
+  }
+  return circles;
 }
 
 
@@ -981,7 +1076,7 @@ function isWalkable(position) {
     position.z > worldBounds.maxZ
   ) return false;
   return !currentBlockers().some(
-    (blocker) => Math.hypot(position.x - blocker.x, position.z - blocker.z) < blocker.radius,
+    (blocker) => Math.hypot(position.x - blocker.x, position.z - blocker.z) < (blocker.r ?? blocker.radius),
   );
 }
 
@@ -1014,6 +1109,20 @@ function updatePlayer(delta) {
       .addScaledVector(cameraRight, input.x)
       .normalize();
     candidatePosition.copy(player.position).addScaledVector(moveDirection, MOVE_SPEED * delta);
+
+    // 玩家 ↔ NPC 软碰撞：NPC 实体作动态圆（r=0.35，含新人实体），目标位置进圆则沿切线滑动。
+    // NPC↔NPC 分离权威在后端，这里只保玩家不穿人；圆位置随帧更新
+    const npcCircles = npcColliders();
+    if (npcCircles.length > 0) {
+      const [npcStepX, npcStepZ] = slideStepAroundBlockers(
+        player.position.x,
+        player.position.z,
+        candidatePosition.x - player.position.x,
+        candidatePosition.z - player.position.z,
+        npcCircles,
+      );
+      candidatePosition.set(player.position.x + npcStepX, 0, player.position.z + npcStepZ);
+    }
 
     if (isWalkable(candidatePosition)) {
       commitCandidatePosition(candidatePosition);
@@ -1379,6 +1488,7 @@ async function boot() {
       assetStore,
       assetCatalog,
       resolveMediaUrl,
+      templateAssetId: HALL_LAYOUT.boothTemplateAssetId,
     });
     await boothSystem.prepare();
   }

@@ -1,0 +1,51 @@
+{
+  "schema_version": "echo-market-street-validation.v1",
+  "file": "public/models/echo_world_market_street.glb",
+  "import_status": "ok",
+  "root_node": "ROOT_MarketStreet",
+  "objects": 536,
+  "empty_nodes": 15,
+  "mesh_objects": 521,
+  "vertices": 27192,
+  "triangles": 12224,
+  "degenerate_triangles": 0,
+  "material_count": 38,
+  "glb_bytes": 1294044,
+  "feature_counts": {
+    "path_stones": 84,
+    "bunting_flags": 52,
+    "trees": 18,
+    "awning_valance_triangles": 35
+  },
+  "bounds_after_reimport": {
+    "min_xyz": [
+      -11.8343,
+      -11.5,
+      -0.12
+    ],
+    "max_xyz": [
+      11.0,
+      13.5765,
+      6.6735
+    ],
+    "size_xyz": [
+      22.8343,
+      25.0765,
+      6.7935
+    ]
+  },
+  "contract_checks": {
+    "root_at_origin": true,
+    "ground_top_z_m": 0.0,
+    "player_spawn_at_south_end": true,
+    "cafe_doorway_at_north_end": true,
+    "striped_awning_materials_present": true,
+    "lamp_glow_emissive": true,
+    "preview_nodes_excluded": true,
+    "no_degenerate_triangles": true,
+    "triangle_budget": 60000,
+    "material_budget": 48,
+    "all_materials_roughness_gte_0_7": true,
+    "glb_size_budget_10mb": true
+  }
+}

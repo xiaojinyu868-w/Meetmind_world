@@ -114,12 +114,47 @@ function variantControlsMarkup({
     </div>`;
 }
 
-function inspectorMarkup(person, state, context = "world") {
+// 头像渲染器工厂：src 经注入的 resolveMediaUrl 映射（live 媒体路由 / BASE_URL），
+// onerror 降级为 canvas dataURL（palette.jacket 圆底 + 名字首字），任何情况下不出现破图
+function createAvatarRenderer(resolveMediaUrl) {
+  const fallbackCache = new Map();
+  function fallbackUrl(person) {
+    const key = person.id ?? person.name;
+    if (!fallbackCache.has(key)) {
+      const canvas = document.createElement("canvas");
+      canvas.width = 64;
+      canvas.height = 64;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = person.palette?.jacket ?? "#2f665c";
+      ctx.beginPath();
+      ctx.arc(32, 32, 32, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#fffdf4";
+      ctx.font = '700 30px "PingFang SC", "Microsoft YaHei", sans-serif';
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(person.displayName ?? person.name ?? "?").slice(0, 1), 32, 34);
+      fallbackCache.set(key, canvas.toDataURL("image/png"));
+    }
+    return fallbackCache.get(key);
+  }
+  return function avatarImg(person, { alt = "", title = "" } = {}) {
+    const fallback = fallbackUrl(person);
+    const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
+    return `<img src="${escapeHtml(resolveMediaUrl(person.portrait))}" alt="${escapeHtml(alt)}"${titleAttr} onerror="this.onerror=null;this.src='${fallback}'" />`;
+  };
+}
+
+
+function inspectorMarkup(person, state, context = "world", avatarImg = null) {
+  const avatar = avatarImg
+    ? avatarImg(person, { alt: `${person.name} 的 Low-poly 头像` })
+    : `<img src="${person.portrait}" alt="${person.name} 的 Low-poly 头像" />`;
   const status = STATUS_LABELS[state?.status] ?? "在 Echo Cafe";
   const place = state?.tableLabel ?? "咖啡厅大厅";
   return `
     <header class="inspector-identity">
-      <img src="${person.portrait}" alt="${person.name} 的 Low-poly 头像" />
+      ${avatar}
       <div>
         <span>${person.relation}</span>
         <h2>${person.name}</h2>
@@ -162,6 +197,7 @@ export function createCafeShell({
   onMeetingStart = async () => {},
   onMeetingEnd = async () => {},
   resolveMediaUrl = (ref) => ref,
+  world = "cafe",
 }) {
   let currentView = "intro";
   let worldReady = false;
@@ -176,35 +212,10 @@ export function createCafeShell({
   const meetingMessages = [];
   const speechTimers = new Map();
   const activeSpeechIds = new Set();
-
-  // HUD 头像：src 经注入的 resolveMediaUrl 映射（live 媒体路由 / BASE_URL），
-  // onerror 降级为 canvas dataURL（palette.jacket 圆底 + 名字首字），任何情况下不出现破图
-  const avatarFallbackCache = new Map();
-  function avatarFallbackUrl(person) {
-    const key = person.id ?? person.name;
-    if (!avatarFallbackCache.has(key)) {
-      const canvas = document.createElement("canvas");
-      canvas.width = 64;
-      canvas.height = 64;
-      const ctx = canvas.getContext("2d");
-      ctx.fillStyle = person.palette?.jacket ?? "#2f665c";
-      ctx.beginPath();
-      ctx.arc(32, 32, 32, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#fffdf4";
-      ctx.font = '700 30px "PingFang SC", "Microsoft YaHei", sans-serif';
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(String(person.displayName ?? person.name ?? "?").slice(0, 1), 32, 34);
-      avatarFallbackCache.set(key, canvas.toDataURL("image/png"));
-    }
-    return avatarFallbackCache.get(key);
-  }
-  function avatarImg(person, { alt = "", title = "" } = {}) {
-    const fallback = avatarFallbackUrl(person);
-    const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
-    return `<img src="${escapeHtml(resolveMediaUrl(person.portrait))}" alt="${escapeHtml(alt)}"${titleAttr} onerror="this.onerror=null;this.src='${fallback}'" />`;
-  }
+  const avatarImg = createAvatarRenderer(resolveMediaUrl);
+  // HUD 文案按世界联动（hall=集市 / cafe=咖啡厅）
+  const worldLabel = world === "hall" ? "Echo 集市" : "Echo Cafe";
+  const worldStatusLine = world === "hall" ? "展位陈列中 · 欢迎串门" : "Agent 正在自主交流";
 
   root.innerHTML = `
     <div class="cafe-shell" data-view="intro">
@@ -223,29 +234,29 @@ export function createCafeShell({
               activeCharacterVariant,
               context: "intro",
             }) : ""}
-            <div class="intro-live"><span></span>6 个 Agent 已抵达</div>
+            <div class="intro-live"><span></span>6 个 Agent 已在展位就位</div>
           </div>
         </header>
         <div class="intro-copy">
           <p>YOUR RELATIONSHIPS, IN ONE PLACE</p>
-          <h1>Echo Cafe</h1>
-          <h2>每一段关系，都有一张可以再次坐下的桌子。</h2>
+          <h1>Echo 集市</h1>
+          <h2>这是你的关系集市：你认识的人，都在这里有了自己的展位。</h2>
         </div>
         <button class="intro-enter" type="button" data-action="enter-cafe" disabled>
-          <span><small>进入我的关系空间</small>走进咖啡厅</span>
+          <span><small>进入我的关系空间</small>走进集市</span>
           ${icon("arrow-right")}
         </button>
         <footer class="intro-footnote">
           <span>ECHOWORLD / PRIVATE AGENT SPACE</span>
-          <span>06 PEOPLE · 04 TABLES · 01 ROUNDTABLE</span>
+          <span>06 PEOPLE · 06 BOOTHS · 01 CAFE</span>
         </footer>
       </section>
 
-      <section id="cafe-view" class="cafe-view cafe-world-view" aria-label="Echo Cafe" aria-hidden="true">
+      <section id="cafe-view" class="cafe-view cafe-world-view" aria-label="${worldLabel}" aria-hidden="true">
         <header class="cafe-hud-top">
           <button class="glass-control venue-control" type="button" data-action="intro" aria-label="返回首页">
             <span class="cafe-brand-mark solid">EW</span>
-            <span><small>当前位置</small><strong>Echo Cafe</strong></span>
+            <span><small>当前位置</small><strong>${worldLabel}</strong></span>
           </button>
           <div class="cafe-presence">
             <div class="presence-faces">
@@ -278,9 +289,9 @@ export function createCafeShell({
         <aside id="world-inspector" class="world-inspector glass-panel" aria-label="人物资料" aria-hidden="true"></aside>
         <aside id="meeting-sheet" class="meeting-sheet glass-panel" aria-label="圆桌会议" aria-hidden="true"></aside>
 
-        <div class="cafe-bottom-status glass-control" aria-label="咖啡厅状态">
+        <div class="cafe-bottom-status glass-control" aria-label="${worldLabel}状态">
           ${icon("coffee")}
-          <span><strong>Echo Cafe</strong><small>Agent 正在自主交流</small></span>
+          <span><strong>${worldLabel}</strong><small>${worldStatusLine}</small></span>
         </div>
       </section>
 
@@ -319,7 +330,7 @@ export function createCafeShell({
       renderWorldInspector();
     }
     onViewChange(view);
-    document.title = view === "intro" ? "EchoWorld · Echo Cafe" : view === "map" ? "EchoWorld · 关系 Map" : "EchoWorld · Echo Cafe 在线";
+    document.title = view === "intro" ? `EchoWorld · ${worldLabel}` : view === "map" ? "EchoWorld · 关系 Map" : `EchoWorld · ${worldLabel} 在线`;
   }
 
   function showToast(message) {
@@ -355,7 +366,7 @@ export function createCafeShell({
       return;
     }
     mapInspector.innerHTML = `
-      ${inspectorMarkup(selectedMapPerson, agentStates.get(selectedMapPerson.id), "map")}
+      ${inspectorMarkup(selectedMapPerson, agentStates.get(selectedMapPerson.id), "map", avatarImg)}
       <button class="locate-person-button" type="button" data-action="locate-person">
         ${icon("locate-fixed")}<span>在咖啡厅中定位</span>
       </button>`;
@@ -372,7 +383,7 @@ export function createCafeShell({
           const personId = seats[index];
           const person = personId === currentUser.id ? currentUser : people.find((candidate) => candidate.id === personId);
           return `<span class="meeting-seat seat-${index + 1}${person ? " is-filled" : ""}">
-            ${person ? `<img src="${person.portrait}" alt="${person.displayName ?? person.name}" />` : `<i>${index + 1}</i>`}
+            ${person ? avatarImg(person, { alt: person.displayName ?? person.name }) : `<i>${index + 1}</i>`}
           </span>`;
         }).join("")}
         <span class="meeting-table-core">${icon("coffee")}<small>${seats.length}/6</small></span>
@@ -393,7 +404,7 @@ export function createCafeShell({
           const state = agentStates.get(person.id);
           return `
             <button class="meeting-person-row${selected ? " is-selected" : ""}" type="button" data-meeting-person="${person.id}" aria-pressed="${selected}">
-              <img src="${person.portrait}" alt="" />
+              ${avatarImg(person)}
               <span><strong>${person.name}</strong><small>${state?.tableLabel ?? person.relation}</small></span>
               <i>${icon(selected ? "check" : "plus")}</i>
             </button>`;
@@ -412,8 +423,8 @@ export function createCafeShell({
     meetingSheet.innerHTML = `
       <header class="meeting-header active">
         <div class="meeting-party-faces">
-          <img src="${currentUser.portrait}" alt="" />
-          ${participants.map((person) => `<img src="${person.portrait}" alt="" />`).join("")}
+          ${avatarImg(currentUser)}
+          ${participants.map((person) => avatarImg(person)).join("")}
         </div>
         <div><small>${participants.length + 1} 人已入座</small><h2>圆桌会议进行中</h2></div>
         <button class="glass-icon-button" type="button" data-action="end-meeting" title="结束会议" aria-label="结束圆桌会议">${icon("x")}</button>
@@ -422,7 +433,7 @@ export function createCafeShell({
         ${meetingMessages.map((message) => {
           const person = message.personId === currentUser.id ? currentUser : people.find((candidate) => candidate.id === message.personId);
           return `<div class="meeting-message${message.personId === currentUser.id ? " is-me" : ""}">
-            <img src="${person.portrait}" alt="" />
+            ${avatarImg(person)}
             <span><small>${person.displayName ?? person.name}</small><p>${escapeHtml(message.text)}</p></span>
           </div>`;
         }).join("")}

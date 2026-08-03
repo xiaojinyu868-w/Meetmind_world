@@ -38,8 +38,13 @@ app/
   world/
     service.py            World Service：事件消费（move/state/talk/meeting-*）、tick、
                           最近 20 条事件滚动缓冲、圆桌会议入座真实锚点、
-                          register_person 展位注册（幂等，大厅/confirm 调用）
-    hall.py               展位大厅：双排网格展位锚点布局（间距 ≥2.2m、面向大厅中心）、
+                          register_person 展位注册（幂等，大厅/confirm 调用）、
+                          agent-move 统一走 resolve_move 服务端权威解算（缓冲含最终位置）
+    colliders.py          碰撞注册表（frozen dataclass：Bounds/Circle/WorldColliders）+
+                          resolve_move 分离解算（静态壳钳制 → agent 圆形分离 0.6m → 再钳制）；
+                          cafe 静态壳同源 tables.py，大厅摊位壳由 booth modules 动态派生
+    hall.py               展位大厅（露天集市街道）：两侧两排摊位锚点（x=±3.8 朝街道中心、
+                          z 从 -9 起行距 2.4m 交替填充、容量 16、出生区 z>8.5 留空）、
                           HallRegistry 幂等分配、build_display_from_package（≥L2 才上墙）
     tables.py             桌位/阻挡配置：TABLE_BLOCKERS + 边界 + 18 个座位锚点
                           （与前端 TABLE_BLOCKERS/CafeLayout 同源），clamp_to_walkable
@@ -70,6 +75,8 @@ app/
     three_view.py         照片 → 三视图接口（mock：复制输入图）
     blender_gen.py        三视图 → GLB：subprocess 调本机 Blender 无头，失败降级 mock GLB
     person_builder.py     编排：照片 → 三视图 → GLB → Package avatar 登记（全流程 mock 可跑通）
+    video_frames.py       视频均匀抽 3 帧：优先系统 ffmpeg（本机 /usr/bin/ffmpeg），
+                          其次 venv 内 cv2（可选 opencv-python-headless），双不可用返回 None
     templates/blender_lowpoly.py  Blender 占位人形脚本（ROOT_FacelessCharacter + MAT_* 材质）
 tests/                    pytest（schema / snapshot / api / pipeline+vision / providers /
                           runtime / permissions / live 冒烟默认 skip）
@@ -99,6 +106,7 @@ data/                     运行期数据（.gitkeep 占位，内容被 .gitigno
 | IF-5 | GET | `/api/v0/packages/{person_id}?viewer=self\|agent\|org\|public` | 按权限圈层过滤的详情（agent 视角要求已确认） |
 | IF-5 | POST | `/api/v0/search` | 检索（FR-1.9）：`{by:"face"\|"name"\|"keyword", query/photo}` → `{results:[{person_id,name,score,last_encounter}]}`；face 为 stub |
 | — | GET | `/api/v0/media/{ref:path}` | 资料包媒体（facts 指针）安全取字节：路径防穿越（403）、扩展名白名单、正确 Content-Type、404 |
+| — | GET | `/api/v0/admin/integrity?person_id=` | 事实层完整性自检（1.D.3）：manifest.v1.json 的 sha256 复核报告 {ok, checked, corrupted, unregistered}；单用户 MVP 无鉴权，多用户需保护 |
 
 ## 边界（务必读）
 

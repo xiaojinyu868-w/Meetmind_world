@@ -13,6 +13,7 @@
 写入；自进化流程（harness）无权调用本模块，见 agents/memory/store.py 的只读封装。
 """
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -80,7 +81,70 @@ class PackageStore:
             )
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
+        self._update_manifest(target, data)
         return str(target.relative_to(self.root))
+
+    # ---------- 事实层完整性（1.D.3：manifest + sha256 自检） ----------
+
+    def _update_manifest(self, target: Path, data: bytes) -> None:
+        """每次写事实文件后维护同目录 manifest.v1.json（相对路径 → sha256）。
+
+        manifest 是索引而非事实内容，允许覆盖重写；它不登记自身。
+        """
+        manifest_path = target.parent / "manifest.v1.json"
+        files = {}
+        if manifest_path.exists():
+            try:
+                files = json.loads(manifest_path.read_text(encoding="utf-8")).get("files", {})
+            except json.JSONDecodeError:
+                files = {}
+        files[str(target.relative_to(self.root))] = hashlib.sha256(data).hexdigest()
+        payload = {"schema": "echo-facts-manifest.v1", "files": files}
+        manifest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2),
+                                 encoding="utf-8")
+
+    def verify_facts_integrity(self, person_id: str | None = None) -> dict:
+        """复核 facts/ 下所有 manifest 登记的 sha256（全量或单人）。
+
+        返回 {"ok", "checked", "corrupted": [{ref, reason}], "unregistered": [...]}：
+        corrupted = 文件缺失或哈希不符（可能被篡改/损坏）；unregistered =
+        存在于目录但未登记进 manifest 的文件（ informational，不影响 ok）。
+        """
+        facts_root = self.facts_dir.resolve()
+        checked, corrupted, unregistered = 0, [], []
+        for manifest_path in sorted(facts_root.rglob("manifest.v1.json")):
+            if person_id and f"/{person_id}/" not in str(manifest_path).replace("\\", "/"):
+                continue
+            try:
+                files = json.loads(manifest_path.read_text(encoding="utf-8")).get("files", {})
+            except json.JSONDecodeError:
+                corrupted.append({"ref": str(manifest_path.relative_to(self.root)),
+                                  "reason": "manifest 无法解析"})
+                continue
+            registered = set()
+            for ref, expected in files.items():
+                if person_id and f"/{person_id}/" not in ref.replace("\\", "/"):
+                    continue
+                registered.add(ref)
+                target = (self.root / ref).resolve()
+                checked += 1
+                if facts_root not in target.parents or not target.is_file():
+                    corrupted.append({"ref": ref, "reason": "文件缺失"})
+                    continue
+                actual = hashlib.sha256(target.read_bytes()).hexdigest()
+                if actual != expected:
+                    corrupted.append({"ref": ref, "reason": "sha256 不符（内容已变更）"})
+            # 目录里存在但 manifest 未登记的文件（如手写拷贝进来的旧文件）
+            for path in sorted(manifest_path.parent.iterdir()):
+                if not path.is_file() or path.name == "manifest.v1.json":
+                    continue
+                ref = str(path.relative_to(self.root))
+                if person_id and f"/{person_id}/" not in ref.replace("\\", "/"):
+                    continue
+                if ref not in registered:
+                    unregistered.append(ref)
+        return {"ok": not corrupted, "checked": checked,
+                "corrupted": corrupted, "unregistered": unregistered}
 
     def read_fact(self, rel_path: str) -> bytes:
         target = (self.root / rel_path).resolve()

@@ -52,7 +52,9 @@ src/runtime/
                             visibilitychange 时暂停；提供 onSnapshot/onEvent 订阅
   SnapshotAdapter.js        快照 agent → 渲染结构映射（状态归一化 walking|seated|talking|in-meeting|at-booth、
                             CafeLayout 座位锚点对齐、事件 camelCase 归一化、modules 透传，纯函数可在 node 下自测）
-  WalkSlide.js              live 插值轻量避障：位移将进入 TABLE_BLOCKERS 圆时投影到切线滑动（纯函数）
+  WalkSlide.js              live 插值轻量避障：位移将进入阻挡圆时投影到切线滑动（纯函数，圆键 r/radius 兼容）
+  ColliderRegistry.js       环境静态碰撞壳注册表（按环境资产 id 返回 bounds + 静态圆；摊位圆由 BoothSystem
+                            动态注入；NPC↔NPC 分离权威在后端；loadFromManifest 为 COLLIDER_* 导出预留桩）
   WorldSwitch.js            两级世界切换（?world=hall|cafe，默认 hall）+ HALL_LAYOUT 大厅布局常量
   BoothSystem.js            展位系统：模板 GLB（module.booth-template.v1，未到货降级简易占位展位）→
                             按快照 modules 克隆、MESH_* 展示面贴图/CanvasTexture 名牌与标签、增量同步、

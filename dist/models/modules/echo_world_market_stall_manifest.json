@@ -1,0 +1,64 @@
+{
+  "schema_version": "echo-market-stall.v1",
+  "name": "EchoWorld Market Stall Template",
+  "style": "storybook low-poly matte stall; log frame, red-white striped awning, goods on counter",
+  "generator": "blender/build_market_stall.py",
+  "seed": 26080502,
+  "blend": "blender/echo_world_market_stall.blend",
+  "glb": "public/models/modules/echo_world_market_stall.glb",
+  "preview": "renders/echo_world_market_stall_preview.png",
+  "root_node": "ROOT_MarketStall",
+  "stand_anchor": "ANCHOR_PersonStand",
+  "display_surfaces": {
+    "MESH_NamePlate": {
+      "width_m": 1.2,
+      "height_m": 0.3,
+      "kind": "name_plate",
+      "material": "MAT_Display_NamePlate"
+    },
+    "MESH_Portrait": {
+      "width_m": 0.7,
+      "height_m": 0.9,
+      "kind": "portrait",
+      "material": "MAT_Display_Portrait"
+    },
+    "MESH_PhotoFrame_01": {
+      "width_m": 0.6,
+      "height_m": 0.45,
+      "kind": "photo_frame",
+      "material": "MAT_Display_PhotoFrame_01"
+    },
+    "MESH_PhotoFrame_02": {
+      "width_m": 0.6,
+      "height_m": 0.45,
+      "kind": "photo_frame",
+      "material": "MAT_Display_PhotoFrame_02"
+    },
+    "MESH_Backdrop": {
+      "width_m": 1.6,
+      "height_m": 0.24,
+      "kind": "tag_strip",
+      "material": "MAT_Display_Backdrop"
+    }
+  },
+  "scale_contract": {
+    "unit": "meter",
+    "footprint_m": [
+      2.6,
+      2.3
+    ],
+    "awning_peak_z_m": 2.75,
+    "counter_top_z_m": 0.89
+  },
+  "coordinate_contract": {
+    "origin": "stall center on ground",
+    "front_side": "-Y in Blender, +Z after glTF export",
+    "up_axis_export": "+Y via glTF"
+  },
+  "export_excludes": [
+    "MARKET_StallPreviewOnly collection",
+    "preview camera",
+    "preview lights",
+    "preview ground card"
+  ]
+}

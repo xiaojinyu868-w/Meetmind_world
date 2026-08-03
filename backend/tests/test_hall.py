@@ -8,8 +8,10 @@ from fastapi.testclient import TestClient
 from app.main import create_app
 from app.schemas.snapshot_schema import validate_snapshot
 from app.world.hall import (
-    BOOTH_COLUMNS,
+    BOOTH_CAPACITY,
     BOOTH_ROW_STEP,
+    BOOTH_ROW_Z_MAX,
+    BOOTH_SIDE_X,
     HALL_BOUNDS,
     SPAWN_FREE_Z,
     HallRegistry,
@@ -23,30 +25,39 @@ def client(tmp_path, monkeypatch):
     return TestClient(create_app())
 
 
-# ---------- 布局算法 ----------
+# ---------- 布局算法（露天集市街道：两侧两排摊位） ----------
 
-def test_layout_spacing_bounds_and_facing():
-    anchors = [booth_anchor(i) for i in range(12)]  # 两排双排网格
-    # 边界内 + 出生区留空
+def test_layout_two_rows_alternating_and_facing_street():
+    anchors = [booth_anchor(i) for i in range(12)]
+    # 左右两排交替：偶数左排 x=-3.8，奇数右排 x=+3.8；同侧 z 步进 2.4
+    for i, anchor in enumerate(anchors):
+        expected_x = -BOOTH_SIDE_X if i % 2 == 0 else BOOTH_SIDE_X
+        assert anchor["x"] == expected_x
+        assert anchor["z"] == pytest.approx(-9.0 + (i // 2) * 2.4)
+    # 朝向街道中心：左排朝 +x（yaw=+90°），右排朝 -x（yaw=-90°）
+    for i, anchor in enumerate(anchors):
+        forward = (math.sin(anchor["yaw"]), math.cos(anchor["yaw"]))
+        toward_street = (1.0, 0.0) if i % 2 == 0 else (-1.0, 0.0)
+        cos_sim = forward[0] * toward_street[0] + forward[1] * toward_street[1]
+        assert cos_sim > 0.999
+    # 边界内 + 出生区留空（z ≤ 8 < 8.5）
     for anchor in anchors:
         assert HALL_BOUNDS["min_x"] <= anchor["x"] <= HALL_BOUNDS["max_x"]
         assert HALL_BOUNDS["min_z"] <= anchor["z"] <= HALL_BOUNDS["max_z"]
         assert anchor["z"] < SPAWN_FREE_Z
-    # 最近邻间距 ≥ 2.2m
+    # 任意两摊位间距 ≥ 2.2m（同侧 2.4、对街 7.6、对角更大）
     for i, a in enumerate(anchors):
         for b in anchors[i + 1:]:
             assert math.hypot(a["x"] - b["x"], a["z"] - b["z"]) >= 2.2 - 1e-9
-    # 面向大厅中心：forward=(sin yaw, cos yaw) 与指向圆心方向一致
-    for anchor in anchors:
-        to_center_x, to_center_z = -anchor["x"], -anchor["z"]
-        length = math.hypot(to_center_x, to_center_z)
-        cos_sim = (math.sin(anchor["yaw"]) * to_center_x
-                   + math.cos(anchor["yaw"]) * to_center_z) / length
-        assert cos_sim > 0.999
-    # 列距/行距常量满足间距要求
-    assert min(BOOTH_COLUMNS[i + 1] - BOOTH_COLUMNS[i]
-               for i in range(len(BOOTH_COLUMNS) - 1)) >= 2.2
     assert BOOTH_ROW_STEP >= 2.2
+    assert 2 * BOOTH_SIDE_X >= 2.2
+
+
+def test_layout_capacity_and_overflow():
+    last = booth_anchor(BOOTH_CAPACITY - 1)
+    assert last["z"] <= BOOTH_ROW_Z_MAX  # 最后一个仍在出生区之前
+    with pytest.raises(ValueError, match="容量已满"):
+        booth_anchor(BOOTH_CAPACITY)  # 超出 z=8 上限，拒绝继续向出生区扩张
 
 
 def test_hall_registry_idempotent():

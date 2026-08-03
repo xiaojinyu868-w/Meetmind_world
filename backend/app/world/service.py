@@ -20,8 +20,17 @@
 from collections import deque
 
 from app.schemas.snapshot_schema import build_snapshot
+from app.world.colliders import (
+    BOOTH_SHELL_RADIUS,
+    CAFE_COLLIDERS,
+    Bounds,
+    Circle,
+    WorldColliders,
+    clamp_static,
+    resolve_move,
+)
 from app.world.hall import HallRegistry
-from app.world.tables import ROUNDTABLE_SEATS, clamp_to_walkable, nearest_seat
+from app.world.tables import ROUNDTABLE_SEATS, WALK_BOUNDS, nearest_seat
 
 EVENT_BUFFER_SIZE = 20
 
@@ -29,16 +38,27 @@ EVENT_BUFFER_SIZE = 20
 class WorldService:
     """世界状态的唯一权威；唯一输出通道是版本化快照（ADR-3）。"""
 
-    def __init__(self, seed: dict, *, blockers=None, bounds=None):
+    def __init__(self, seed: dict, *, blockers=None, bounds=None, colliders=None):
         self.tick = 0
-        # 可行走约束：None 表示用 tables 的咖啡厅默认值；大厅实例传空阻挡 + 大厅边界
-        self._blockers = blockers
-        self._bounds = bounds
+        # 碰撞注册：colliders 显式传入优先；否则由 blockers/bounds 构造；
+        # 都缺省为咖啡厅静态壳（CAFE_COLLIDERS）。大厅的摊位壳在此之外
+        # 由 booth modules 动态派生（r=0.9，新展位自动成壳）。
+        if colliders is not None:
+            self._colliders = colliders
+        elif blockers is not None or bounds is not None:
+            effective = bounds or WALK_BOUNDS
+            self._colliders = WorldColliders(
+                bounds=Bounds(effective["min_x"], effective["max_x"],
+                              effective["min_z"], effective["max_z"]),
+                circles=tuple(Circle(b["x"], b["z"], b["radius"]) for b in (blockers or ())),
+            )
+        else:
+            self._colliders = CAFE_COLLIDERS
         # agent 内部状态：id -> {name, position, state, palette}
-        # 种子位置同样过可行走钳制（防止初始就站进桌子）
+        # 种子位置同样过静态钳制（防止初始就站进桌子）
         self._agents = {}
         for agent in seed.get("agents", []):
-            clamped = clamp_to_walkable(agent["position"], self._blockers, self._bounds)
+            clamped = self._clamp(agent["position"])
             clamped["yaw"] = agent["position"].get("yaw", 0.0)
             self._agents[agent["id"]] = {
                 "name": agent["name"],
@@ -110,38 +130,71 @@ class WorldService:
             return
         position = event.get("position")
         if isinstance(position, dict):
-            # 统一钳制：任何来源（规则兜底/LLM 决策/外部注入）的目标点
-            # 都不允许落入阻挡圆或走出边界（防穿模的唯一闸口）
-            clamped = clamp_to_walkable(position, self._blockers, self._bounds)
-            clamped["yaw"] = float(position.get("yaw", agent["position"]["yaw"]))
-            agent["position"] = clamped
+            # 服务端权威解算：静态壳钳制 + 与其他 agent 的圆形分离。
+            # 任何来源（咖啡厅 runtime/大厅串门/外部注入）都过这唯一闸口。
+            resolved = self._resolve_position(event["agent_id"], agent["position"], position)
+            resolved["yaw"] = float(position.get("yaw", agent["position"]["yaw"]))
+            agent["position"] = resolved
         if event.get("state"):
-            self._apply_state(agent, event["state"])
+            self._apply_state(event["agent_id"], agent, event["state"])
         self._events.append(
-            {"type": "agent-move", "agent_id": event["agent_id"], "tick": self.tick}
+            {"type": "agent-move", "agent_id": event["agent_id"],
+             "position": dict(agent["position"]), "tick": self.tick}
         )
 
     def _on_agent_state(self, event: dict) -> None:
         agent = self._agents.get(event.get("agent_id"))
         if agent is None or not event.get("state"):
             return
-        if not self._apply_state(agent, event["state"]):
+        if not self._apply_state(event["agent_id"], agent, event["state"]):
             return  # 状态被拒绝（如无座位强行 seated）：不入缓冲
         self._events.append(
             {"type": "agent-state", "agent_id": event["agent_id"],
              "state": event["state"], "tick": self.tick}
         )
 
-    def _apply_state(self, agent: dict, state: str) -> bool:
-        """应用状态切换。seated 必须吸附最近座位锚点（阈值内），否则拒绝并保持原状态。"""
-        if state != "seated":
-            agent["state"] = state
+    # ---------- 碰撞与位置解算（服务端权威） ----------
+
+    def _clamp(self, position: dict) -> dict:
+        return clamp_static(position, self._colliders)
+
+    def _booth_circles(self, exclude_agent: str | None = None) -> tuple:
+        """大厅摊位壳：由 booth modules 动态派生（新展位自动成壳；
+        自己的摊位不算自己的壳——回展位是合法目的地）。"""
+        return tuple(
+            Circle(m["position"]["x"], m["position"]["z"], BOOTH_SHELL_RADIUS)
+            for m in self._modules
+            if m.get("type") == "booth" and m.get("person_id") != exclude_agent
+        )
+
+    def _resolve_position(self, agent_id: str, from_pos: dict, to_pos: dict) -> dict:
+        others = [(pid, state["position"]) for pid, state in self._agents.items()
+                  if pid != agent_id]
+        colliders = WorldColliders(self._colliders.bounds,
+                                   self._colliders.circles
+                                   + self._booth_circles(exclude_agent=agent_id))
+        return resolve_move(agent_id, from_pos, to_pos, others, colliders)
+
+    def _apply_state(self, agent_id: str, agent: dict, state: str) -> bool:
+        """应用状态切换。seated 必须吸附最近座位锚点；at-booth 必须有自己的展位
+        （位置吸附展位锚点——壳内合法例外）；都不满足则拒绝并保持原状态。"""
+        if state == "seated":
+            seat = nearest_seat(agent["position"])
+            if seat is None:
+                return False
+            agent["position"] = {"x": seat["x"], "z": seat["z"], "yaw": seat["yaw"]}
+            agent["state"] = "seated"
             return True
-        seat = nearest_seat(agent["position"])
-        if seat is None:
-            return False
-        agent["position"] = {"x": seat["x"], "z": seat["z"], "yaw": seat["yaw"]}
-        agent["state"] = "seated"
+        if state == "at-booth":
+            booth = next((m for m in self._modules
+                          if m.get("type") == "booth" and m.get("person_id") == agent_id),
+                         None)
+            if booth is None:
+                return False
+            agent["position"] = dict(booth["position"])
+            agent["state"] = "at-booth"
+            return True
+        agent["state"] = state
         return True
 
     def _on_agent_talk(self, event: dict) -> None:

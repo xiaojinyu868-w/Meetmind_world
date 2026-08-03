@@ -1,0 +1,47 @@
+{
+  "schema_version": "echo-market-street.v1",
+  "name": "EchoWorld Open-air Market Street",
+  "style": "storybook low-poly matte; stone path, striped awnings, bunting, pink tent",
+  "generator": "blender/build_market_street.py",
+  "seed": 26080501,
+  "blend": "blender/echo_world_market_street.blend",
+  "glb": "public/models/echo_world_market_street.glb",
+  "preview": "renders/echo_world_market_street_preview.png",
+  "root_node": "ROOT_MarketStreet",
+  "ground_node": "GROUND_MarketStreet",
+  "spawn_anchor": "ANCHOR_PlayerSpawn",
+  "cafe_doorway": "FIXTURE_CafeDoorway",
+  "features": {
+    "path_stones": 84,
+    "baked_stalls": [
+      "STALL_L1",
+      "STALL_L2",
+      "STALL_L3",
+      "STALL_R1",
+      "STALL_R2"
+    ],
+    "bunting_flags": 52,
+    "lamp_posts": 4,
+    "trees": 18,
+    "pink_tent": "FIXTURE_PinkTent",
+    "fabric_rack": "FIXTURE_FabricRack"
+  },
+  "scale_contract": {
+    "unit": "meter",
+    "street_passage_width_m": 6.0,
+    "street_length_m": 20.0,
+    "reference_character_height_m": 1.65,
+    "ground_top_z": 0.0
+  },
+  "coordinate_contract": {
+    "origin": "street center on ground",
+    "spawn": "south end, Blender (0, -9, 0) = glTF (0, 0, 9), facing glTF -Z",
+    "cafe_portal": "north end, Blender y=10.4 = glTF z=-10.4",
+    "up_axis_export": "+Y via glTF"
+  },
+  "export_excludes": [
+    "MARKET_PreviewOnly collection",
+    "preview camera",
+    "preview lights"
+  ]
+}

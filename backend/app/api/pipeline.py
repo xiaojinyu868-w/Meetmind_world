@@ -18,6 +18,7 @@
 import base64
 import json
 import time
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -27,6 +28,7 @@ from typing import Literal
 from app.agents.llm import base as llm_base
 from app.agents.utils.jsonish import extract_json as _extract_json
 from app.packages.store import FactLayerImmutableError
+from app.pipeline.video_frames import extract_keyframes
 from app.schemas.package_schema import DEFAULT_PRIVACY, validate_encounter_draft
 
 router = APIRouter(prefix="/api/v0", tags=["pipeline"])
@@ -81,9 +83,10 @@ def _chat_provider():
 # ---------- 各处理步骤 ----------
 
 def _step_preprocess(store, partition, bundle, media, ctx) -> dict:
-    """预处理：图片输入直接作为关键帧（真实内容）；视频无 ffmpeg 降级占位图。
+    """预处理：图片输入直接作为关键帧；视频经 ffmpeg/cv2 均匀抽 3 帧（真实帧）；
+    抽帧不可用或失败才退回占位图（faces 步骤随后跳过）。
 
-    TODO(算法待打磨)：视频关键帧抽取（ffmpeg/cv2），接后视频也能走真实分析。
+    TODO(后续)：抽帧结果可缓存复用（当前幂等靠 facts 文件名，重复触发不重抽）。
     """
     keyframes, keyframe_info = [], []
     images = [m for m in media if m.suffix.lower() in _IMAGE_EXT]
@@ -94,16 +97,32 @@ def _step_preprocess(store, partition, bundle, media, ctx) -> dict:
                                   f"kf_{i + 1:02d}{ext}", image.read_bytes())
         keyframes.append(ref)
         keyframe_info.append({"ref": ref, "kind": "image", "mime": _MIME_BY_EXT[ext]})
-    for i, _video in enumerate(videos[:3 - len(keyframes)]):
-        ref = _write_derived_fact(store, partition, bundle,
-                                  f"kf_{len(keyframes) + 1:02d}.jpg", _TINY_JPEG)
-        keyframes.append(ref)
-        keyframe_info.append({"ref": ref, "kind": "stub", "mime": "image/jpeg"})
+    remaining = 3 - len(keyframes)
+    stubbed = False
+    for video in videos:
+        if remaining <= 0:
+            break
+        frames = extract_keyframes(video, count=remaining)  # ffmpeg 优先，cv2 兜底
+        if frames:
+            for frame in frames:
+                ref = _write_derived_fact(store, partition, bundle,
+                                          f"kf_{len(keyframes) + 1:02d}.jpg",
+                                          Path(frame).read_bytes())
+                keyframes.append(ref)
+                keyframe_info.append({"ref": ref, "kind": "image", "mime": "image/jpeg"})
+                remaining -= 1
+        else:
+            # 抽帧不可用/失败：占位帧兜底（faces 随后跳过该路）
+            ref = _write_derived_fact(store, partition, bundle,
+                                      f"kf_{len(keyframes) + 1:02d}.jpg", _TINY_JPEG)
+            keyframes.append(ref)
+            keyframe_info.append({"ref": ref, "kind": "stub", "mime": "image/jpeg"})
+            remaining -= 1
+            stubbed = True
     ctx["keyframe_info"] = keyframe_info
-    note = None if images or not videos else "视频抽帧待接（ffmpeg/cv2 TODO），关键帧为占位图"
     payload = {"step": "preprocess", "status": "done", "keyframes": keyframes}
-    if note:
-        payload["note"] = note
+    if stubbed:
+        payload["note"] = "ffmpeg/cv2 不可用或视频无法解析：部分关键帧为占位图"
     return payload
 
 
@@ -157,20 +176,34 @@ def _analyze_faces_with_vision(provider, image_bytes: bytes, mime: str) -> list 
 
 
 def _step_transcript(store, partition, bundle, media, meta, ctx) -> dict:
-    """转写：有音频轨才产出 transcript.v1.md。
-
-    TODO(算法待打磨)：接入 dashscope ASR WS（根 .env DASHSCOPE_ASR_WS_*）真实转写；
-    转写与原始音频双份留存（防线 #2）。当前为 stub 占位文本。
+    """转写：音频输入（m4a/wav/mp3）优先调 vision provider 的 transcribe
+    （dashscope 音频理解模型）产出真实转写；未配置/失败降级 stub 占位文本。
+    转写与原始音频双份留存（防线 #2）；视频音轨转写待接（TODO）。
     """
-    if not any(m.suffix.lower() in (_AUDIO_EXT | _VIDEO_EXT) for m in media):
+    audios = [m for m in media if m.suffix.lower() in _AUDIO_EXT]
+    videos = [m for m in media if m.suffix.lower() in _VIDEO_EXT]
+    if not audios and not videos:
         return {"step": "transcript", "status": "done",
                 "transcript_ref": None, "summary_draft": None}
+    if audios:
+        provider = _vision_provider()
+        if provider.config.get("configured"):
+            response = provider.transcribe(str(audios[0]))
+            if not response.mock and response.text.strip():
+                text = (f"# 转写 v1（{response.model}）\n\n"
+                        f"来源媒体：{audios[0].name}\n\n{response.text.strip()}\n")
+                ref = _write_derived_fact(store, partition, bundle,
+                                          "transcript.v1.md", text.encode("utf-8"))
+                return {"step": "transcript", "status": "done", "transcript_ref": ref,
+                        "summary_draft": _summarize_transcript(ref, text),
+                        "model": response.model}
+    # 降级：stub 占位文本（注明待接入）
     sources = ", ".join(m.name for m in media)
     text = (
         "# 转写 v1（stub）\n\n"
         f"来源媒体：{sources}\n"
         f"现场备注：{meta.get('note') or '无'}\n\n"
-        "TODO(算法待打磨)：接入 dashscope ASR WS 输出真实转写。\n"
+        "TODO：音频理解未配置或调用失败，此为占位转写（模型接入后重跑即覆盖为新版本）。\n"
     )
     ref = _write_derived_fact(store, partition, bundle,
                               "transcript.v1.md", text.encode("utf-8"))

@@ -10,8 +10,6 @@
       tests/test_media.py —— face_ref/photos 指针经 media 路由可取到真实字节。
 """
 
-import shutil
-
 # 与前端 demoPeople.js 对齐的 6 个 NPC（调色板/姓名/相遇信息）
 SEED_AGENTS = [
     {
@@ -131,9 +129,9 @@ def seed_world() -> dict:
 
 
 def _copy_portrait_fact(store, source_name: str, person_id: str, target_name: str) -> str | None:
-    """把前端仓库的肖像 PNG 复制为种子事实文件（幂等：已存在则跳过复制）。
+    """把前端仓库的肖像 PNG 登记为种子事实文件（幂等：已存在则跳过）。
 
-    返回 facts 相对指针；源文件缺失（如裁剪过的部署环境）返回 None。
+    走 write_fact（append-only + manifest 登记）；源文件缺失返回 None。
     """
     from app.config import REPO_ROOT
 
@@ -141,10 +139,9 @@ def _copy_portrait_fact(store, source_name: str, person_id: str, target_name: st
     if not source.exists():
         return None
     target = store.facts_dir / "seed" / person_id / target_name
-    if not target.exists():
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source, target)
-    return f"facts/seed/{person_id}/{target_name}"
+    if target.exists():
+        return f"facts/seed/{person_id}/{target_name}"
+    return store.write_fact("seed", person_id, target_name, source.read_bytes())
 
 
 def seed_demo_packages(store) -> int:

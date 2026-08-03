@@ -12,6 +12,7 @@
 | [ROADMAP.md](./ROADMAP.md) | 分阶段、分模块的 TODO 清单（打勾制），唯一进度看板 | 所有人 + AI |
 | [ART-BRIEF.md](./ART-BRIEF.md) | 美术协作提示词：画面/风格负责人的资产交付契约（自包含，可直接转发） | 美术协作者 |
 | [API.md](./API.md) | 对外接口契约：IF-1~IF-8 全量接口地图，前后端唯一契约，先前端 mock 后后端实现 | 工程 + AI |
+| [INTERACTION-DESIGN.md](./INTERACTION-DESIGN.md) | Agent 交互逻辑优化策划草案（事件驱动调度/玩家单聊/对话质量，**待评审**） | 产品 + 工程 |
 | ../AGENTS.md | 现有前端仓库（three.js 原型）的工程约定 | AI |
 
 推荐阅读顺序：PRD → ARCHITECTURE → CONTEXT-AND-MEMORY → ROADMAP。

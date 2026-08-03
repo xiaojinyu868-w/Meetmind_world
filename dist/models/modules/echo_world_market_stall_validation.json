@@ -1,0 +1,71 @@
+{
+  "schema_version": "echo-market-stall-validation.v1",
+  "file": "public/models/modules/echo_world_market_stall.glb",
+  "import_status": "ok",
+  "root_node": "ROOT_MarketStall",
+  "objects": 45,
+  "mesh_objects": 43,
+  "vertices": 2159,
+  "triangles": 1033,
+  "degenerate_triangles": 0,
+  "material_count": 19,
+  "glb_bytes": 107620,
+  "bounds_after_reimport": {
+    "min_xyz": [
+      -1.306,
+      -1.1925,
+      -0.0492
+    ],
+    "max_xyz": [
+      1.8071,
+      1.09,
+      2.75
+    ],
+    "size_xyz": [
+      3.1131,
+      2.2825,
+      2.7992
+    ]
+  },
+  "display_surfaces": {
+    "MESH_NamePlate": {
+      "width_m": 1.2,
+      "height_m": 0.3,
+      "material": "MAT_Display_NamePlate"
+    },
+    "MESH_Portrait": {
+      "width_m": 0.7,
+      "height_m": 0.9,
+      "material": "MAT_Display_Portrait"
+    },
+    "MESH_PhotoFrame_01": {
+      "width_m": 0.6,
+      "height_m": 0.45,
+      "material": "MAT_Display_PhotoFrame_01"
+    },
+    "MESH_PhotoFrame_02": {
+      "width_m": 0.6,
+      "height_m": 0.45,
+      "material": "MAT_Display_PhotoFrame_02"
+    },
+    "MESH_Backdrop": {
+      "width_m": 1.6,
+      "height_m": 0.24,
+      "material": "MAT_Display_Backdrop"
+    }
+  },
+  "contract_checks": {
+    "root_at_origin": true,
+    "all_5_display_meshes_present": true,
+    "display_sizes_within_tolerance": true,
+    "display_materials_distinct": true,
+    "display_meshes_have_uvs": true,
+    "striped_awning_materials_present": true,
+    "person_stand_anchor_present": true,
+    "preview_nodes_excluded": true,
+    "no_degenerate_triangles": true,
+    "triangle_budget": 15000,
+    "all_materials_roughness_gte_0_7": true,
+    "glb_size_budget_2mb": true
+  }
+}
