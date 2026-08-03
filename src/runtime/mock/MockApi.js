@@ -55,7 +55,19 @@ async function fetchJson(url) {
   if (!response.ok) {
     throw new Error(`GET ${url} failed: HTTP ${response.status}`);
   }
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.toLowerCase().includes("application/json")) {
+    throw new Error(`GET ${url} 未返回 JSON，请检查本地 /api 代理是否连接后端`);
+  }
   return response.json();
+}
+
+function normalizePackageList(payload) {
+  const packages = Array.isArray(payload) ? payload : payload?.packages;
+  if (!Array.isArray(packages)) {
+    throw new Error("IF-5 packages: 响应必须是数组或 { packages: [] }");
+  }
+  return packages;
 }
 
 async function fetchJsonLines(url) {
@@ -317,9 +329,9 @@ export async function confirm(draft, identity, privacy = "self-only") {
  */
 export async function getPackages() {
   if (isLiveMode()) {
-    return fetchJson(`${LIVE_BASE_URL}/packages`);
+    return normalizePackageList(await fetchJson(`${LIVE_BASE_URL}/packages`));
   }
-  return fetchJson(mockUrl("packages.demo.json"));
+  return normalizePackageList(await fetchJson(mockUrl("packages.demo.json")));
 }
 
 /**

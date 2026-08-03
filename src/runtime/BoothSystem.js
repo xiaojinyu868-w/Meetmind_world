@@ -181,6 +181,27 @@ function makeCanvasForMesh(mesh) {
 }
 
 
+// GLB 展示材质是 doubleSided；直接从背面观看会把文字/照片镜像。
+// 改为两张方向相反的 FrontSide 平面，让摊位内外两侧都保持自然阅读方向。
+function addReadableBackFace(mesh) {
+  mesh.material.side = THREE.FrontSide;
+  mesh.material.needsUpdate = true;
+  const back = new THREE.Mesh(mesh.geometry, mesh.material.clone());
+  back.name = `${mesh.name}_ReadableBack`;
+  back.position.copy(mesh.position);
+  back.quaternion.copy(mesh.quaternion);
+  back.scale.copy(mesh.scale);
+  back.rotateY(Math.PI);
+  back.material.side = THREE.FrontSide;
+  back.material.needsUpdate = true;
+  back.castShadow = false;
+  back.receiveShadow = false;
+  back.userData.displaySource = mesh.name;
+  mesh.parent.add(back);
+  return back;
+}
+
+
 // 模板 GLB 未到货时的简易占位展位：展示面网格同名，贴图/绘制路径一致
 function buildFallbackTemplate() {
   const group = new THREE.Group();
@@ -281,6 +302,12 @@ export class BoothSystem {
     return [...this.booths.values()].map((record) => record.root);
   }
 
+  get readablePanelCount() {
+    let count = 0;
+    for (const record of this.booths.values()) count += record.displayBacks.size;
+    return count;
+  }
+
   boothForPerson(personId) {
     for (const record of this.booths.values()) {
       if (record.personId === personId) return record;
@@ -309,6 +336,7 @@ export class BoothSystem {
     root.userData.personId = booth.personId;
     root.userData.boothId = booth.id;
     const displayMaterials = [];
+    const displayMeshes = [];
     root.traverse((object) => {
       if (!object.isMesh) return;
       object.castShadow = true;
@@ -316,8 +344,15 @@ export class BoothSystem {
       if (DISPLAY_MESH_NAMES.has(object.name)) {
         object.material = object.material.clone();
         displayMaterials.push(object.material);
+        displayMeshes.push(object);
       }
     });
+    const displayBacks = new Map();
+    for (const mesh of displayMeshes) {
+      const back = addReadableBackFace(mesh);
+      displayBacks.set(mesh.name, back);
+      displayMaterials.push(back.material);
+    }
     // hover 提示地环（初始隐藏，setHighlighted 控制）
     const hoverRing = new THREE.Mesh(
       new THREE.RingGeometry(BOOTH_BLOCKER_RADIUS + 0.06, BOOTH_BLOCKER_RADIUS + 0.2, 40),
@@ -341,6 +376,7 @@ export class BoothSystem {
       position: booth.position,
       root,
       displayMaterials,
+      displayBacks,
       ownedTextures: new Map(),
       displaySignature: null,
       displayName: null,
@@ -379,7 +415,11 @@ export class BoothSystem {
       material.emissive?.set(highlighted ? "#4a3d20" : "#000000");
     }
     if (record.hoverRing) record.hoverRing.visible = highlighted;
-    if (record.namePlate) record.namePlate.scale.setScalar(highlighted ? 1.15 : 1);
+    if (record.namePlate) {
+      const scale = highlighted ? 1.15 : 1;
+      record.namePlate.scale.setScalar(scale);
+      record.displayBacks.get("MESH_NamePlate")?.scale.setScalar(scale);
+    }
   }
 
   #applyDisplay(record, rawDisplay) {
@@ -405,6 +445,11 @@ export class BoothSystem {
     this.#loadTexture(ref, (texture) => {
       mesh.material.map = texture;
       mesh.material.needsUpdate = true;
+      const back = record.displayBacks.get(meshName);
+      if (back) {
+        back.material.map = texture;
+        back.material.needsUpdate = true;
+      }
     });
   }
 
@@ -446,5 +491,10 @@ export class BoothSystem {
     record.ownedTextures.set(meshName, texture);
     mesh.material.map = texture;
     mesh.material.needsUpdate = true;
+    const back = record.displayBacks.get(meshName);
+    if (back) {
+      back.material.map = texture;
+      back.material.needsUpdate = true;
+    }
   }
 }

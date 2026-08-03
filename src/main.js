@@ -800,6 +800,7 @@ function applyLiveSnapshot(rawSnapshot) {
         ? boothModules
         : (liveWorld?.source === "live" ? [] : buildFallbackBooths(people));
     canvas.dataset.boothCount = String(boothSystem.sync(booths));
+    canvas.dataset.boothReadablePanelCount = String(boothSystem.readablePanelCount);
   }
 
   for (const agent of adapted.agents) {
