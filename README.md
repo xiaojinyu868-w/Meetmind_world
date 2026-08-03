@@ -27,7 +27,7 @@ npm run build
 -> 从节点返回咖啡厅定位人物
 ```
 
-场景包含 1 个玩家和 6 个占位人物。人物头像来自同一 Blender 无脸角色的统一渲染；Three.js 克隆模块化人物 GLB，并按每人的调色板创建独立材质。中央六人桌只接受用户会议邀请，普通 Agent 调度不会占用它。
+场景包含 1 个玩家和 6 个 Agent。六名 Agent 当前统一使用固定身体、五面头像的 MC 像素角色；绘本 Low-poly 角色资产仅作归档。中央六人桌只接受用户会议邀请，普通 Agent 调度不会占用它。
 
 ## 代码边界
 
@@ -37,16 +37,36 @@ npm run build
 - `src/runtime/CafeLayout.js`：咖啡厅边界、5 张桌和 18 个 Blender 座位锚点。
 - `src/runtime/NpcAgentSystem.js`：普通桌随机分配、入座、同桌对话与会议调度。
 - `src/runtime/CharacterSystem.js`：人物 GLB 缓存、克隆、换色与实例生命周期。
+- `src/runtime/CharacterVariants.js`：两套人物生产方案、匿名人物槽位和 URL 状态。
 - `src/main.js`：Three.js 场景、第三人称相机、移动、碰撞、射线选择和会议编排。
 - `public/data/asset-catalog.json`：环境、人物和资料资产白名单。
 
 原始照片、声音、embedding、内部记忆和安全存储地址不得复制到 `public/`。前端只消费授权过滤后的 DTO、`CharacterAsset` 和实时 `AgentEvent`。
 
-完整人物生成与 K3/Agent 数据契约见 [`../docs/README.md`](../docs/README.md)。
+人物生成分工、分支约定和 K3/Agent 跨模块契约见 [`docs/TEAM_WORKSTREAMS.md`](docs/TEAM_WORKSTREAMS.md)。
+
+## 场景风格
+
+- `http://127.0.0.1:5173/?scene=v1`：保留原始粉彩咖啡厅。
+- `http://127.0.0.1:5173/?scene=v3`：原创手绘幻想冒险版本，也是默认版本。
+
+V2 几何场景资产仍归档保留，但不再出现在前端选择器中，旧 `?scene=v2` 地址会回落到 V3。场景共用同一套桌位、碰撞、NPC、圆桌会议和人物资料交互。Blender 生成命令、资产统计、GLB 限制和玩法空间契约见 [`docs/SCENE_VARIANTS.md`](docs/SCENE_VARIANTS.md)。
+
+当前前端只启用像素人物方案：
+
+- `http://127.0.0.1:5173/?scene=v3&character=voxel`：固定 Blender 身体与照片特征像素 atlas，也是默认方案。
+
+绘本人物资产仍归档保留，但不再出现在前端选择器中，旧 `?character=storybook` 地址会回落到 `voxel`。
+
+照片输入边界、匿名槽位、五面头部贴图和生产服务接口见 [`docs/PHOTO_CHARACTER_PIPELINES.md`](docs/PHOTO_CHARACTER_PIPELINES.md)。
+
+![几何 Low-poly 版本](renders/echo_world_cafe_reference-lowpoly-v2_preview.png)
+
+![绘本冒险版本](renders/echo_world_storybook_cafe_preview.png)
 
 ## 当前限制
 
 - Agent 对话和桌位调度为本地 mock，尚未连接 SSE/WebSocket 服务。
-- 人物共用一套无脸基础几何和发型，仅材质配色独立。
+- 当前照片输入是合照，匿名槽位由主参考图从左到右确定；正式链路仍需要上游提供稳定的 `personId + boundingBox`。
 - 人物暂时没有骨骼动画；移动和入座采用刚性模型的轻量表现。
 - 咖啡厅使用运行时圆形桌面碰撞，尚未从 Blender 导出完整碰撞壳。

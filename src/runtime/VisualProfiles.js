@@ -1,0 +1,171 @@
+import * as THREE from "three";
+
+
+const VISUAL_PROFILES = Object.freeze({
+  current: Object.freeze({
+    background: "#92b6bc",
+    fog: Object.freeze({ color: "#92b6bc", near: 18, far: 36 }),
+    toneMapping: THREE.ACESFilmicToneMapping,
+    exposure: 1.02,
+    shadowType: THREE.PCFShadowMap,
+    materialMode: "gltf",
+    hemisphere: Object.freeze({ sky: "#d9eef0", ground: "#725a45", intensity: 1.65 }),
+    sun: Object.freeze({ color: "#ffe5b0", intensity: 3.1, position: [-5.5, 9.5, 6.5] }),
+    points: Object.freeze([
+      Object.freeze({ position: [0, 2.75, 0], intensity: 8.5 }),
+      Object.freeze({ position: [-3.4, 2.75, 0], intensity: 5.2 }),
+      Object.freeze({ position: [3.3, 2.75, 0], intensity: 5.2 }),
+    ]),
+  }),
+  referenceLowpoly: Object.freeze({
+    background: "#a9c7c0",
+    fog: Object.freeze({ color: "#a9c7c0", near: 20, far: 40 }),
+    toneMapping: THREE.NeutralToneMapping,
+    exposure: 1.08,
+    shadowType: THREE.PCFShadowMap,
+    materialMode: "flat",
+    hemisphere: Object.freeze({ sky: "#d8ece5", ground: "#59623e", intensity: 1.1 }),
+    sun: Object.freeze({ color: "#ffd58a", intensity: 3.65, position: [-7.5, 10.5, 6.8] }),
+    points: Object.freeze([]),
+  }),
+  painterlyAdventure: Object.freeze({
+    background: "#8fbfc0",
+    fog: Object.freeze({ color: "#8fbfc0", near: 19, far: 38 }),
+    toneMapping: THREE.NeutralToneMapping,
+    exposure: 1.08,
+    shadowType: THREE.PCFShadowMap,
+    materialMode: "toon",
+    environmentMaterialMode: "gltf",
+    hemisphere: Object.freeze({ sky: "#d8edf0", ground: "#596147", intensity: 1.22 }),
+    sun: Object.freeze({ color: "#ffd095", intensity: 3.55, position: [-6.2, 10.8, 7.8] }),
+    points: Object.freeze([
+      Object.freeze({ position: [3.8, 2.4, -2.4], color: "#8fc7d5", intensity: 1.2, distance: 9 }),
+    ]),
+  }),
+});
+
+let toonGradient = null;
+
+
+function getToonGradient() {
+  if (toonGradient) return toonGradient;
+  toonGradient = new THREE.DataTexture(
+    new Uint8Array([72, 134, 196, 255]),
+    4,
+    1,
+    THREE.RedFormat,
+  );
+  toonGradient.minFilter = THREE.NearestFilter;
+  toonGradient.magFilter = THREE.NearestFilter;
+  toonGradient.generateMipmaps = false;
+  toonGradient.needsUpdate = true;
+  return toonGradient;
+}
+
+
+export function visualProfile(profileId) {
+  return VISUAL_PROFILES[profileId] ?? VISUAL_PROFILES.current;
+}
+
+
+export function installVisualProfile(scene, renderer, profileId) {
+  const profile = visualProfile(profileId);
+  scene.background = new THREE.Color(profile.background);
+  scene.fog = new THREE.Fog(profile.fog.color, profile.fog.near, profile.fog.far);
+  renderer.toneMapping = profile.toneMapping;
+  renderer.toneMappingExposure = profile.exposure;
+  renderer.shadowMap.type = profile.shadowType;
+
+  const hemisphere = new THREE.HemisphereLight(
+    profile.hemisphere.sky,
+    profile.hemisphere.ground,
+    profile.hemisphere.intensity,
+  );
+  hemisphere.name = "LIGHT_Hemisphere";
+  scene.add(hemisphere);
+
+  const sun = new THREE.DirectionalLight(profile.sun.color, profile.sun.intensity);
+  sun.name = "LIGHT_Sun";
+  sun.position.fromArray(profile.sun.position);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.camera.near = 0.5;
+  sun.shadow.camera.far = 28;
+  sun.shadow.camera.left = -8;
+  sun.shadow.camera.right = 8;
+  sun.shadow.camera.top = 7;
+  sun.shadow.camera.bottom = -7;
+  sun.shadow.bias = -0.00016;
+  sun.shadow.normalBias = 0.025;
+  sun.target.position.set(0, 0, -0.6);
+  scene.add(sun, sun.target);
+
+  for (const [index, pointSpec] of profile.points.entries()) {
+    const point = new THREE.PointLight(
+      pointSpec.color ?? "#ffd391",
+      pointSpec.intensity,
+      pointSpec.distance ?? 7.2,
+      2,
+    );
+    point.name = `LIGHT_Accent_${index + 1}`;
+    point.position.fromArray(pointSpec.position);
+    scene.add(point);
+  }
+  return profile;
+}
+
+
+export function adaptMaterialToProfile(sourceMaterial, profileId, scope = "character") {
+  const profile = visualProfile(profileId);
+  const materialMode = scope === "environment"
+    ? profile.environmentMaterialMode ?? profile.materialMode
+    : profile.materialMode;
+  if (materialMode === "gltf") return sourceMaterial;
+  if (/outline|glass|window|water|emission/i.test(sourceMaterial.name)) {
+    return sourceMaterial;
+  }
+
+  if (materialMode === "toon") {
+    const material = new THREE.MeshToonMaterial({
+      name: sourceMaterial.name,
+      color: sourceMaterial.color?.clone() ?? new THREE.Color("#ffffff"),
+      map: sourceMaterial.map ?? null,
+      alphaMap: sourceMaterial.alphaMap ?? null,
+      transparent: sourceMaterial.transparent,
+      opacity: sourceMaterial.opacity,
+      side: sourceMaterial.side,
+      vertexColors: sourceMaterial.vertexColors,
+      gradientMap: getToonGradient(),
+    });
+    material.userData.sourceMaterial = sourceMaterial.name;
+    return material;
+  }
+
+  sourceMaterial.roughness = 0.94;
+  sourceMaterial.metalness = 0;
+  sourceMaterial.envMapIntensity = 0.12;
+  sourceMaterial.flatShading = true;
+  sourceMaterial.needsUpdate = true;
+  return sourceMaterial;
+}
+
+
+export function adaptSceneMaterials(root, profileId) {
+  const materialCache = new Map();
+  const adapt = (material) => {
+    if (!material) return material;
+    if (!materialCache.has(material)) {
+      materialCache.set(
+        material,
+        adaptMaterialToProfile(material, profileId, "environment"),
+      );
+    }
+    return materialCache.get(material);
+  };
+  root.traverse((object) => {
+    if (!object.isMesh) return;
+    object.material = Array.isArray(object.material)
+      ? object.material.map(adapt)
+      : adapt(object.material);
+  });
+}

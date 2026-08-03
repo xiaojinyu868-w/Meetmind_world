@@ -1,5 +1,4 @@
 import * as THREE from "three";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { currentUser, people, relationships } from "./data/demoPeople.js";
 import { AssetCatalog } from "./runtime/AssetCatalog.js";
 import { AssetStore } from "./runtime/AssetStore.js";
@@ -7,7 +6,23 @@ import { CAFE_LAYOUT, tableById } from "./runtime/CafeLayout.js";
 import { CharacterSystem } from "./runtime/CharacterSystem.js";
 import { LiveWorld } from "./runtime/LiveWorld.js";
 import { NpcAgentSystem } from "./runtime/NpcAgentSystem.js";
+import {
+  CHARACTER_VARIANT_OPTIONS,
+  characterAssetId,
+  characterVariantFromLocation,
+  navigateToCharacterVariant,
+} from "./runtime/CharacterVariants.js";
+import {
+  SCENE_VARIANT_OPTIONS,
+  navigateToSceneVariant,
+  sceneVariantFromLocation,
+} from "./runtime/SceneVariants.js";
 import { adaptSnapshot, normalizeEvent } from "./runtime/SnapshotAdapter.js";
+import {
+  adaptMaterialToProfile,
+  adaptSceneMaterials,
+  installVisualProfile,
+} from "./runtime/VisualProfiles.js";
 import { loadWorldSpec, publicUrl } from "./runtime/WorldSpec.js";
 import { createCafeShell } from "./ui/CafeShell.js";
 import { mountIntegrations } from "./bootstrap/integrations.js";
@@ -15,7 +30,27 @@ import "./cafe.css";
 
 
 const WORLD_SPEC_URL = publicUrl("data/world-spec.json");
-const CHARACTER_ASSET_ID = "character.faceless-prototype.v1";
+const activeSceneVariant = sceneVariantFromLocation();
+const activeCharacterVariant = characterVariantFromLocation();
+const canonicalUrl = new URL(window.location.href);
+let replaceCanonicalUrl = false;
+if (
+  canonicalUrl.searchParams.has("scene") &&
+  canonicalUrl.searchParams.get("scene") !== activeSceneVariant.id
+) {
+  canonicalUrl.searchParams.set("scene", activeSceneVariant.id);
+  replaceCanonicalUrl = true;
+}
+if (
+  canonicalUrl.searchParams.has("character") &&
+  canonicalUrl.searchParams.get("character") !== activeCharacterVariant.id
+) {
+  canonicalUrl.searchParams.set("character", activeCharacterVariant.id);
+  replaceCanonicalUrl = true;
+}
+if (replaceCanonicalUrl) {
+  window.history.replaceState(window.history.state, "", canonicalUrl);
+}
 const MOVE_SPEED = 2.7;
 const PLAYER_FOOT_OFFSET = 0.018;
 const SEATED_SCALE_Y = 0.82;
@@ -84,8 +119,6 @@ const touchKnob = document.querySelector("#touch-knob");
 const fatalError = document.querySelector("#fatal-error");
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color("#92b6bc");
-scene.fog = new THREE.Fog("#92b6bc", 18, 36);
 
 const camera = new THREE.PerspectiveCamera(48, 1, 0.06, 80);
 camera.position.set(6.7, 4.6, 8.2);
@@ -97,34 +130,8 @@ const renderer = new THREE.WebGLRenderer({
   powerPreference: "high-performance",
 });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.02;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFShadowMap;
-
-const hemisphere = new THREE.HemisphereLight("#d9eef0", "#725a45", 1.65);
-scene.add(hemisphere);
-
-const sun = new THREE.DirectionalLight("#ffe5b0", 3.1);
-sun.position.set(-5.5, 9.5, 6.5);
-sun.castShadow = true;
-sun.shadow.mapSize.set(1024, 1024);
-sun.shadow.camera.near = 0.5;
-sun.shadow.camera.far = 28;
-sun.shadow.camera.left = -8;
-sun.shadow.camera.right = 8;
-sun.shadow.camera.top = 7;
-sun.shadow.camera.bottom = -7;
-sun.shadow.bias = -0.00016;
-sun.shadow.normalBias = 0.025;
-sun.target.position.set(0, 0, -0.6);
-scene.add(sun, sun.target);
-
-for (const [x, z, intensity] of [[0, 0, 8.5], [-3.4, 0, 5.2], [3.3, 0, 5.2]]) {
-  const lamp = new THREE.PointLight("#ffd391", intensity, 7.2, 2);
-  lamp.position.set(x, 2.75, z);
-  scene.add(lamp);
-}
+installVisualProfile(scene, renderer, activeSceneVariant.visualProfile);
 
 const timer = new THREE.Timer();
 timer.connect(document);
@@ -183,7 +190,17 @@ const appShell = createCafeShell({
   currentUser,
   people,
   relationships,
+  sceneVariants: SCENE_VARIANT_OPTIONS,
+  activeSceneVariant,
+  characterVariants: CHARACTER_VARIANT_OPTIONS,
+  activeCharacterVariant,
   onViewChange: setExperienceMode,
+  onSceneVariantChange: (variantId) => {
+    if (variantId !== activeSceneVariant.id) navigateToSceneVariant(variantId);
+  },
+  onCharacterVariantChange: (variantId) => {
+    if (variantId !== activeCharacterVariant.id) navigateToCharacterVariant(variantId);
+  },
   onLocatePerson: (person) => selectWorldPerson(person.id),
   onMeetingStart: startMeeting,
   onMeetingEnd: endMeeting,
@@ -192,6 +209,7 @@ const appShell = createCafeShell({
 canvas.dataset.ready = "false";
 canvas.dataset.appView = experienceMode;
 canvas.dataset.roundtableReserved = "true";
+canvas.dataset.characterVariant = activeCharacterVariant.id;
 
 // Live overlay：气泡复用 CafeShell 的 world-speech-layer 与气泡样式，Toast/tick 为轻量内联样式
 const speechLayer = document.querySelector("#world-speech-layer");
@@ -259,7 +277,10 @@ function characterSpec(person, instanceId, spawn, idleBob = 0.005) {
   return {
     instance_id: instanceId,
     person_id: person.id,
-    asset_id: CHARACTER_ASSET_ID,
+    asset_id: characterAssetId(activeCharacterVariant, person.id),
+    fallback_asset_id: activeCharacterVariant.fallbackAssetId,
+    texture_filter: activeCharacterVariant.textureFilter,
+    lock_texture_colors: true,
     profile: {
       person_id: person.id,
       display_name: person.displayName ?? person.name,
@@ -348,6 +369,7 @@ async function spawnCharacters() {
 
 async function configureWorld(root) {
   environmentRoot = root;
+  adaptSceneMaterials(root, activeSceneVariant.visualProfile);
   scene.add(root);
   root.updateMatrixWorld(true);
 
@@ -381,8 +403,9 @@ async function configureWorld(root) {
   canvas.dataset.ready = "true";
   canvas.dataset.characterCount = String(characterSystem.entities.length);
   canvas.dataset.npcCount = String(npcSystem.agents.size);
-  canvas.dataset.environment = "echo-world-lowpoly-cafe";
-  setProgress(1, "Echo Cafe 已准备好");
+  canvas.dataset.environment = activeSceneVariant.environmentAssetId;
+  canvas.dataset.sceneVariant = activeSceneVariant.id;
+  setProgress(1, `${activeSceneVariant.title} 已准备好`);
   appShell.setWorldReady(true);
   startLiveWorld();
   requestAnimationFrame(() => loading.classList.add("is-hidden"));
@@ -1075,11 +1098,8 @@ window.addEventListener("resize", resizeRenderer);
 resizeRenderer();
 
 const assetStore = new AssetStore();
-const loader = new GLTFLoader();
-
-
 async function boot() {
-  setProgress(0.04, "正在读取 Echo Cafe");
+  setProgress(0.04, `正在读取${activeSceneVariant.title}`);
   // 人名映射只拉一次：气泡与 Toast 优先使用资料包里的名字（与 integrations 共享 getPackages 缓存）
   api.getPackages().then(fillPackageNames).catch((error) => {
     console.warn("[EchoWorld] api.getPackages() 失败，气泡人名回退为本地数据", error);
@@ -1094,28 +1114,19 @@ async function boot() {
     assetStore,
     assetCatalog,
     resolveSurfaceY: surfaceHeightAt,
+    materialAdapter: (material) => adaptMaterialToProfile(
+      material,
+      activeSceneVariant.visualProfile,
+    ),
   });
   const environmentAsset = assetCatalog.resolve(
-    worldSpec.environment.asset_id,
+    activeSceneVariant.environmentAssetId,
     "environment",
   );
-  setProgress(0.1, "正在搭建 Low-poly 咖啡厅");
-  loader.load(
-    environmentAsset.resolvedUrl,
-    async (gltf) => {
-      try {
-        await configureWorld(gltf.scene);
-      } catch (error) {
-        showFatalError(error);
-      }
-    },
-    (event) => {
-      if (event.lengthComputable && event.total > 0) {
-        setProgress(0.1 + (event.loaded / event.total) * 0.58);
-      }
-    },
-    showFatalError,
-  );
+  setProgress(0.12, `正在搭建${activeSceneVariant.title}`);
+  const environment = await assetStore.loadScene(environmentAsset.resolvedUrl);
+  setProgress(0.68);
+  await configureWorld(environment);
 }
 
 boot().catch(showFatalError);
@@ -1127,6 +1138,8 @@ window.__echoWorld = {
   get renderer() { return renderer; },
   get camera() { return camera; },
   get worldSpec() { return worldSpec; },
+  get sceneVariant() { return activeSceneVariant; },
+  get characterVariant() { return activeCharacterVariant; },
   get characters() { return characterSystem?.entities ?? []; },
   get agentStates() {
     return people.map((person) => npcSystem?.getState(person.id)).filter(Boolean);

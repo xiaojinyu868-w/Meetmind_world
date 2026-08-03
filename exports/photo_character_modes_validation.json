@@ -1,0 +1,1286 @@
+{
+  "schema_version": "echo-photo-character-modes-validation.v1",
+  "blender_version": "5.2.0 LTS",
+  "summary": {
+    "asset_count": 14,
+    "asset_passed": 14,
+    "texture_count": 14,
+    "texture_passed": 14,
+    "preview_passed": 2
+  },
+  "manifest": {
+    "path": "exports/photo_character_modes_manifest.json",
+    "mismatches": [],
+    "checks": {
+      "manifest_exists": true,
+      "schema_version": true,
+      "fourteen_assets": true,
+      "six_photo_plus_host_per_mode": true,
+      "raw_photos_not_copied": true,
+      "hashes_match": true
+    },
+    "passed": true
+  },
+  "privacy": {
+    "jpg_or_jpeg_files_in_public": [],
+    "passed": true
+  },
+  "assets": [
+    {
+      "asset_id": "character.photo.person_01.storybook.v1",
+      "path": "public/models/characters/photo-derived/storybook/person_01.glb",
+      "exists": true,
+      "bytes": 104200,
+      "sha256": "187feb84432cc4a29588c4751c6edd06ede86e668d8f2bb84525f44f5e8df07e",
+      "root_location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "bounds": {
+        "min": [
+          -0.4305,
+          -0.2454,
+          0.0
+        ],
+        "max": [
+          0.4305,
+          0.27249,
+          1.7244
+        ],
+        "height": 1.7244
+      },
+      "meshes": 29,
+      "triangles": 772,
+      "materials": [
+        "MAT_person_01_StorybookAtlas"
+      ],
+      "embedded_texture_sizes": [
+        [
+          256,
+          256
+        ]
+      ],
+      "sampler_interpolation": [
+        "Linear"
+      ],
+      "voxel_head_uv_region_triangles": null,
+      "missing_nodes": [],
+      "checks": {
+        "root_present": true,
+        "root_at_origin": true,
+        "mode_metadata": true,
+        "person_metadata": true,
+        "forward_is_minus_y": true,
+        "photo_projection_forbidden": true,
+        "source_kind_valid": true,
+        "required_nodes_present": true,
+        "mesh_count": true,
+        "triangle_budget": true,
+        "height_range": true,
+        "feet_on_ground": true,
+        "single_atlas_material": true,
+        "embedded_texture_present": true,
+        "embedded_texture_size": true,
+        "sampler_interpolation": true,
+        "no_runtime_camera_or_light": true
+      },
+      "passed": true
+    },
+    {
+      "asset_id": "character.photo.person_02.storybook.v1",
+      "path": "public/models/characters/photo-derived/storybook/person_02.glb",
+      "exists": true,
+      "bytes": 130856,
+      "sha256": "e8815122f9bdd0f8bb8ad1d4e80317f2ee01166945dc7d22979209e2fbcde3a2",
+      "root_location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "bounds": {
+        "min": [
+          -0.44544,
+          -0.24295,
+          -0.0
+        ],
+        "max": [
+          0.44544,
+          0.24586,
+          1.71109
+        ],
+        "height": 1.71109
+      },
+      "meshes": 38,
+      "triangles": 1052,
+      "materials": [
+        "MAT_person_02_StorybookAtlas"
+      ],
+      "embedded_texture_sizes": [
+        [
+          256,
+          256
+        ]
+      ],
+      "sampler_interpolation": [
+        "Linear"
+      ],
+      "voxel_head_uv_region_triangles": null,
+      "missing_nodes": [],
+      "checks": {
+        "root_present": true,
+        "root_at_origin": true,
+        "mode_metadata": true,
+        "person_metadata": true,
+        "forward_is_minus_y": true,
+        "photo_projection_forbidden": true,
+        "source_kind_valid": true,
+        "required_nodes_present": true,
+        "mesh_count": true,
+        "triangle_budget": true,
+        "height_range": true,
+        "feet_on_ground": true,
+        "single_atlas_material": true,
+        "embedded_texture_present": true,
+        "embedded_texture_size": true,
+        "sampler_interpolation": true,
+        "no_runtime_camera_or_light": true
+      },
+      "passed": true
+    },
+    {
+      "asset_id": "character.photo.person_03.storybook.v1",
+      "path": "public/models/characters/photo-derived/storybook/person_03.glb",
+      "exists": true,
+      "bytes": 117616,
+      "sha256": "d8942cd976777056118b1c169cc1dc422e47f5c279b44c49ea45561e1920dc2c",
+      "root_location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "bounds": {
+        "min": [
+          -0.41106,
+          -0.2454,
+          0.0
+        ],
+        "max": [
+          0.41106,
+          0.2357,
+          1.73803
+        ],
+        "height": 1.73803
+      },
+      "meshes": 39,
+      "triangles": 872,
+      "materials": [
+        "MAT_person_03_StorybookAtlas"
+      ],
+      "embedded_texture_sizes": [
+        [
+          256,
+          256
+        ]
+      ],
+      "sampler_interpolation": [
+        "Linear"
+      ],
+      "voxel_head_uv_region_triangles": null,
+      "missing_nodes": [],
+      "checks": {
+        "root_present": true,
+        "root_at_origin": true,
+        "mode_metadata": true,
+        "person_metadata": true,
+        "forward_is_minus_y": true,
+        "photo_projection_forbidden": true,
+        "source_kind_valid": true,
+        "required_nodes_present": true,
+        "mesh_count": true,
+        "triangle_budget": true,
+        "height_range": true,
+        "feet_on_ground": true,
+        "single_atlas_material": true,
+        "embedded_texture_present": true,
+        "embedded_texture_size": true,
+        "sampler_interpolation": true,
+        "no_runtime_camera_or_light": true
+      },
+      "passed": true
+    },
+    {
+      "asset_id": "character.photo.person_04.storybook.v1",
+      "path": "public/models/characters/photo-derived/storybook/person_04.glb",
+      "exists": true,
+      "bytes": 130348,
+      "sha256": "8104b749bc9e172fdd61eeef899829376b6406b16247028f8f3964c8f5c91601",
+      "root_location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "bounds": {
+        "min": [
+          -0.49993,
+          -0.26503,
+          0.0
+        ],
+        "max": [
+          0.49993,
+          0.26821,
+          1.89824
+        ],
+        "height": 1.89824
+      },
+      "meshes": 42,
+      "triangles": 1004,
+      "materials": [
+        "MAT_person_04_StorybookAtlas"
+      ],
+      "embedded_texture_sizes": [
+        [
+          256,
+          256
+        ]
+      ],
+      "sampler_interpolation": [
+        "Linear"
+      ],
+      "voxel_head_uv_region_triangles": null,
+      "missing_nodes": [],
+      "checks": {
+        "root_present": true,
+        "root_at_origin": true,
+        "mode_metadata": true,
+        "person_metadata": true,
+        "forward_is_minus_y": true,
+        "photo_projection_forbidden": true,
+        "source_kind_valid": true,
+        "required_nodes_present": true,
+        "mesh_count": true,
+        "triangle_budget": true,
+        "height_range": true,
+        "feet_on_ground": true,
+        "single_atlas_material": true,
+        "embedded_texture_present": true,
+        "embedded_texture_size": true,
+        "sampler_interpolation": true,
+        "no_runtime_camera_or_light": true,
+        "abstract_mark_no_logo": true,
+        "two_color_mark_geometry": true
+      },
+      "passed": true
+    },
+    {
+      "asset_id": "character.photo.person_05.storybook.v1",
+      "path": "public/models/characters/photo-derived/storybook/person_05.glb",
+      "exists": true,
+      "bytes": 109304,
+      "sha256": "ce0331730144caa3eba69d62ac88cb9a36b03acf7b35dc1e891f5862decb00ad",
+      "root_location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "bounds": {
+        "min": [
+          -0.42589,
+          -0.25031,
+          -0.0
+        ],
+        "max": [
+          0.42589,
+          0.24041,
+          1.76723
+        ],
+        "height": 1.76723
+      },
+      "meshes": 31,
+      "triangles": 812,
+      "materials": [
+        "MAT_person_05_StorybookAtlas"
+      ],
+      "embedded_texture_sizes": [
+        [
+          256,
+          256
+        ]
+      ],
+      "sampler_interpolation": [
+        "Linear"
+      ],
+      "voxel_head_uv_region_triangles": null,
+      "missing_nodes": [],
+      "checks": {
+        "root_present": true,
+        "root_at_origin": true,
+        "mode_metadata": true,
+        "person_metadata": true,
+        "forward_is_minus_y": true,
+        "photo_projection_forbidden": true,
+        "source_kind_valid": true,
+        "required_nodes_present": true,
+        "mesh_count": true,
+        "triangle_budget": true,
+        "height_range": true,
+        "feet_on_ground": true,
+        "single_atlas_material": true,
+        "embedded_texture_present": true,
+        "embedded_texture_size": true,
+        "sampler_interpolation": true,
+        "no_runtime_camera_or_light": true
+      },
+      "passed": true
+    },
+    {
+      "asset_id": "character.photo.person_06.storybook.v1",
+      "path": "public/models/characters/photo-derived/storybook/person_06.glb",
+      "exists": true,
+      "bytes": 114164,
+      "sha256": "0cc16a68f703c5a89bbe91fbda49dc4af564a8cfa835eab032dc2385cd5c89ad",
+      "root_location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "bounds": {
+        "min": [
+          -0.39872,
+          -0.23804,
+          -0.0
+        ],
+        "max": [
+          0.39872,
+          0.26431,
+          1.67002
+        ],
+        "height": 1.67002
+      },
+      "meshes": 35,
+      "triangles": 852,
+      "materials": [
+        "MAT_person_06_StorybookAtlas"
+      ],
+      "embedded_texture_sizes": [
+        [
+          256,
+          256
+        ]
+      ],
+      "sampler_interpolation": [
+        "Linear"
+      ],
+      "voxel_head_uv_region_triangles": null,
+      "missing_nodes": [],
+      "checks": {
+        "root_present": true,
+        "root_at_origin": true,
+        "mode_metadata": true,
+        "person_metadata": true,
+        "forward_is_minus_y": true,
+        "photo_projection_forbidden": true,
+        "source_kind_valid": true,
+        "required_nodes_present": true,
+        "mesh_count": true,
+        "triangle_budget": true,
+        "height_range": true,
+        "feet_on_ground": true,
+        "single_atlas_material": true,
+        "embedded_texture_present": true,
+        "embedded_texture_size": true,
+        "sampler_interpolation": true,
+        "no_runtime_camera_or_light": true
+      },
+      "passed": true
+    },
+    {
+      "asset_id": "character.photo.host.storybook.v1",
+      "path": "public/models/characters/photo-derived/storybook/host.glb",
+      "exists": true,
+      "bytes": 109732,
+      "sha256": "5146bf51ac3bb882c659202affe14d8e998824d16e706d4d91dbc97b64e53463",
+      "root_location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "bounds": {
+        "min": [
+          -0.43698,
+          -0.2454,
+          0.0
+        ],
+        "max": [
+          0.43698,
+          0.2357,
+          1.71895
+        ],
+        "height": 1.71895
+      },
+      "meshes": 32,
+      "triangles": 820,
+      "materials": [
+        "MAT_host_StorybookAtlas"
+      ],
+      "embedded_texture_sizes": [
+        [
+          256,
+          256
+        ]
+      ],
+      "sampler_interpolation": [
+        "Linear"
+      ],
+      "voxel_head_uv_region_triangles": null,
+      "missing_nodes": [],
+      "checks": {
+        "root_present": true,
+        "root_at_origin": true,
+        "mode_metadata": true,
+        "person_metadata": true,
+        "forward_is_minus_y": true,
+        "photo_projection_forbidden": true,
+        "source_kind_valid": true,
+        "required_nodes_present": true,
+        "mesh_count": true,
+        "triangle_budget": true,
+        "height_range": true,
+        "feet_on_ground": true,
+        "single_atlas_material": true,
+        "embedded_texture_present": true,
+        "embedded_texture_size": true,
+        "sampler_interpolation": true,
+        "no_runtime_camera_or_light": true
+      },
+      "passed": true
+    },
+    {
+      "asset_id": "character.photo.person_01.voxel.v1",
+      "path": "public/models/characters/photo-derived/voxel/person_01.glb",
+      "exists": true,
+      "bytes": 11560,
+      "sha256": "73c08f0c65baf9dd106a3f6ebacd065d0675495c713c7dd5f862c5f600d8183c",
+      "root_location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "bounds": {
+        "min": [
+          -0.4,
+          -0.215,
+          0.0
+        ],
+        "max": [
+          0.4,
+          0.215,
+          1.65
+        ],
+        "height": 1.65
+      },
+      "meshes": 6,
+      "triangles": 72,
+      "materials": [
+        "MAT_person_01_VoxelAtlas"
+      ],
+      "embedded_texture_sizes": [
+        [
+          128,
+          128
+        ]
+      ],
+      "sampler_interpolation": [
+        "Closest"
+      ],
+      "voxel_head_uv_region_triangles": {
+        "left": 2,
+        "front": 2,
+        "right": 2,
+        "back": 2,
+        "top": 2,
+        "bottom": 2
+      },
+      "missing_nodes": [],
+      "checks": {
+        "root_present": true,
+        "root_at_origin": true,
+        "mode_metadata": true,
+        "person_metadata": true,
+        "forward_is_minus_y": true,
+        "photo_projection_forbidden": true,
+        "source_kind_valid": true,
+        "required_nodes_present": true,
+        "mesh_count": true,
+        "triangle_budget": true,
+        "height_range": true,
+        "feet_on_ground": true,
+        "single_atlas_material": true,
+        "embedded_texture_present": true,
+        "embedded_texture_size": true,
+        "sampler_interpolation": true,
+        "no_runtime_camera_or_light": true,
+        "fixed_body_template": true,
+        "head_six_cube_sides_uv_mapped": true,
+        "head_declares_five_generated_faces": true
+      },
+      "passed": true
+    },
+    {
+      "asset_id": "character.photo.person_02.voxel.v1",
+      "path": "public/models/characters/photo-derived/voxel/person_02.glb",
+      "exists": true,
+      "bytes": 11608,
+      "sha256": "3b275c02b3266411e0f86eaa4ae342c8e4afcf515b65a37ee088e8ca0b7a2bdd",
+      "root_location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "bounds": {
+        "min": [
+          -0.396,
+          -0.21285,
+          -0.0
+        ],
+        "max": [
+          0.396,
+          0.21285,
+          1.6335
+        ],
+        "height": 1.6335
+      },
+      "meshes": 6,
+      "triangles": 72,
+      "materials": [
+        "MAT_person_02_VoxelAtlas"
+      ],
+      "embedded_texture_sizes": [
+        [
+          128,
+          128
+        ]
+      ],
+      "sampler_interpolation": [
+        "Closest"
+      ],
+      "voxel_head_uv_region_triangles": {
+        "left": 2,
+        "front": 2,
+        "right": 2,
+        "back": 2,
+        "top": 2,
+        "bottom": 2
+      },
+      "missing_nodes": [],
+      "checks": {
+        "root_present": true,
+        "root_at_origin": true,
+        "mode_metadata": true,
+        "person_metadata": true,
+        "forward_is_minus_y": true,
+        "photo_projection_forbidden": true,
+        "source_kind_valid": true,
+        "required_nodes_present": true,
+        "mesh_count": true,
+        "triangle_budget": true,
+        "height_range": true,
+        "feet_on_ground": true,
+        "single_atlas_material": true,
+        "embedded_texture_present": true,
+        "embedded_texture_size": true,
+        "sampler_interpolation": true,
+        "no_runtime_camera_or_light": true,
+        "fixed_body_template": true,
+        "head_six_cube_sides_uv_mapped": true,
+        "head_declares_five_generated_faces": true
+      },
+      "passed": true
+    },
+    {
+      "asset_id": "character.photo.person_03.voxel.v1",
+      "path": "public/models/characters/photo-derived/voxel/person_03.glb",
+      "exists": true,
+      "bytes": 11512,
+      "sha256": "12b132213b24917cca29abc12bf18409445183c2d782e1f925be01df03ee4dde",
+      "root_location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "bounds": {
+        "min": [
+          -0.4,
+          -0.215,
+          0.0
+        ],
+        "max": [
+          0.4,
+          0.215,
+          1.65
+        ],
+        "height": 1.65
+      },
+      "meshes": 6,
+      "triangles": 72,
+      "materials": [
+        "MAT_person_03_VoxelAtlas"
+      ],
+      "embedded_texture_sizes": [
+        [
+          128,
+          128
+        ]
+      ],
+      "sampler_interpolation": [
+        "Closest"
+      ],
+      "voxel_head_uv_region_triangles": {
+        "left": 2,
+        "front": 2,
+        "right": 2,
+        "back": 2,
+        "top": 2,
+        "bottom": 2
+      },
+      "missing_nodes": [],
+      "checks": {
+        "root_present": true,
+        "root_at_origin": true,
+        "mode_metadata": true,
+        "person_metadata": true,
+        "forward_is_minus_y": true,
+        "photo_projection_forbidden": true,
+        "source_kind_valid": true,
+        "required_nodes_present": true,
+        "mesh_count": true,
+        "triangle_budget": true,
+        "height_range": true,
+        "feet_on_ground": true,
+        "single_atlas_material": true,
+        "embedded_texture_present": true,
+        "embedded_texture_size": true,
+        "sampler_interpolation": true,
+        "no_runtime_camera_or_light": true,
+        "fixed_body_template": true,
+        "head_six_cube_sides_uv_mapped": true,
+        "head_declares_five_generated_faces": true
+      },
+      "passed": true
+    },
+    {
+      "asset_id": "character.photo.person_04.voxel.v1",
+      "path": "public/models/characters/photo-derived/voxel/person_04.glb",
+      "exists": true,
+      "bytes": 11656,
+      "sha256": "bf3020203133c0d416286f8b675563ce2da42649bb1e59c0be7c99de8abe223e",
+      "root_location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "bounds": {
+        "min": [
+          -0.432,
+          -0.2322,
+          0.0
+        ],
+        "max": [
+          0.432,
+          0.2322,
+          1.836
+        ],
+        "height": 1.836
+      },
+      "meshes": 6,
+      "triangles": 72,
+      "materials": [
+        "MAT_person_04_VoxelAtlas"
+      ],
+      "embedded_texture_sizes": [
+        [
+          128,
+          128
+        ]
+      ],
+      "sampler_interpolation": [
+        "Closest"
+      ],
+      "voxel_head_uv_region_triangles": {
+        "left": 2,
+        "front": 2,
+        "right": 2,
+        "back": 2,
+        "top": 2,
+        "bottom": 2
+      },
+      "missing_nodes": [],
+      "checks": {
+        "root_present": true,
+        "root_at_origin": true,
+        "mode_metadata": true,
+        "person_metadata": true,
+        "forward_is_minus_y": true,
+        "photo_projection_forbidden": true,
+        "source_kind_valid": true,
+        "required_nodes_present": true,
+        "mesh_count": true,
+        "triangle_budget": true,
+        "height_range": true,
+        "feet_on_ground": true,
+        "single_atlas_material": true,
+        "embedded_texture_present": true,
+        "embedded_texture_size": true,
+        "sampler_interpolation": true,
+        "no_runtime_camera_or_light": true,
+        "abstract_mark_no_logo": true,
+        "fixed_body_template": true,
+        "head_six_cube_sides_uv_mapped": true,
+        "head_declares_five_generated_faces": true
+      },
+      "passed": true
+    },
+    {
+      "asset_id": "character.photo.person_05.voxel.v1",
+      "path": "public/models/characters/photo-derived/voxel/person_05.glb",
+      "exists": true,
+      "bytes": 11576,
+      "sha256": "648d9bd6fd813a014ed7f8c05bec0c0d306341685edd02f4d106339e1183c053",
+      "root_location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "bounds": {
+        "min": [
+          -0.408,
+          -0.2193,
+          0.0
+        ],
+        "max": [
+          0.408,
+          0.2193,
+          1.683
+        ],
+        "height": 1.683
+      },
+      "meshes": 6,
+      "triangles": 72,
+      "materials": [
+        "MAT_person_05_VoxelAtlas"
+      ],
+      "embedded_texture_sizes": [
+        [
+          128,
+          128
+        ]
+      ],
+      "sampler_interpolation": [
+        "Closest"
+      ],
+      "voxel_head_uv_region_triangles": {
+        "left": 2,
+        "front": 2,
+        "right": 2,
+        "back": 2,
+        "top": 2,
+        "bottom": 2
+      },
+      "missing_nodes": [],
+      "checks": {
+        "root_present": true,
+        "root_at_origin": true,
+        "mode_metadata": true,
+        "person_metadata": true,
+        "forward_is_minus_y": true,
+        "photo_projection_forbidden": true,
+        "source_kind_valid": true,
+        "required_nodes_present": true,
+        "mesh_count": true,
+        "triangle_budget": true,
+        "height_range": true,
+        "feet_on_ground": true,
+        "single_atlas_material": true,
+        "embedded_texture_present": true,
+        "embedded_texture_size": true,
+        "sampler_interpolation": true,
+        "no_runtime_camera_or_light": true,
+        "fixed_body_template": true,
+        "head_six_cube_sides_uv_mapped": true,
+        "head_declares_five_generated_faces": true
+      },
+      "passed": true
+    },
+    {
+      "asset_id": "character.photo.person_06.voxel.v1",
+      "path": "public/models/characters/photo-derived/voxel/person_06.glb",
+      "exists": true,
+      "bytes": 11596,
+      "sha256": "cbf9d468086c2fc62e70e10e277a91581cc350cfa22f53130dd28f3db9021751",
+      "root_location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "bounds": {
+        "min": [
+          -0.388,
+          -0.20855,
+          -0.0
+        ],
+        "max": [
+          0.388,
+          0.20855,
+          1.6005
+        ],
+        "height": 1.6005
+      },
+      "meshes": 6,
+      "triangles": 72,
+      "materials": [
+        "MAT_person_06_VoxelAtlas"
+      ],
+      "embedded_texture_sizes": [
+        [
+          128,
+          128
+        ]
+      ],
+      "sampler_interpolation": [
+        "Closest"
+      ],
+      "voxel_head_uv_region_triangles": {
+        "left": 2,
+        "front": 2,
+        "right": 2,
+        "back": 2,
+        "top": 2,
+        "bottom": 2
+      },
+      "missing_nodes": [],
+      "checks": {
+        "root_present": true,
+        "root_at_origin": true,
+        "mode_metadata": true,
+        "person_metadata": true,
+        "forward_is_minus_y": true,
+        "photo_projection_forbidden": true,
+        "source_kind_valid": true,
+        "required_nodes_present": true,
+        "mesh_count": true,
+        "triangle_budget": true,
+        "height_range": true,
+        "feet_on_ground": true,
+        "single_atlas_material": true,
+        "embedded_texture_present": true,
+        "embedded_texture_size": true,
+        "sampler_interpolation": true,
+        "no_runtime_camera_or_light": true,
+        "fixed_body_template": true,
+        "head_six_cube_sides_uv_mapped": true,
+        "head_declares_five_generated_faces": true
+      },
+      "passed": true
+    },
+    {
+      "asset_id": "character.photo.host.voxel.v1",
+      "path": "public/models/characters/photo-derived/voxel/host.glb",
+      "exists": true,
+      "bytes": 11540,
+      "sha256": "1141152b6383f63ee502eb0df9aa8732a4065d37b4277986c36a2f6c199132ba",
+      "root_location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "bounds": {
+        "min": [
+          -0.4,
+          -0.215,
+          0.0
+        ],
+        "max": [
+          0.4,
+          0.215,
+          1.65
+        ],
+        "height": 1.65
+      },
+      "meshes": 6,
+      "triangles": 72,
+      "materials": [
+        "MAT_host_VoxelAtlas"
+      ],
+      "embedded_texture_sizes": [
+        [
+          128,
+          128
+        ]
+      ],
+      "sampler_interpolation": [
+        "Closest"
+      ],
+      "voxel_head_uv_region_triangles": {
+        "left": 2,
+        "front": 2,
+        "right": 2,
+        "back": 2,
+        "top": 2,
+        "bottom": 2
+      },
+      "missing_nodes": [],
+      "checks": {
+        "root_present": true,
+        "root_at_origin": true,
+        "mode_metadata": true,
+        "person_metadata": true,
+        "forward_is_minus_y": true,
+        "photo_projection_forbidden": true,
+        "source_kind_valid": true,
+        "required_nodes_present": true,
+        "mesh_count": true,
+        "triangle_budget": true,
+        "height_range": true,
+        "feet_on_ground": true,
+        "single_atlas_material": true,
+        "embedded_texture_present": true,
+        "embedded_texture_size": true,
+        "sampler_interpolation": true,
+        "no_runtime_camera_or_light": true,
+        "fixed_body_template": true,
+        "head_six_cube_sides_uv_mapped": true,
+        "head_declares_five_generated_faces": true
+      },
+      "passed": true
+    }
+  ],
+  "textures": [
+    {
+      "path": "public/textures/characters/storybook/person_01_atlas.png",
+      "exists": true,
+      "size": [
+        256,
+        256
+      ],
+      "bytes": 18844,
+      "sha256": "02481fcdaa210ec18fc53916192261989cc1f927be2e62d24b8c145d95771349",
+      "head_face_coverage": null,
+      "checks": {
+        "exists": true,
+        "power_of_two_expected_size": true,
+        "png_extension": true
+      },
+      "passed": true
+    },
+    {
+      "path": "public/textures/characters/storybook/person_02_atlas.png",
+      "exists": true,
+      "size": [
+        256,
+        256
+      ],
+      "bytes": 18339,
+      "sha256": "aded7f20725fe3e13221ec408882cbb2e442270beba934c5a1f22a6888783103",
+      "head_face_coverage": null,
+      "checks": {
+        "exists": true,
+        "power_of_two_expected_size": true,
+        "png_extension": true
+      },
+      "passed": true
+    },
+    {
+      "path": "public/textures/characters/storybook/person_03_atlas.png",
+      "exists": true,
+      "size": [
+        256,
+        256
+      ],
+      "bytes": 18962,
+      "sha256": "8075b0e36ba5f47c7086788a4b6444ffc8a7b2c9ff611be393292465307596d7",
+      "head_face_coverage": null,
+      "checks": {
+        "exists": true,
+        "power_of_two_expected_size": true,
+        "png_extension": true
+      },
+      "passed": true
+    },
+    {
+      "path": "public/textures/characters/storybook/person_04_atlas.png",
+      "exists": true,
+      "size": [
+        256,
+        256
+      ],
+      "bytes": 18237,
+      "sha256": "d40d6ccff95596741adab380f4a84daac4ca8a87150bc730d6843551567ebb47",
+      "head_face_coverage": null,
+      "checks": {
+        "exists": true,
+        "power_of_two_expected_size": true,
+        "png_extension": true
+      },
+      "passed": true
+    },
+    {
+      "path": "public/textures/characters/storybook/person_05_atlas.png",
+      "exists": true,
+      "size": [
+        256,
+        256
+      ],
+      "bytes": 18471,
+      "sha256": "c9d8e8ad042445ae0348d0d97de961a6284812820ad3c06064bdd91e05684374",
+      "head_face_coverage": null,
+      "checks": {
+        "exists": true,
+        "power_of_two_expected_size": true,
+        "png_extension": true
+      },
+      "passed": true
+    },
+    {
+      "path": "public/textures/characters/storybook/person_06_atlas.png",
+      "exists": true,
+      "size": [
+        256,
+        256
+      ],
+      "bytes": 18946,
+      "sha256": "fe194049ed22f9b8986ce6f47e2f1ca08ecbe5b45db30e7784fc3190f76592ca",
+      "head_face_coverage": null,
+      "checks": {
+        "exists": true,
+        "power_of_two_expected_size": true,
+        "png_extension": true
+      },
+      "passed": true
+    },
+    {
+      "path": "public/textures/characters/storybook/host_atlas.png",
+      "exists": true,
+      "size": [
+        256,
+        256
+      ],
+      "bytes": 19363,
+      "sha256": "2ac1ae1f25dc3e951063a6e8d8fbe52666e64a37a2456597adc97c978d24d35d",
+      "head_face_coverage": null,
+      "checks": {
+        "exists": true,
+        "power_of_two_expected_size": true,
+        "png_extension": true
+      },
+      "passed": true
+    },
+    {
+      "path": "public/textures/characters/voxel/person_01_atlas.png",
+      "exists": true,
+      "size": [
+        128,
+        128
+      ],
+      "bytes": 1356,
+      "sha256": "a0e76a86e40df2d61f9ec3ef2803366e4084175c99232aef979c88c0fc10a954",
+      "head_face_coverage": {
+        "left": true,
+        "front": true,
+        "right": true,
+        "back": true,
+        "top": true
+      },
+      "checks": {
+        "exists": true,
+        "power_of_two_expected_size": true,
+        "png_extension": true,
+        "five_head_faces_have_pixels": true,
+        "hard_alpha_only": true
+      },
+      "passed": true
+    },
+    {
+      "path": "public/textures/characters/voxel/person_02_atlas.png",
+      "exists": true,
+      "size": [
+        128,
+        128
+      ],
+      "bytes": 1313,
+      "sha256": "701dba72d5515aa6d28135a6a0684b53acc8be1902f8a4798737948273d6fe87",
+      "head_face_coverage": {
+        "left": true,
+        "front": true,
+        "right": true,
+        "back": true,
+        "top": true
+      },
+      "checks": {
+        "exists": true,
+        "power_of_two_expected_size": true,
+        "png_extension": true,
+        "five_head_faces_have_pixels": true,
+        "hard_alpha_only": true
+      },
+      "passed": true
+    },
+    {
+      "path": "public/textures/characters/voxel/person_03_atlas.png",
+      "exists": true,
+      "size": [
+        128,
+        128
+      ],
+      "bytes": 1283,
+      "sha256": "123599e3d345efc76d9d67a97bd19a8d2ff1f578c3908e2739e8e9ee715c5968",
+      "head_face_coverage": {
+        "left": true,
+        "front": true,
+        "right": true,
+        "back": true,
+        "top": true
+      },
+      "checks": {
+        "exists": true,
+        "power_of_two_expected_size": true,
+        "png_extension": true,
+        "five_head_faces_have_pixels": true,
+        "hard_alpha_only": true
+      },
+      "passed": true
+    },
+    {
+      "path": "public/textures/characters/voxel/person_04_atlas.png",
+      "exists": true,
+      "size": [
+        128,
+        128
+      ],
+      "bytes": 1310,
+      "sha256": "326c78f345fe96c4b1a1b6d9349420272c625e799883dacb012047ae01c5cfc6",
+      "head_face_coverage": {
+        "left": true,
+        "front": true,
+        "right": true,
+        "back": true,
+        "top": true
+      },
+      "checks": {
+        "exists": true,
+        "power_of_two_expected_size": true,
+        "png_extension": true,
+        "five_head_faces_have_pixels": true,
+        "hard_alpha_only": true
+      },
+      "passed": true
+    },
+    {
+      "path": "public/textures/characters/voxel/person_05_atlas.png",
+      "exists": true,
+      "size": [
+        128,
+        128
+      ],
+      "bytes": 1279,
+      "sha256": "940573f432d17dd03f7e759bfee5815966edb02bbff21f0767a1d98d90fa7638",
+      "head_face_coverage": {
+        "left": true,
+        "front": true,
+        "right": true,
+        "back": true,
+        "top": true
+      },
+      "checks": {
+        "exists": true,
+        "power_of_two_expected_size": true,
+        "png_extension": true,
+        "five_head_faces_have_pixels": true,
+        "hard_alpha_only": true
+      },
+      "passed": true
+    },
+    {
+      "path": "public/textures/characters/voxel/person_06_atlas.png",
+      "exists": true,
+      "size": [
+        128,
+        128
+      ],
+      "bytes": 1300,
+      "sha256": "f2d4d476952eae6f4d7c6f38f6cf5d165364bd8386be7fb8b781595e8b1299d6",
+      "head_face_coverage": {
+        "left": true,
+        "front": true,
+        "right": true,
+        "back": true,
+        "top": true
+      },
+      "checks": {
+        "exists": true,
+        "power_of_two_expected_size": true,
+        "png_extension": true,
+        "five_head_faces_have_pixels": true,
+        "hard_alpha_only": true
+      },
+      "passed": true
+    },
+    {
+      "path": "public/textures/characters/voxel/host_atlas.png",
+      "exists": true,
+      "size": [
+        128,
+        128
+      ],
+      "bytes": 1314,
+      "sha256": "9e619c2536f16535f7c24e6beef67afb11c02a89cb84265698f569ad8907726f",
+      "head_face_coverage": {
+        "left": true,
+        "front": true,
+        "right": true,
+        "back": true,
+        "top": true
+      },
+      "checks": {
+        "exists": true,
+        "power_of_two_expected_size": true,
+        "png_extension": true,
+        "five_head_faces_have_pixels": true,
+        "hard_alpha_only": true
+      },
+      "passed": true
+    }
+  ],
+  "previews": [
+    {
+      "mode": "storybook",
+      "path": "renders/photo_characters_storybook_lineup.png",
+      "size": [
+        1600,
+        900
+      ],
+      "bytes": 1392643,
+      "checks": {
+        "exists": true,
+        "resolution": true,
+        "nontrivial_file_size": true
+      },
+      "passed": true
+    },
+    {
+      "mode": "voxel",
+      "path": "renders/photo_characters_voxel_lineup.png",
+      "size": [
+        1600,
+        900
+      ],
+      "bytes": 1379112,
+      "checks": {
+        "exists": true,
+        "resolution": true,
+        "nontrivial_file_size": true
+      },
+      "passed": true
+    }
+  ],
+  "passed": true
+}

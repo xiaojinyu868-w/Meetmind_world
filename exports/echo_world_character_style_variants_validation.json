@@ -1,0 +1,85 @@
+{
+  "variants": [
+    {
+      "style_variant": "reference-lowpoly",
+      "file": "public/models/characters/echo_world_faceless_reference.glb",
+      "root_node": "ROOT_FacelessCharacter",
+      "face_mode": "featureless",
+      "declared_height_m": 1.65,
+      "bounds_m": {
+        "min_xyz": [
+          -0.44513,
+          -0.25741,
+          -0.01063
+        ],
+        "max_xyz": [
+          0.44513,
+          0.24506,
+          1.67
+        ],
+        "height": 1.68063
+      },
+      "mesh_objects": 19,
+      "triangles": 440,
+      "materials": [
+        "MAT_Accent",
+        "MAT_Hair",
+        "MAT_Jacket",
+        "MAT_Pants",
+        "MAT_Shirt",
+        "MAT_Shoes",
+        "MAT_Skin"
+      ],
+      "checks": {
+        "root_present": true,
+        "featureless_metadata": true,
+        "no_face_feature_nodes": true,
+        "forbidden_nodes": [],
+        "height_in_range": true,
+        "triangle_budget": true
+      },
+      "ok": true
+    },
+    {
+      "style_variant": "painterly-adventure",
+      "file": "public/models/characters/echo_world_faceless_painterly.glb",
+      "root_node": "ROOT_FacelessCharacter",
+      "face_mode": "featureless",
+      "declared_height_m": 1.65,
+      "bounds_m": {
+        "min_xyz": [
+          -0.47262,
+          -0.28494,
+          0.0
+        ],
+        "max_xyz": [
+          0.47262,
+          0.26357,
+          1.68
+        ],
+        "height": 1.68
+      },
+      "mesh_objects": 26,
+      "triangles": 794,
+      "materials": [
+        "MAT_Accent",
+        "MAT_Hair",
+        "MAT_Jacket",
+        "MAT_Outline",
+        "MAT_Pants",
+        "MAT_Shirt",
+        "MAT_Shoes",
+        "MAT_Skin"
+      ],
+      "checks": {
+        "root_present": true,
+        "featureless_metadata": true,
+        "no_face_feature_nodes": true,
+        "forbidden_nodes": [],
+        "height_in_range": true,
+        "triangle_budget": true
+      },
+      "ok": true
+    }
+  ]
+}

@@ -1,4 +1,6 @@
 node_modules/
+__pycache__/
+.codex-*.log
 blender-4.5.12-linux-x64/
 EchoWorld-threejs-frontend-20260803.zip
 
@@ -10,3 +12,7 @@ backend/.pytest_cache/
 backend/data/*
 !backend/data/.gitkeep
 .env
+
+# Blender 产物
+*.blend1
+exports/*.glb
