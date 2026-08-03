@@ -37,9 +37,13 @@ app/
   packages/store.py       Package 存储：facts/ append-only、inferences/ 可重算、people/ 目录
   world/
     service.py            World Service：事件消费（move/state/talk/meeting-*）、tick、
-                          最近 20 条事件滚动缓冲、圆桌会议入座（圆心 (0,0) 半径 1.6）
+                          最近 20 条事件滚动缓冲、圆桌会议入座真实锚点
+    tables.py             桌位/阻挡配置：TABLE_BLOCKERS + 边界 + 18 个座位锚点
+                          （与前端 TABLE_BLOCKERS/CafeLayout 同源），clamp_to_walkable
+                          统一钳制 + seated 锚点吸附（防穿模）
     seed.py               种子：1 咖啡厅模块 + 6 demo agent（调色板对齐前端 demoPeople.js）
-                          + 幂等 demo Package（bio 落种子事实，推断带真实指针）
+                          + 幂等 demo Package（bio 落种子事实，推断带真实指针，
+                          face/现场照复制自 public/portraits，media 路由可取）
   agents/
     runtime.py            Agent Runtime：每 tick 读 skill + 快照调 chat provider 决策
                           （JSON 约束 move/visit/sit/talk），失败回退规则驱动；
@@ -88,6 +92,7 @@ data/                     运行期数据（.gitkeep 占位，内容被 .gitigno
 | IF-5 | GET | `/api/v0/packages` | Package 摘要列表 |
 | IF-5 | GET | `/api/v0/packages/{person_id}?viewer=self\|agent\|org\|public` | 按权限圈层过滤的详情（agent 视角要求已确认） |
 | IF-5 | POST | `/api/v0/search` | 检索（FR-1.9）：`{by:"face"\|"name"\|"keyword", query/photo}` → `{results:[{person_id,name,score,last_encounter}]}`；face 为 stub |
+| — | GET | `/api/v0/media/{ref:path}` | 资料包媒体（facts 指针）安全取字节：路径防穿越（403）、扩展名白名单、正确 Content-Type、404 |
 
 ## 边界（务必读）
 

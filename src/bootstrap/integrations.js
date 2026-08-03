@@ -87,13 +87,17 @@ body[data-view="cafe"] .echo-integrations .search-bar { display: block; }
 `;
 
 
-// 事实层指针（portraits/xxx.png、facts/...）→ 可加载 URL；绝对 URL / data / blob 原样透传
+// 事实层指针（portraits/xxx.png、facts/...）→ 可加载 URL；绝对 URL / data / blob 原样透传。
+// live 模式下 facts/... 媒体走后端媒体路由（/api/v0/media/<ref>，后端在建）；mock 模式保持 publicUrl。
 export function resolveMediaUrl(ref) {
   if (ref === null || ref === undefined) return "";
   const value = String(ref).trim();
   if (!value) return "";
   if (/^(?:https?:)?\/\//.test(value) || value.startsWith("data:") || value.startsWith("blob:")) {
     return value;
+  }
+  if (MockApi.isLiveMode() && value.startsWith("facts/")) {
+    return `${import.meta.env.BASE_URL}api/v0/media/${value}`;
   }
   return publicUrl(value);
 }

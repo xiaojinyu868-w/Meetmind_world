@@ -215,9 +215,9 @@ def test_meeting_lifecycle(monkeypatch):
     assert 3 <= len(participants) <= 4
     seated = {a["id"]: a for a in snapshot["agents"] if a["id"] in participants}
     assert all(a["state"] == "in-meeting" for a in seated.values())
-    # 入座圆桌：半径 1.6，圆心 (0,0)
+    # 入座圆桌真实锚点：半径 ≈1.57，圆心 (0,0)（与前端 CafeLayout.roundtable.seats 同源）
     for agent in seated.values():
-        assert abs((agent["position"]["x"] ** 2 + agent["position"]["z"] ** 2) ** 0.5 - 1.6) < 1e-6
+        assert abs((agent["position"]["x"] ** 2 + agent["position"]["z"] ** 2) ** 0.5 - 1.57) < 5e-3
 
     world.step()
     runtime.tick(world.snapshot())  # tick1：会议中发言

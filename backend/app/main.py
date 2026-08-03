@@ -16,7 +16,7 @@ from app.agents.llm import get_provider
 from app.agents.memory.store import MemoryStore
 from app.agents.runtime import AgentRuntime, EventBus
 from app.api import confirm as confirm_api
-from app.api import ingest, packages, pipeline, search as search_api
+from app.api import ingest, media, packages, pipeline, search as search_api
 from app.api import world as world_api
 from app.harness.permissions.guard import DEFAULT_GUARD, PermissionDenied
 from app.packages.store import PackageStore
@@ -60,6 +60,7 @@ def create_app() -> FastAPI:
     app.include_router(search_api.router)
     app.include_router(packages.router)
     app.include_router(world_api.router)
+    app.include_router(media.router)
     return app
 
 

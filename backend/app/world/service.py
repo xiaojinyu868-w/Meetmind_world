@@ -10,25 +10,19 @@
       tests/test_runtime.py —— 会议调度与 talk 事件进缓冲。
 
 会议约定：中央六人圆桌与前端 CafeLayout.roundtable 对齐（圆心 (0,0)，
-座位半径 1.6m，六等分朝向圆心）；in-meeting 中的 Agent 不被日常调度打扰。
+座位用真实锚点 ROUNDTABLE_SEATS）；in-meeting 中的 Agent 不被日常调度打扰。
+
+防穿模：agent-move 目标点与种子位置统一过 tables.clamp_to_walkable()
+（边界 + 圆形阻挡体外扩 0.3 投影）；seated 必须吸附最近座位锚点
+（阈值 0.9m，否则拒绝并保持 standing/walking）。
 """
 
-import math
 from collections import deque
 
 from app.schemas.snapshot_schema import build_snapshot
+from app.world.tables import ROUNDTABLE_SEATS, clamp_to_walkable, nearest_seat
 
 EVENT_BUFFER_SIZE = 20
-ROUNDTABLE_CENTER = (0.0, 0.0)
-ROUNDTABLE_SEAT_RADIUS = 1.6
-
-
-def roundtable_seat(index: int, count: int) -> dict:
-    """圆桌第 index 个座位（共 count 个），朝向圆心（与前端 MODEL_FORWARD +Z 一致）。"""
-    angle = index * 2 * math.pi / max(count, 1)
-    x = ROUNDTABLE_CENTER[0] + ROUNDTABLE_SEAT_RADIUS * math.cos(angle)
-    z = ROUNDTABLE_CENTER[1] + ROUNDTABLE_SEAT_RADIUS * math.sin(angle)
-    return {"x": x, "z": z, "yaw": math.atan2(-x, -z)}
 
 
 class WorldService:
@@ -37,22 +31,24 @@ class WorldService:
     def __init__(self, seed: dict):
         self.tick = 0
         # agent 内部状态：id -> {name, position, state, palette}
-        self._agents = {
-            agent["id"]: {
+        # 种子位置同样过可行走钳制（防止初始就站进桌子）
+        self._agents = {}
+        for agent in seed.get("agents", []):
+            clamped = clamp_to_walkable(agent["position"])
+            clamped["yaw"] = agent["position"].get("yaw", 0.0)
+            self._agents[agent["id"]] = {
                 "name": agent["name"],
-                "position": dict(agent["position"]),
+                "position": clamped,
                 "state": agent["state"],
                 "palette": dict(agent["palette"]),
             }
-            for agent in seed.get("agents", [])
-        }
         self._modules = [dict(module) for module in seed.get("modules", [])]
         # 最近 N 条世界事件滚动缓冲（快照 events 字段，前端轮询渲染）
         self._events: deque = deque(maxlen=EVENT_BUFFER_SIZE)
         # 当前进行中的圆桌会议：{"id", "participants", "started_tick"} | None
         self.current_meeting: dict | None = None
-        # TODO(座位调度预留)：普通桌位表（table_id -> seat_id -> agent_id），
-        # 入座/离座事件在这里结算；MVP1 暂由 Agent Runtime mock 直接给坐标。
+        # TODO(座位占用登记)：普通桌位表（seat_node -> agent_id），
+        # 目前 seated 只做锚点吸附，不做一人一座的占用互斥。
 
     # ---------- 事件消费（Agent 改变世界的唯一方式） ----------
 
@@ -76,11 +72,13 @@ class WorldService:
             return
         position = event.get("position")
         if isinstance(position, dict):
-            agent["position"].update(
-                {axis: float(position[axis]) for axis in ("x", "z", "yaw") if axis in position}
-            )
+            # 统一钳制：任何来源（规则兜底/LLM 决策/外部注入）的目标点
+            # 都不允许落入阻挡圆或走出边界（防穿模的唯一闸口）
+            clamped = clamp_to_walkable(position)
+            clamped["yaw"] = float(position.get("yaw", agent["position"]["yaw"]))
+            agent["position"] = clamped
         if event.get("state"):
-            agent["state"] = event["state"]
+            self._apply_state(agent, event["state"])
         self._events.append(
             {"type": "agent-move", "agent_id": event["agent_id"], "tick": self.tick}
         )
@@ -89,11 +87,24 @@ class WorldService:
         agent = self._agents.get(event.get("agent_id"))
         if agent is None or not event.get("state"):
             return
-        agent["state"] = event["state"]
+        if not self._apply_state(agent, event["state"]):
+            return  # 状态被拒绝（如无座位强行 seated）：不入缓冲
         self._events.append(
             {"type": "agent-state", "agent_id": event["agent_id"],
              "state": event["state"], "tick": self.tick}
         )
+
+    def _apply_state(self, agent: dict, state: str) -> bool:
+        """应用状态切换。seated 必须吸附最近座位锚点（阈值内），否则拒绝并保持原状态。"""
+        if state != "seated":
+            agent["state"] = state
+            return True
+        seat = nearest_seat(agent["position"])
+        if seat is None:
+            return False
+        agent["position"] = {"x": seat["x"], "z": seat["z"], "yaw": seat["yaw"]}
+        agent["state"] = "seated"
+        return True
 
     def _on_agent_talk(self, event: dict) -> None:
         speaker = self._agents.get(event.get("agent_id"))
@@ -120,7 +131,9 @@ class WorldService:
         meeting_id = str(event.get("meeting_id") or f"meeting_{self.tick}")
         for index, pid in enumerate(participants):
             agent = self._agents[pid]
-            agent["position"] = roundtable_seat(index, len(participants))
+            # 入座圆桌真实锚点（与前端 CafeLayout.roundtable.seats 同源）
+            seat = ROUNDTABLE_SEATS[index % len(ROUNDTABLE_SEATS)]
+            agent["position"] = {"x": seat["x"], "z": seat["z"], "yaw": seat["yaw"]}
             agent["state"] = "in-meeting"
         self.current_meeting = {
             "id": meeting_id, "participants": participants, "started_tick": self.tick,

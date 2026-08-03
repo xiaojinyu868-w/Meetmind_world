@@ -18,6 +18,7 @@ import {
   sceneVariantFromLocation,
 } from "./runtime/SceneVariants.js";
 import { adaptSnapshot, normalizeEvent } from "./runtime/SnapshotAdapter.js";
+import { slideStepAroundBlockers } from "./runtime/WalkSlide.js";
 import {
   adaptMaterialToProfile,
   adaptSceneMaterials,
@@ -714,9 +715,24 @@ function updateLiveAgents(delta) {
     if (moving) {
       // 匀速逼近快照目标：轮询节拍之间保持连续走动，而不是脉冲式追赶
       const stepLength = Math.min(distance, LIVE_WALK_SPEED * delta);
-      root.position.x += (dx / distance) * stepLength;
-      root.position.z += (dz / distance) * stepLength;
-      liveFacing.set(dx / distance, 0, dz / distance);
+      // 轻量避障：下一步进入桌面圆形阻挡时沿切线滑动，缓解快照直线路径穿模；
+      // yaw 跟随实际（滑动后的）移动方向
+      const [stepX, stepZ] = slideStepAroundBlockers(
+        root.position.x,
+        root.position.z,
+        (dx / distance) * stepLength,
+        (dz / distance) * stepLength,
+        TABLE_BLOCKERS,
+        { targetX: target.x, targetZ: target.z },
+      );
+      root.position.x += stepX;
+      root.position.z += stepZ;
+      const actualStep = Math.hypot(stepX, stepZ);
+      if (actualStep > 1e-5) {
+        liveFacing.set(stepX / actualStep, 0, stepZ / actualStep);
+      } else {
+        liveFacing.set(Math.sin(target.yaw), 0, Math.cos(target.yaw));
+      }
     } else {
       root.position.x = target.x;
       root.position.z = target.z;
@@ -761,6 +777,10 @@ function startLiveWorld() {
   liveWorld.onSnapshot(applyLiveSnapshot);
   liveWorld.onEvent(handleLiveEvent);
   liveWorld.start();
+  if (activeSceneVariant.id !== "v1") {
+    // 座位锚点/碰撞按 v1 原始咖啡厅标定：美术变体下活的世界仍按 v1 布局运转（提示一次，不改 URL）
+    pushLiveToast("活的世界目前基于原始咖啡厅布局");
+  }
 }
 
 

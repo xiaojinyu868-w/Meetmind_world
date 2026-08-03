@@ -6,8 +6,11 @@
 输入：无。
 输出：seed_world() -> {"agents", "modules"}；seed_demo_packages(store) -> 新建数量。
 验收：tests/test_snapshot.py —— 由种子生成的快照通过 echo-snapshot.v1 校验；
-      tests/test_search.py —— name 检索命中种子数据。
+      tests/test_search.py —— name 检索命中种子数据；
+      tests/test_media.py —— face_ref/photos 指针经 media 路由可取到真实字节。
 """
+
+import shutil
 
 # 与前端 demoPeople.js 对齐的 6 个 NPC（调色板/姓名/相遇信息）
 SEED_AGENTS = [
@@ -116,28 +119,53 @@ def seed_world() -> dict:
     return {"agents": agents, "modules": modules}
 
 
+def _copy_portrait_fact(store, source_name: str, person_id: str, target_name: str) -> str | None:
+    """把前端仓库的肖像 PNG 复制为种子事实文件（幂等：已存在则跳过复制）。
+
+    返回 facts 相对指针；源文件缺失（如裁剪过的部署环境）返回 None。
+    """
+    from app.config import REPO_ROOT
+
+    source = REPO_ROOT / "public" / "portraits" / source_name
+    if not source.exists():
+        return None
+    target = store.facts_dir / "seed" / person_id / target_name
+    if not target.exists():
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, target)
+    return f"facts/seed/{person_id}/{target_name}"
+
+
 def seed_demo_packages(store) -> int:
     """把 6 个 demo agent 同步为已确认的 demo Package（检索/资料包 demo 数据）。
 
     幂等：people/<person_id>/profile.json 已存在则跳过。bio 落为种子事实
-    （facts/seed/<pid>/note.v1.md），推断标签携带真实事实指针。
+    （facts/seed/<pid>/note.v1.md），推断标签携带真实事实指针；
+    face_ref / real_face_ref / encounter photos 指向真实肖像文件
+    （现场照暂用他人肖像占位，TODO：待真实物理输入替换）。
     """
     from app.schemas.package_schema import SCHEMA_VERSION
 
     created = 0
-    for agent in SEED_AGENTS:
+    for index, agent in enumerate(SEED_AGENTS):
         person_id = agent["id"]
         if (store.people_dir / person_id / "profile.json").exists():
             continue
         note_ref = store.write_fact("seed", person_id, "note.v1.md",
                                     agent["bio"].encode("utf-8"))
+        face_ref = _copy_portrait_fact(store, f"{person_id}.png", person_id, "face.png")
+        # 现场照占位：复用下一位（循环）agent 的肖像。TODO：待真实物理输入替换
+        neighbor = SEED_AGENTS[(index + 1) % len(SEED_AGENTS)]
+        scene_ref = _copy_portrait_fact(store, f"{neighbor['id']}.png", person_id,
+                                        "scene_01.png")
+        photos = [ref for ref in (scene_ref, face_ref) if ref]
         package = {
             "schema": SCHEMA_VERSION,
             "person_id": person_id,
             "identity": {
                 "confirmed": True,
                 "name": agent["name"],
-                "face_ref": None,
+                "face_ref": face_ref,
                 "voiceprint_ref": None,
             },
             "encounters": [
@@ -145,7 +173,7 @@ def seed_demo_packages(store) -> int:
                     "encounter_id": "enc_seed",
                     "time": agent["met_at"],
                     "place": agent["met_at"],
-                    "facts": {"media": [], "transcript": None, "photos": []},
+                    "facts": {"media": [], "transcript": None, "photos": photos},
                     "inferences": [
                         {
                             "id": "inf_seed_tags",
@@ -163,7 +191,7 @@ def seed_demo_packages(store) -> int:
             "avatar": {
                 "type": "lowpoly-faceless-v1",
                 "palette": dict(agent["palette"]),
-                "real_face_ref": None,
+                "real_face_ref": face_ref,
             },
             "relations": [],
         }
