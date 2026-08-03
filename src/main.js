@@ -107,13 +107,12 @@ const pressedKeys = new Set();
 const moveInput = new THREE.Vector2();
 const touchInput = new THREE.Vector2();
 const moveDirection = new THREE.Vector3();
-const cameraForward = new THREE.Vector3();
-const cameraRight = new THREE.Vector3();
+const movementForward = new THREE.Vector3();
+const movementRight = new THREE.Vector3();
 const currentHeading = new THREE.Vector3(0, 0, -1);
 const desiredCameraPosition = new THREE.Vector3();
 const desiredLookTarget = new THREE.Vector3();
 const lookTarget = new THREE.Vector3(0, 0.85, 0);
-const followRight = new THREE.Vector3();
 const projected = new THREE.Vector3();
 const candidatePosition = new THREE.Vector3();
 const slidePosition = new THREE.Vector3();
@@ -463,15 +462,12 @@ function updatePlayer(delta) {
   const moving = input.lengthSq() > 0.0025;
 
   if (moving) {
-    camera.getWorldDirection(cameraForward);
-    cameraForward.y = 0;
-    if (cameraForward.lengthSq() < 0.0001) cameraForward.copy(currentHeading);
-    cameraForward.normalize();
-    cameraRight.crossVectors(cameraForward, WORLD_UP).normalize();
+    movementForward.copy(currentHeading).setY(0).normalize();
+    movementRight.crossVectors(movementForward, WORLD_UP).normalize();
     moveDirection
-      .copy(cameraForward)
+      .copy(movementForward)
       .multiplyScalar(input.y)
-      .addScaledVector(cameraRight, input.x)
+      .addScaledVector(movementRight, input.x)
       .normalize();
     candidatePosition.copy(player.position).addScaledVector(moveDirection, MOVE_SPEED * delta);
 
@@ -507,11 +503,9 @@ function updatePlayerMarker() {
 
 
 function updateFollowCamera(delta) {
-  followRight.crossVectors(currentHeading, WORLD_UP).normalize();
   desiredCameraPosition
     .copy(player.position)
     .addScaledVector(currentHeading, -3.75)
-    .addScaledVector(followRight, 0.52)
     .addScaledVector(WORLD_UP, 2.35);
   desiredLookTarget
     .copy(player.position)
