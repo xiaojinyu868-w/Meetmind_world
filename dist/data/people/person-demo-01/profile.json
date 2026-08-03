@@ -1,0 +1,28 @@
+{
+  "schema_version": "person-bundle.v1",
+  "person_id": "person-demo-01",
+  "status": "design-prototype",
+  "basic_info": {
+    "display_name": "无脸人物原型",
+    "relationship_summary": "用于验证人物数据、模型和世界实例之间的接口"
+  },
+  "source_media": {
+    "grouped_photo_set": [],
+    "voice_asset": null,
+    "algorithm_metadata": null
+  },
+  "visual_profile": {
+    "head_shape": "soft oval",
+    "hair": "short layered dark hair",
+    "outfit": "blue jacket, light inner shirt, charcoal trousers",
+    "face_policy": "faceless-prototype"
+  },
+  "runtime": {
+    "voice_asset": null,
+    "memory_package": null
+  },
+  "privacy": {
+    "consent_status": "prototype-no-biometric-source",
+    "retention_policy": "none"
+  }
+}

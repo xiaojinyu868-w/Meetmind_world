@@ -1,0 +1,26 @@
+{
+  "schema_version": "echo-assets.v1",
+  "assets": [
+    {
+      "asset_id": "environment.cafe.v1",
+      "kind": "environment",
+      "url": "models/echo_world_lowpoly_cafe.glb",
+      "version": 1
+    },
+    {
+      "asset_id": "character.faceless-prototype.v1",
+      "kind": "character",
+      "url": "models/characters/echo_world_faceless_person.glb",
+      "version": 1,
+      "root_node": "ROOT_FacelessCharacter",
+      "height_m": 1.65,
+      "face_mode": "featureless"
+    },
+    {
+      "asset_id": "profile.person-demo-01.v1",
+      "kind": "person-profile",
+      "url": "data/people/person-demo-01/profile.json",
+      "version": 1
+    }
+  ]
+}

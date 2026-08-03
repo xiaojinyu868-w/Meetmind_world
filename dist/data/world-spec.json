@@ -1,0 +1,13 @@
+{
+  "schema_version": "echo-world.v1",
+  "world_id": "echo-cafe-prototype",
+  "asset_catalog_url": "data/asset-catalog.json",
+  "environment": {
+    "asset_id": "environment.cafe.v1"
+  },
+  "player": {
+    "kind": "person-agent",
+    "node_name": "ROOT_FacelessCharacter"
+  },
+  "characters": []
+}
