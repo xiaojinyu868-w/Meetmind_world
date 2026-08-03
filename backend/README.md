@@ -67,7 +67,8 @@ app/
     llm/deepseek.py       chat 角色（deepseek-chat，决策/对话/摘要），未配置降级 mock
     llm/qwen.py           vision 角色（qwen-vl 图像理解：人脸候选/场景标签）
     memory/store.py       记忆分层：场景/短期/长期（只读）/推断 + authorized_agent_view
-                          （≥ L2 授权上下文视图，对话与决策的唯一信息来源）
+                          （≥ L2 授权上下文视图，对话与决策的唯一信息来源）+
+                          互动注册表（relations.md 行尾 last:/count: 持久化，启动恢复）
     skills/               cafe_daily.md / meeting.md（runtime 每 tick 读取）+ loader
     tools/example_tool.py 工具协议示例（search_person，FR-1.9 占位）
     utils/jsonish.py      LLM 输出宽容 JSON 提取（runtime 与 pipeline 共用）

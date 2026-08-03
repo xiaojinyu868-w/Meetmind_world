@@ -69,29 +69,64 @@ class HallRuntime:
         visitor_id, host_id, common_tags = pair
         self._start_visit(booths, visitor_id, host_id, common_tags)
 
-    # ---------- 配对（有理由才成行） ----------
+    # ---------- 配对（有理由才成行；旧识深聊优先于破冰复读，§4） ----------
+
+    # 配对打分公式（可解释）：
+    #   硬门槛：双方有共同 tags（破冰）或 relations.md 关联（旧识），否则不候选；
+    #   层优先：旧识永远优先于破冰（大厅是关系网络，熟人深聊是核心体验）；
+    #   旧识层内：score = 10 - (3 若近 RECENT_HOURS 小时内互动过) - min(count, 5)
+    #     —— count 越低、越久未互动得分越高（深聊优先于复读）；
+    #   破冰层内：score = 共同 tag 数。
+    RECENT_HOURS = 6
 
     def _find_pair(self, person_ids: list) -> tuple | None:
-        """返回 (visitor_id, host_id, common_tags)；无交集对返回 None。
-
-        理由一：双方 ≥L2 推断 tags 有交集；理由二：relations.md 互有关联
-        （此时 common_tags 为空，对话聊叙旧）。未确认/无授权视图的人不参与。
-        """
+        """返回 (visitor_id, host_id, common_tags)；无合格对返回 None。"""
         views = {}
         for pid in person_ids:
             view = self._authorized_view(pid)
             if view is not None:
                 views[pid] = view
         ids = [pid for pid in person_ids if pid in views]
-        self.rng.shuffle(ids)
+        self.rng.shuffle(ids)  # 同分时的随机次序
+        best = None  # ((tier_rank, score), a, b, common)
         for i, first in enumerate(ids):
             for second in ids[i + 1:]:
                 common = sorted(_tag_set(views[first]) & _tag_set(views[second]))
-                if common:
-                    return (first, second, common)
-                if self._related(views[first], views[second]):
-                    return (first, second, [])
-        return None
+                related = self._related(views[first], views[second])
+                if not common and not related:
+                    continue
+                rank = self._pair_score(first, second, common, related)
+                if best is None or rank > best[0]:
+                    best = (rank, first, second, common)
+        if best is None:
+            return None
+        return (best[1], best[2], best[3])
+
+    def _pair_score(self, id_a: str, id_b: str, common_tags: list,
+                    related: bool) -> tuple:
+        """返回排序键 (tier_rank, score)：tier_rank 1=旧识、0=破冰，越大越优先。"""
+        if not related:
+            return (0, len(common_tags))
+        count, recent = 0, False
+        if self._memory is not None:
+            entry = self._memory.last_interaction(id_a, id_b)
+            if entry:
+                count = entry.get("count", 0)
+                recent = self._is_recent(entry.get("last_interaction_at"))
+        return (1, 10 - (3 if recent else 0) - min(count, 5))
+
+    def _is_recent(self, iso_timestamp: str | None) -> bool:
+        """最近一次互动是否在 RECENT_HOURS 小时内（解析失败按不近期）。"""
+        if not iso_timestamp:
+            return False
+        try:
+            from datetime import datetime
+
+            interacted_at = datetime.strptime(iso_timestamp, "%Y-%m-%dT%H:%M:%S%z")
+            now = datetime.now(interacted_at.tzinfo)
+            return (now - interacted_at).total_seconds() < self.RECENT_HOURS * 3600
+        except (ValueError, TypeError):
+            return False
 
     def _related(self, view_a: dict, view_b: dict) -> bool:
         """relations.md 关联：对方姓名出现在任一方的关系网络里。"""
