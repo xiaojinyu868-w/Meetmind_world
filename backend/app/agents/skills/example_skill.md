@@ -7,8 +7,8 @@
 
 ## 输入
 
-- `person_id`：目标人物；其 Package 必须 `identity.confirmed == true`。
-- 只可使用该 Package 中 privacy ≥ L2（agent-usable）的 encounter 数据（P-8）。
+- `person_id`：目标人物；其 Package 必须 `identity.confirmed == true`（FR-1.3）。
+- 上下文视图首版全量不过滤（TBD-P3）；恢复圈层后，仅可使用 ≥ L2 的 encounter 数据。
 
 ## 流程
 

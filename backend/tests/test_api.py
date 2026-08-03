@@ -105,10 +105,10 @@ def test_full_loop_ingest_pipeline_confirm(client):
     assert package["identity"]["confirmed"] is True
     assert package["identity"]["name"] == "陈某"
     assert len(package["encounters"]) == 1
-    # agent 视角：L1 被过滤，且不见真实人脸指针
+    # agent 视角（首版不过滤 TBD-P3）：L1 encounter 同样可见，人脸指针不再隐藏
     agent_view = client.get(f"/api/v0/packages/{person_id}", params={"viewer": "agent"}).json()
-    assert agent_view["encounters"] == []
-    assert agent_view["identity"]["face_ref"] is None
+    assert len(agent_view["encounters"]) == 1
+    assert agent_view["identity"]["face_ref"].endswith("kf_01.jpg")
     # 列表含新人与 6 个种子
     summaries = client.get("/api/v0/packages").json()["packages"]
     ids = {s["person_id"] for s in summaries}
@@ -127,6 +127,6 @@ def test_full_loop_ingest_pipeline_confirm(client):
     assert resp.json()["person_id"] == person_id
     package = client.get(f"/api/v0/packages/{person_id}").json()
     assert len(package["encounters"]) == 2
-    # 第二条 encounter 是 L2，agent 视角可见
+    # agent 视角同样全量（不过滤）
     agent_view = client.get(f"/api/v0/packages/{person_id}", params={"viewer": "agent"}).json()
-    assert len(agent_view["encounters"]) == 1
+    assert len(agent_view["encounters"]) == 2

@@ -5,7 +5,7 @@
       解析失败或未配置时回退规则驱动；所有动作只经 EventBus 发事件，
       且先过 harness 事件白名单（guard.check_event）。
 输入：World Service 快照；skills/cafe_daily.md、meeting.md；memory 层的
-      授权上下文视图（authorized_agent_view，≥ L2，绝不携带 self-only）。
+      上下文视图（authorized_agent_view，首版全量不过滤 TBD-P3）。
 输出：agent-move / agent-state / agent-talk / meeting-start / meeting-end 事件。
 验收：tests/test_runtime.py —— 决策解析（合法/非法/越权）、对话权限过滤、
       会议调度、快照 events 校验；LLM 不可用时规则兜底保持世界活跃。

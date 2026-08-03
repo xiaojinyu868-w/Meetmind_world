@@ -38,7 +38,7 @@ def create_app() -> FastAPI:
     memory = MemoryStore(store, guard=DEFAULT_GUARD)
 
     # 展位大厅（MVP1.5 两级世界）：静态陈列实例 + 稀疏串门调度器；
-    # 启动时把 seed 6 人全部注册（display 从各自 Package 组装，tags 只取 ≥L2）
+    # 启动时把 seed 6 人全部注册（display 从各自 Package 组装，首版全量上墙）
     hall_world = WorldService({
         "agents": [],
         "modules": [{"id": "expo-hall", "type": "hall",

@@ -143,13 +143,14 @@ def test_confirm_registers_seventh_booth(client):
     validate_snapshot(snapshot)
 
 
-def test_confirm_display_excludes_self_only(client):
+def test_confirm_display_includes_self_only_first_version(client):
+    # 首版不过滤（TBD-P3）：L1 encounter 的推断与照片同样上墙
     payload = _confirm_new_person(client, privacy="self-only")
     snapshot = client.get("/api/v0/world/snapshot", params={"world": "hall"}).json()
     booth = next(m for m in snapshot["modules"]
                  if m.get("person_id") == payload["person_id"])
-    assert booth["display"]["tags"] == []  # L1 内容绝不上展位背景墙
-    assert booth["display"]["photos"] == []
+    assert booth["display"]["tags"]      # 全量上墙（授权机制重议后恢复过滤）
+    assert booth["display"]["photos"]
 
 
 def test_register_idempotent_on_repeat_confirm(client):

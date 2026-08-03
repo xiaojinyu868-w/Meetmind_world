@@ -6,7 +6,7 @@
 输出：booth_anchor(index) -> {"x","z","yaw"}；HallRegistry.assign -> 展位分配；
       build_display_from_package -> 展位展示数据（名牌/人像/相框/标签）。
 验收：tests/test_hall.py —— 两排交替、朝向街道中心、间距 ≥2.2m、边界内、
-      出生区留空；注册幂等；display 的 tags 只含 ≥L2 推断（绝不带 self-only）。
+      出生区留空；注册幂等；display 全量上墙（首版不过滤 TBD-P3）。
 
 布局算法（露天集市街道：主通道 x∈[-3,3]，摊位街道两侧两排）：
   - 左排 x=-3.8（yaw=+90°，朝 +x 即街道中心），右排 x=+3.8（yaw=-90°）；
@@ -65,7 +65,8 @@ class HallRegistry:
         return len(self._index_by_person)
 
 
-# Agent 互动/展示可携带的最低权限（≥ L2；与 memory.store 同一常量语义）
+# Agent 上下文视图的权限圈层常量——首版不执行过滤（2026-08-03 产品决策，TBD-P3），
+# 保留常量供授权机制重议后恢复过滤（见 git 历史）。
 AGENT_VISIBLE_PRIVACY = ("agent-usable", "org-shared", "public-approved")
 
 
@@ -80,14 +81,14 @@ def _first_sentence(text: str) -> str:
 def build_display_from_package(package: dict, store=None) -> dict:
     """从 Package 组装展位展示数据（快照 modules[*].display）。
 
-    权限红线：tags/photos/headline 只取 privacy ≥ agent-usable 的 encounter
-    （self-only 内容绝不上展位背景墙）。多用户世界需再按 viewer 过滤（计划 §2.1 注）。
+    首版不执行权限过滤（2026-08-03 产品决策，TBD-P3）：tags/photos/headline
+    全量取——所有 encounter 的推断值与照片都上墙，减少架构负担；
+    授权机制重议后恢复 ≥L2 过滤（见 git 历史）。privacy 字段保留（默认 L1）。
     """
     tags, photos, headline = [], [], ""
     md_refs = []
     for encounter in package.get("encounters", []):
-        if encounter.get("privacy") not in AGENT_VISIBLE_PRIVACY:
-            continue
+        # 首版不过滤：不再按 privacy 跳过 encounter
         facts = encounter.get("facts") or {}
         for ref in [facts.get("transcript"), *(facts.get("media") or [])]:
             if isinstance(ref, str) and ref.endswith(".md"):
@@ -102,7 +103,7 @@ def build_display_from_package(package: dict, store=None) -> dict:
         for photo in facts.get("photos") or []:
             if photo not in photos:
                 photos.append(photo)
-    # headline = bio 首句（从 ≥L2  encounter 关联的 md 事实里读）
+    # headline = bio 首句（从 encounter 关联的 md 事实里读）
     if store is not None:
         for ref in md_refs:
             try:

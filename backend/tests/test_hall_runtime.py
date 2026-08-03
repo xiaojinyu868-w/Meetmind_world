@@ -185,7 +185,7 @@ def test_sparse_probability(tmp_path):
 
 # ---------- 对话权限过滤 ----------
 
-def test_dialogue_prompt_excludes_self_only(tmp_path):
+def test_dialogue_prompt_carries_full_view(tmp_path):
     store = PackageStore(tmp_path)
     make_package(store, "agent-a", "甲", tags=["公开标签PUBLIC"], secret_tag="秘密标签SECRET")
     make_package(store, "agent-b", "乙", tags=["公开标签PUBLIC"])
@@ -198,16 +198,15 @@ def test_dialogue_prompt_excludes_self_only(tmp_path):
     runtime = make_runtime(bus, memory, chat_provider=fake)
     runtime.tick(world.snapshot())  # 触发串门（概率 1.0），生成对话
     prompt = str(fake.calls[0])
+    # 首版不过滤（TBD-P3）：prompt 携带全量视图
     assert "公开标签PUBLIC" in prompt
-    assert "秘密标签SECRET" not in prompt
-    assert "秘密地点" not in prompt
+    assert "秘密标签SECRET" in prompt
     world.step()
     for _ in range(6):
         runtime.tick(world.snapshot())
         world.step()
     talks = [e for e in world.snapshot()["events"] if e["type"] == "agent-talk"]
     assert len(talks) == 2
-    assert "SECRET" not in str(talks)
 
 
 # ---------- API 联动（?world=hall&advance=1 驱动串门） ----------

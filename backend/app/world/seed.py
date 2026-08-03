@@ -208,7 +208,7 @@ def seed_demo_packages(store) -> int:
                             "created_at": "2026-08-03T00:00:00+00:00",
                         }
                     ],
-                    "privacy": "agent-usable",  # demo 世界里的 Agent 可携带（≥ L2）
+                    "privacy": "agent-usable",  # privacy 字段保留（首版不执行过滤，TBD-P3）
                 }
             ],
             "avatar": {

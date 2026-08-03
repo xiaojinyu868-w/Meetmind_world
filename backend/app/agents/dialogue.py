@@ -12,8 +12,8 @@
 验收：tests/test_dialogue.py —— prompt 含共同 tags/关系备注/最近互动时间；
       informative=false 被拦、true 放行、自评异常默认放行。
 
-红线：prompt 只含 authorized_agent_view（≥L2）与 relations.md 公开关系行，
-绝不携带 self-only 内容；自评失败/超时默认 informative=true（宁可放行）。
+上下文来源：authorized_agent_view（首版为全量视图，TBD-P3 不过滤）与
+relations.md 关系行；自评失败/超时默认 informative=true（宁可放行）。
 """
 
 import json

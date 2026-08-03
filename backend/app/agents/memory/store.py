@@ -20,7 +20,8 @@ from pathlib import Path
 
 from app.harness.permissions.guard import DEFAULT_GUARD, PermissionGuard
 
-# Agent 互动时只能携带 ≥ L2 的信息（CONTEXT-AND-MEMORY.md §5）
+# Agent 互动可携带的信息圈层——首版不执行过滤（2026-08-03 产品决策，TBD-P3），
+# 保留常量供授权机制重议后恢复过滤（见 git 历史）。
 AGENT_VISIBLE_PRIVACY = ("agent-usable", "org-shared", "public-approved")
 
 # memory.md 条目格式：- 内容 (source: facts/<pid>/<enc>/..., conf: 0.7)
@@ -166,12 +167,12 @@ class MemoryStore:
     # ---------- Agent 授权上下文视图（对话/决策的唯一信息来源，P-8） ----------
 
     def authorized_agent_view(self, person_id: str) -> dict | None:
-        """返回 Agent 可携带的信息：仅 privacy ≥ agent-usable 的内容。
+        """Agent 上下文视图（首版不执行隐私过滤，2026-08-03 产品决策，TBD-P3）。
 
-        - 未确认身份（identity.confirmed=false）返回 None：不进 Agent 上下文（FR-1.3）；
-        - tags/places 只来自 ≥ L2 的 encounter 推断与地点；
-        - memory.md 条目逐行按事实指针反查 encounter 权限，指不到 ≥ L2 的剔除；
-        - self-only 内容绝不出现在返回值里（对话生成的红线）。
+        返回**全量**信息：所有 encounter 的推断值/地点、memory.md 全部带事实指针
+        的条目（self-only 不再剔除，减少架构负担；授权机制重议后恢复 ≥L2 过滤，
+        见 git 历史）。未确认身份仍返回 None —— 那是 FR-1.3 的数据可靠性闸
+        （防错误绑定进上下文），与隐私过滤无关，保留。
         """
         try:
             package = self._packages.load_package(person_id)
@@ -179,12 +180,11 @@ class MemoryStore:
             return None
         if not package["identity"].get("confirmed"):
             return None
-        visible_encounters = {}  # encounter_id -> encounter（≥ L2）
+        encounter_ids = set()
         tags, places = [], []
         for encounter in package.get("encounters", []):
-            if encounter.get("privacy") not in AGENT_VISIBLE_PRIVACY:
-                continue
-            visible_encounters[encounter.get("encounter_id")] = encounter
+            # 首版不过滤：不再按 privacy 跳过 encounter
+            encounter_ids.add(encounter.get("encounter_id"))
             if encounter.get("place"):
                 places.append(encounter["place"])
             for inference in encounter.get("inferences", []):
@@ -194,7 +194,7 @@ class MemoryStore:
         memory_lines = []
         for line in self.read_memory_md(person_id).splitlines():
             match = _MEMORY_SOURCE_RE.search(line)
-            if match and match.group(1) in visible_encounters:
+            if match and match.group(1) in encounter_ids:
                 memory_lines.append(line.strip())
         return {
             "person_id": person_id,

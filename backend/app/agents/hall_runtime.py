@@ -1,10 +1,10 @@
 """大厅调度器：有目的的稀疏活动（MVP1.5 产品决策——访问必须由推断层共同点驱动）。
 
 目的：让展位大厅"活而不闹"——每 tick 低概率（默认 1/8）触发一场"串门"，
-      否则安静。串门配对必须有理由：双方 ≥L2 推断 tags 有交集，或 relations.md
+      否则安静。串门配对必须有理由：双方推断 tags 有交集，或 relations.md
       有关联；找不到交集对则本 tick 不触发（无共同点不演化，P-1）。
 输入：大厅 World Service 快照（agents at-booth + booth modules）；memory 层的
-      授权上下文视图（authorized_agent_view，≥L2，绝不携带 self-only）。
+      上下文视图（authorized_agent_view，首版全量不过滤 TBD-P3）。
 输出：agent-move / agent-state / agent-talk 事件（全部先过 guard 事件白名单）。
 验收：tests/test_hall_runtime.py —— 配对只在有共同点时发生；串门事件序列完整
       （move→talk→return）；无交集长时间安静；对话 prompt 无 self-only。
