@@ -59,7 +59,9 @@ fixtures/                    脱敏联调样例
 }
 ```
 
-只有 QA 通过的资产可以进入前端资产注册表。更新必须增加 `revision`，不能静默覆盖旧 URL。
+只有 QA 通过的资产可以进入前端资产注册表。更新必须增加 `revision`，不能静默覆盖旧 URL。`scale_meters` 是 GLB 按世界米制导出后的 QA 高度，不是前端二次缩放倍数；`animations` 只允许“语义名 -> GLB clip 名”映射。
+
+发布入口为 `PUT /api/v0/packages/{person_id}/character-asset`。服务端以 `contracts/character-asset.v1.schema.json` 和运行时硬校验为准，只保留浏览器需要的公开字段；同一人物固定 `character_id`，升级只增加 `revision`。前端收到新 revision 后保持人物位置与状态热替换，失败自动回退统一体素占位。脱敏联调样例见 `fixtures/character-assets/demo.voxel.v1.json`。
 
 ### AgentEvent：Agent 组 -> 前端
 

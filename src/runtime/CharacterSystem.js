@@ -91,11 +91,16 @@ export class CharacterSystem {
   async spawn(characterSpec) {
     const profilePromise = this.#resolveProfile(characterSpec);
     const profile = await profilePromise;
-    let resolvedAssetId = characterSpec.asset_id;
+    let resolvedAssetId = characterSpec.asset_key ?? characterSpec.asset_id;
+    let assetLoadStatus = characterSpec.asset_url ? "dynamic" : "catalog";
     let sourceScene;
     try {
-      const asset = this.assetCatalog.resolve(resolvedAssetId, "character");
-      sourceScene = await this.assetStore.loadScene(asset.resolvedUrl);
+      if (characterSpec.asset_url) {
+        sourceScene = await this.assetStore.loadScene(characterSpec.asset_url);
+      } else {
+        const asset = this.assetCatalog.resolve(characterSpec.asset_id, "character");
+        sourceScene = await this.assetStore.loadScene(asset.resolvedUrl);
+      }
     } catch (error) {
       if (!characterSpec.fallback_asset_id) throw error;
       console.warn(
@@ -103,6 +108,7 @@ export class CharacterSystem {
         error,
       );
       resolvedAssetId = characterSpec.fallback_asset_id;
+      assetLoadStatus = "fallback";
       const fallbackAsset = this.assetCatalog.resolve(resolvedAssetId, "character");
       sourceScene = await this.assetStore.loadScene(fallbackAsset.resolvedUrl);
     }
@@ -163,6 +169,7 @@ export class CharacterSystem {
       characterSpec.person_id ?? profile?.person_id ?? characterSpec.instance_id;
     root.userData.profile = profile;
     root.userData.interaction = characterSpec.interaction ?? null;
+    root.userData.assetLoadStatus = assetLoadStatus;
 
     model.name = `${root.name}_Model`;
     model.traverse((object) => {
@@ -182,6 +189,7 @@ export class CharacterSystem {
       profile,
       spec: characterSpec,
       resolvedAssetId,
+      assetLoadStatus,
       instanceId: characterSpec.instance_id,
       materials,
       baseY: root.position.y,

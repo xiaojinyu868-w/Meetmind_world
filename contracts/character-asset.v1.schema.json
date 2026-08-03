@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://meetmind.online/contracts/character-asset.v1.schema.json",
+  "title": "EchoWorld CharacterAsset v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "character_id",
+    "revision",
+    "glb_url",
+    "content_hash",
+    "runtime",
+    "qa"
+  ],
+  "properties": {
+    "schema_version": { "const": "character-asset.v1" },
+    "character_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "revision": { "type": "integer", "minimum": 1 },
+    "glb_url": { "type": "string", "minLength": 1 },
+    "content_hash": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+    "runtime": {
+      "type": "object",
+      "required": ["scale_meters", "ground_offset", "forward_axis", "animations"],
+      "properties": {
+        "scale_meters": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 3,
+          "description": "QA-reported authored model height in world meters; the GLB is already exported at this scale."
+        },
+        "ground_offset": { "type": "number", "minimum": -1, "maximum": 1 },
+        "forward_axis": { "const": "+Z" },
+        "animations": {
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": { "minLength": 1, "maxLength": 64 },
+          "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 128 }
+        }
+      }
+    },
+    "qa": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": { "const": "passed" }
+      }
+    }
+  }
+}

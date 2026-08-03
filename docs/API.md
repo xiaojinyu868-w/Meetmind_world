@@ -13,6 +13,7 @@
 | IF-1 | `POST /api/v0/ingest` | MVP1 | 输入：接收视频/音频数据（眼镜/手机/K3 开发板） |
 | IF-2 | `POST /api/v0/pipeline` | MVP1 | 处理：预处理 + 流式产出中间特征 → 相遇草稿 |
 | IF-3 | `POST /api/v0/confirm` | MVP1 | 确认：用户确认人物身份绑定（FR-1.3） |
+| IF-3A | `PUT /api/v0/packages/{person_id}/character-asset` | MVP1 | 视觉管线发布 QA 通过的版本化人物资产 |
 | IF-4 | `GET /api/v0/world/snapshot` | MVP1 | 世界：快照 `echo-snapshot.v1`，前端唯一渲染数据源 |
 | IF-5 | `GET /api/v0/packages/...` `POST /api/v0/search` | MVP1 | 资料包查看 + 人脸/姓名/关键词检索（FR-1.8/1.9） |
 | IF-6 | `POST /api/v0/agents/meeting` 等 | MVP2 | 互动：发起圆桌、Agent 事件流 |
@@ -99,6 +100,29 @@ event: result    data: {"encounter_draft": { ... echo-package.v0 的 encounter �
 
 - `avatar_status`: `placeholder`（占位模型）| `queued`（生成管线排队中）| `ready`（per-person 模型已生成）。
 
+### IF-3A 人物资产发布 `PUT /api/v0/packages/{person_id}/character-asset`
+
+视觉/贴图团队只向该接口交付脱敏后的 `character-asset.v1`，不上传原始照片、内部存储地址或模型密钥。人物必须已由用户确认；同一 `character_id` 的 `revision` 必须单调递增，同一 revision + hash 重试为幂等操作。
+
+```json
+{
+  "schema_version": "character-asset.v1",
+  "character_id": "char_demo_01",
+  "revision": 1,
+  "glb_url": "/assets/characters/char_demo_01/1/model.glb",
+  "content_hash": "<64-char sha256>",
+  "runtime": {
+    "scale_meters": 1.65,
+    "ground_offset": 0,
+    "forward_axis": "+Z",
+    "animations": {}
+  },
+  "qa": { "status": "passed" }
+}
+```
+
+服务端只保留契约白名单字段，并把资产放入 Package 与世界快照。前端收到新 revision 后保留人物位置/状态热替换；加载失败时继续显示统一体素占位人物。权威 JSON Schema 见 `contracts/character-asset.v1.schema.json`，脱敏样例见 `fixtures/character-assets/demo.voxel.v1.json`。
+
 ## IF-4 世界接口 `GET /api/v0/world/snapshot`
 
 返回 `echo-snapshot.v1`（见 ARCHITECTURE.md §4）。MVP1 前端轮询（咖啡厅 2s / 大厅 10s）；MVP2 评估 SSE。资料包内容不走快照，由 IF-5 按权限单独拉取。
@@ -163,3 +187,4 @@ booth module 结构（快照 modules 内，`type: "booth"`）：
 - 2026-08-03 | v0.1：扩展为全量接口地图（IF-1~IF-8，按 MVP 阶段分组），IF-1~IF-5 出详节，IF-6/7/8 先行登记 | 人（指正接口不止两个）+ AI（补全）
 - 2026-08-03 | v0.2：IF-2 接口更名为 `pipeline`（原 paipai 为语音转写错误） | 人 + AI
 - 2026-08-03 | v0.3（加性）：IF-4 增加 `?world=hall|cafe` 参数与 booth module 结构；新增媒体路由 `GET /api/v0/media/{ref}`；IF-3 confirm 响应增加 `booth_id` | AI
+- 2026-08-04 | v0.4（加性）：新增 IF-3A CharacterAsset 发布接口；版本、QA、哈希与安全 URL 硬校验；资产经 Package/快照下发，前端热替换并保留体素回退 | AI

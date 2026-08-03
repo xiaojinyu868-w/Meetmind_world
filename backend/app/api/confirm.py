@@ -81,13 +81,21 @@ def confirm(request: Request, body: ConfirmRequest):
 
     # 用户确认 = 长期记忆唯一写入入口（FR-1.3，权限矩阵）
     package = store.confirm_identity(person_id, name=body.identity.name)
-    avatar_status = "ready" if package["avatar"].get("model_ref") else "placeholder"
+    avatar_status = (
+        "ready"
+        if package["avatar"].get("character_asset") or package["avatar"].get("model_ref")
+        else "placeholder"
+    )
 
     # 新人进世界：注册进展位大厅（幂等——重复 confirm 只刷新 display，不重复分配）
     booth_id = None
     hall = getattr(request.app.state, "hall", None)
     if hall is not None:
-        booth = hall.register_person(person_id, build_display_from_package(package, store))
+        booth = hall.register_person(
+            person_id,
+            build_display_from_package(package, store),
+            character_asset=(package.get("avatar") or {}).get("character_asset"),
+        )
         booth_id = booth["id"]
 
     return {

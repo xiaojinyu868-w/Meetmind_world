@@ -5,6 +5,7 @@ import { AssetCatalog } from "./runtime/AssetCatalog.js";
 import { AssetStore } from "./runtime/AssetStore.js";
 import { BoothSystem, buildFallbackBooths } from "./runtime/BoothSystem.js";
 import { CAFE_LAYOUT, tableById } from "./runtime/CafeLayout.js";
+import { characterAssetKey, characterAssetUrl } from "./runtime/CharacterAsset.js";
 import { CharacterExpressionSystem } from "./runtime/CharacterExpressionSystem.js";
 import { CharacterSystem } from "./runtime/CharacterSystem.js";
 import { colliderShellFor } from "./runtime/ColliderRegistry.js";
@@ -349,10 +350,15 @@ function makeGroundMarker(color, innerRadius, outerRadius, opacity) {
 
 
 function characterSpec(person, instanceId, spawn, idleBob = 0.005) {
+  const dynamicAssetKey = characterAssetKey(person.characterAsset);
+  const dynamicAssetUrl = characterAssetUrl(person.characterAsset);
   return {
     instance_id: instanceId,
     person_id: person.id,
     asset_id: characterAssetId(activeCharacterVariant, person.id),
+    ...(dynamicAssetKey && dynamicAssetUrl
+      ? { asset_key: dynamicAssetKey, asset_url: dynamicAssetUrl }
+      : {}),
     fallback_asset_id: activeCharacterVariant.fallbackAssetId,
     texture_filter: activeCharacterVariant.textureFilter,
     lock_texture_colors: true,
@@ -363,10 +369,32 @@ function characterSpec(person, instanceId, spawn, idleBob = 0.005) {
       palette: person.palette,
     },
     palette: person.palette,
-    spawn: { ...spawn, scale: 1, ground_offset: 0 },
+    spawn: {
+      ...spawn,
+      scale: 1,
+      ground_offset: person.characterAsset?.runtime?.ground_offset ?? 0,
+    },
     behavior: { idle_bob: idleBob },
     interaction: { kind: "person-agent", radius: 1.7, voice_enabled: true },
   };
+}
+
+
+function refreshCharacterAssetDiagnostics(lastPersonId = null) {
+  const assets = (characterSystem?.entities ?? [])
+    .filter((entity) => entity.spec.asset_key)
+    .map((entity) =>
+      [
+        entity.spec.person_id,
+        entity.spec.asset_key,
+        entity.assetLoadStatus,
+        entity.resolvedAssetId,
+      ].join(":"),
+    )
+    .sort();
+  canvas.dataset.characterAssetCount = String(assets.length);
+  canvas.dataset.characterAssets = assets.join("|");
+  if (lastPersonId) canvas.dataset.lastCharacterAssetUpdate = lastPersonId;
 }
 
 
@@ -504,6 +532,7 @@ async function configureWorld(root) {
   canvas.dataset.npcCount = String(npcSystem.agents.size);
   canvas.dataset.environment = environmentAssetId;
   canvas.dataset.sceneVariant = activeSceneVariant.id;
+  refreshCharacterAssetDiagnostics();
   setProgress(1, `${worldTitle} 已准备好`);
   appShell.setWorldReady(true);
   startLiveWorld();
@@ -806,6 +835,14 @@ function applyLiveSnapshot(rawSnapshot) {
       void ensureAgentEntity(agent);
       continue;
     }
+    const desiredAssetKey = characterAssetKey(agent.characterAsset);
+    if (
+      desiredAssetKey &&
+      entity.spec.asset_key !== desiredAssetKey
+    ) {
+      // 视觉管线发布了更高 revision：保留位置/状态，异步热替换模型。
+      void ensureAgentEntity(agent);
+    }
     if (isHallWorld) {
       if (agent.state === "walking" && agent.position) {
         // 串门途中：按快照位置插值行走（WalkSlide 绕开展位）
@@ -982,32 +1019,65 @@ function personLikeFor(personId) {
 // 快照里的新面孔：用 CharacterSystem 克隆/换色现场生成实体，注册进既有驱动链路
 async function ensureAgentEntity(agent) {
   if (!characterSystem || !npcSystem) return;
-  if (pendingAgentSpawns.has(agent.id) || npcSystem.getEntity(agent.id)) return;
+  const existingEntity = npcSystem.getEntity(agent.id);
+  const desiredAssetKey = characterAssetKey(agent.characterAsset);
+  if (pendingAgentSpawns.has(agent.id)) return;
+  if (existingEntity) {
+    if (!desiredAssetKey || existingEntity.spec.asset_key === desiredAssetKey) return;
+  }
   pendingAgentSpawns.add(agent.id);
   try {
     const palette =
       agent.palette ?? FALLBACK_PALETTES[hashString(agent.id) % FALLBACK_PALETTES.length];
-    const name = nameOf(agent.id);
-    const personLike = {
-      id: agent.id,
-      name,
-      displayName: name,
-      relation: "刚搬进世界的新朋友",
-      palette,
-      conversation: { replies: ["（TA 还在整理自己的故事。）"] },
-    };
-    dynamicPeople.set(agent.id, personLike);
+    const knownPerson = people.find((person) => person.id === agent.id);
+    const name = knownPerson?.name ?? nameOf(agent.id);
+    const personLike = knownPerson
+      ? { ...knownPerson, palette, characterAsset: agent.characterAsset }
+      : {
+          id: agent.id,
+          name,
+          displayName: name,
+          relation: "刚搬进世界的新朋友",
+          palette,
+          characterAsset: agent.characterAsset,
+          conversation: { replies: ["（TA 还在整理自己的故事。）"] },
+        };
     const spawn = agent.position
       ? { x: agent.position.x, z: agent.position.z, yaw: agent.position.yaw ?? 0 }
       : worldPlayerSpawn;
     const entity = await characterSystem.spawn(
       characterSpec(personLike, `agent-${agent.id}`, spawn, 0.005),
     );
-    npcSystem.register(personLike, entity);
+    if (existingEntity) {
+      const verticalMotion = existingEntity.root.position.y - existingEntity.baseY;
+      entity.root.position.set(
+        existingEntity.root.position.x,
+        entity.baseY + verticalMotion,
+        existingEntity.root.position.z,
+      );
+      entity.root.quaternion.copy(existingEntity.root.quaternion);
+      entity.root.scale.copy(existingEntity.root.scale);
+      const hadHeartSignal = heartSignalSystem.has(agent.id);
+      expressionSystem.unregister(agent.id);
+      heartSignalSystem.unregister(agent.id);
+      npcSystem.replaceEntity(agent.id, entity);
+      characterSystem.despawn(existingEntity);
+      if (hadHeartSignal) {
+        heartSignalSystem.register(
+          entity,
+          agent.id,
+          personSignalStore.getSnapshot(agent.id),
+        );
+      }
+    } else {
+      npcSystem.register(personLike, entity);
+    }
+    if (!knownPerson) dynamicPeople.set(agent.id, personLike);
     canvas.dataset.npcCount = String(npcSystem.agents.size);
     canvas.dataset.characterCount = String(characterSystem.entities.length);
+    refreshCharacterAssetDiagnostics(agent.id);
   } catch (error) {
-    dynamicPeople.delete(agent.id);
+    if (!existingEntity) dynamicPeople.delete(agent.id);
     console.warn(`[EchoWorld] 新人 ${agent.id} 的实体生成失败`, error);
   } finally {
     pendingAgentSpawns.delete(agent.id);
@@ -1028,6 +1098,7 @@ function syncDynamicAgents(agents) {
     hallGlances.delete(personId);
     dynamicPeople.delete(personId);
     canvas.dataset.npcCount = String(npcSystem?.agents.size ?? 0);
+    refreshCharacterAssetDiagnostics(personId);
   }
 }
 

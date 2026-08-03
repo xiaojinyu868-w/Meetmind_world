@@ -17,7 +17,7 @@ from app.agents.llm import get_provider
 from app.agents.memory.store import MemoryStore
 from app.agents.runtime import AgentRuntime, EventBus
 from app.api import confirm as confirm_api
-from app.api import admin, ingest, media, packages, pipeline, search as search_api
+from app.api import admin, character_assets, ingest, media, packages, pipeline, search as search_api
 from app.api import world as world_api
 from app.harness.permissions.guard import DEFAULT_GUARD, PermissionDenied
 from app.packages.store import PackageStore
@@ -46,8 +46,11 @@ def create_app() -> FastAPI:
     }, blockers=(), bounds=HALL_BOUNDS)  # 展位不是阻挡体；大厅边界 x∈[-7,7] z∈[-5,5]
     for agent_seed in SEED_AGENTS:
         package = store.load_package(agent_seed["id"])
-        hall_world.register_person(agent_seed["id"],
-                                   build_display_from_package(package, store))
+        hall_world.register_person(
+            agent_seed["id"],
+            build_display_from_package(package, store),
+            character_asset=(package.get("avatar") or {}).get("character_asset"),
+        )
     hall_bus = EventBus()
     hall_bus.subscribe(hall_world.apply_event)
 
@@ -80,6 +83,7 @@ def create_app() -> FastAPI:
     app.include_router(ingest.router)
     app.include_router(pipeline.router)
     app.include_router(confirm_api.router)
+    app.include_router(character_assets.router)
     app.include_router(search_api.router)
     app.include_router(packages.router)
     app.include_router(world_api.router)

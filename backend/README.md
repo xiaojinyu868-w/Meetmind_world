@@ -28,6 +28,7 @@ app/
     ingest.py             IF-1 POST /api/v0/ingest：输入落盘（事实层，只增不改）→ {input_id, facts_refs}
     pipeline.py           IF-2 POST /api/v0/pipeline：SSE/once 产出中间特征 + encounter_draft（提取 stub）
     confirm.py            IF-3 POST /api/v0/confirm：用户确认身份写入 Package（FR-1.3，长期记忆唯一入口）
+    character_assets.py   IF-3A PUT /api/v0/packages/{id}/character-asset：视觉资产版本化发布
     search.py             IF-5 POST /api/v0/search：人脸(stub)/姓名/关键词检索（FR-1.9）
     packages.py           IF-5 GET /api/v0/packages[/{id}]：Package 列表/详情（viewer 权限过滤）
     world.py              IF-4 GET /api/v0/world/snapshot：echo-snapshot.v1 世界快照
@@ -106,6 +107,7 @@ data/                     运行期数据（.gitkeep 占位，内容被 .gitigno
 | IF-1 | POST | `/api/v0/ingest` | 输入：multipart（media[]/captured_at/device/note?/place_hint?）→ 201 `{input_id, facts_refs, status:"stored"}`，落盘即只读 |
 | IF-2 | POST | `/api/v0/pipeline` | 处理「pipeline」：`{input_id, mode, steps?}`；`mode=stream`（默认）SSE 流式产出 preprocess/faces/transcript/scene 中间特征 + result 返回 encounter_draft；`mode=once` 一次性返回合并 JSON |
 | IF-3 | POST | `/api/v0/confirm` | 确认：`{encounter_draft, identity{name, match_person_id}, privacy}` → `{person_id, encounter_id, package_ref, avatar_status}`；match_person_id 为 null 新建 Person，否则并入；长期记忆唯一写入入口 |
+| IF-3A | PUT | `/api/v0/packages/{person_id}/character-asset` | 视觉团队交付 `character-asset.v1`；要求身份已确认、QA passed、HTTPS/受控公开路径、revision 单调递增；成功后进入 Package 与世界快照 |
 | IF-4 | GET | `/api/v0/world/snapshot?world=hall\|cafe&advance=1` | echo-snapshot.v1 世界快照。world=cafe（默认）：活动世界，events 为最近 20 条缓冲；world=hall：展位大厅，agents 以 at-booth 站位为主，events 为大厅事件缓冲（稀疏串门：agent-move/agent-state/agent-talk），modules 含 booth（display 名牌/人像/相框/标签）。advance=1 默认推进 tick，=0 只读 |
 | IF-5 | GET | `/api/v0/packages` | Package 摘要列表 |
 | IF-5 | GET | `/api/v0/packages/{person_id}?viewer=self\|agent\|org\|public` | 按权限圈层过滤的详情（agent 视角要求已确认） |

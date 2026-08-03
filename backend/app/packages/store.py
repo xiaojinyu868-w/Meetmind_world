@@ -19,6 +19,7 @@ import re
 from pathlib import Path
 
 from app.config import get_data_dir
+from app.schemas.character_asset import validate_character_asset
 from app.schemas.package_schema import SCHEMA_VERSION, validate_package
 
 _SAFE_NAME = re.compile(r"^[\w.\-]+$", re.UNICODE)
@@ -258,3 +259,11 @@ class PackageStore:
             return self.load_package(person_id)
         except PackageNotFound:
             return self.create_draft_package(person_id, palette)
+
+    def attach_character_asset(self, person_id: str, asset: dict) -> dict:
+        """Attach a QA-passed, versioned visual-team delivery to a confirmed Package."""
+        package = self.load_package(person_id)
+        package["avatar"]["type"] = "voxel-photo-v1"
+        package["avatar"]["character_asset"] = validate_character_asset(asset)
+        self.save_package(package)
+        return package

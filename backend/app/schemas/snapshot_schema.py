@@ -7,6 +7,11 @@
 验收：tests/test_snapshot.py —— 快照含 schema/tick/agents 且通过校验。
 """
 
+from app.schemas.character_asset import (
+    CharacterAssetSchemaError,
+    validate_character_asset,
+)
+
 SCHEMA_VERSION = "echo-snapshot.v1"
 
 # ARCHITECTURE.md §4 示例中的状态枚举 + MVP1.5 展位大厅的 at-booth
@@ -87,6 +92,13 @@ def _validate_agent(agent, field: str) -> None:
     avatar = agent.get("avatar")
     if not isinstance(avatar, dict) or not isinstance(avatar.get("palette"), dict):
         raise SnapshotSchemaError(f"Snapshot agent avatar requires a palette object: {field}.avatar")
+    if avatar.get("character_asset") is not None:
+        try:
+            avatar["character_asset"] = validate_character_asset(avatar["character_asset"])
+        except CharacterAssetSchemaError as exc:
+            raise SnapshotSchemaError(
+                f"Snapshot agent CharacterAsset is invalid: {field}.avatar.character_asset: {exc}"
+            ) from exc
 
 
 def _validate_module(module, field: str) -> None:

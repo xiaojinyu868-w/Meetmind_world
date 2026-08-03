@@ -34,7 +34,7 @@ export const CHARACTER_VARIANTS = Object.freeze([
     label: "像素角色",
     title: "固定方块身体与五面像素头像",
     assetByPersonId: PHOTO_CHARACTER_ASSETS.voxel,
-    fallbackAssetId: "character.faceless-painterly-adventure.v1",
+    fallbackAssetId: "character.photo.host.voxel.v1",
     textureFilter: "nearest",
   }),
 ]);

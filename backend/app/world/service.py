@@ -66,11 +66,13 @@ class WorldService:
         for agent in seed.get("agents", []):
             clamped = self._clamp(agent["position"])
             clamped["yaw"] = agent["position"].get("yaw", 0.0)
+            seed_avatar = agent.get("avatar") or {}
             self._agents[agent["id"]] = {
                 "name": agent["name"],
                 "position": clamped,
                 "state": agent["state"],
                 "palette": dict(agent["palette"]),
+                "character_asset": seed_avatar.get("character_asset"),
             }
         self._modules = [dict(module) for module in seed.get("modules", [])]
         # 最近 N 条世界事件滚动缓冲（快照 events 字段，前端轮询渲染）
@@ -85,7 +87,8 @@ class WorldService:
 
     # ---------- 展位大厅：人员注册（系统/确认流程驱动，非自进化写入） ----------
 
-    def register_person(self, person_id: str, display: dict) -> dict:
+    def register_person(self, person_id: str, display: dict,
+                        character_asset: dict | None = None) -> dict:
         """把一个人注册进展位大厅（幂等）：分配展位锚点 → agents 增员
         （state="at-booth"，位置=展位锚点，yaw 朝展位前方/大厅中心）→
         modules 增加 booth 条目。重复注册只刷新 display，不重复分配展位。
@@ -112,8 +115,19 @@ class WorldService:
                 "position": dict(booth["position"]),
                 "state": "at-booth",
                 "palette": dict(display.get("palette") or {}),
+                "character_asset": character_asset,
             }
+        elif character_asset is not None:
+            self._agents[person_id]["character_asset"] = character_asset
         return booth
+
+    def set_character_asset(self, person_id: str, character_asset: dict) -> bool:
+        """Refresh a registered person's render asset without changing world state."""
+        agent = self._agents.get(person_id)
+        if agent is None:
+            return False
+        agent["character_asset"] = character_asset
+        return True
 
     # ---------- 事件消费（Agent 改变世界的唯一方式） ----------
 
@@ -307,15 +321,17 @@ class WorldService:
     # ---------- 快照生成 ----------
 
     def snapshot(self) -> dict:
-        agents = [
-            {
+        agents = []
+        for agent_id, state in sorted(self._agents.items()):
+            avatar = {"palette": dict(state["palette"])}
+            if state.get("character_asset") is not None:
+                avatar["character_asset"] = dict(state["character_asset"])
+            agents.append({
                 "id": agent_id,
                 "position": dict(state["position"]),
                 "state": state["state"],
-                "avatar": {"palette": dict(state["palette"])},
-            }
-            for agent_id, state in sorted(self._agents.items())
-        ]
+                "avatar": avatar,
+            })
         snapshot = build_snapshot(
             tick=self.tick,
             agents=agents,

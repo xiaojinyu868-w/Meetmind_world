@@ -8,6 +8,11 @@
       错误 privacy 被拒、错误 schema 版本被拒。
 """
 
+from app.schemas.character_asset import (
+    CharacterAssetSchemaError,
+    validate_character_asset,
+)
+
 SCHEMA_VERSION = "echo-package.v0"
 
 # 权限圈层（CONTEXT-AND-MEMORY.md §5）：L1~L4，默认 L1 self-only
@@ -100,6 +105,11 @@ def validate_package(package) -> dict:
     avatar = package.get("avatar")
     if not isinstance(avatar, dict) or not isinstance(avatar.get("palette"), dict):
         raise PackageSchemaError("Package avatar requires a palette object: avatar.palette")
+    if avatar.get("character_asset") is not None:
+        try:
+            avatar["character_asset"] = validate_character_asset(avatar["character_asset"])
+        except CharacterAssetSchemaError as exc:
+            raise PackageSchemaError(f"Package avatar.character_asset is invalid: {exc}") from exc
     # 人脸/声纹永不允许 L4（P-8，MVP1/2 直接禁止）
     for i, encounter in enumerate(encounters):
         if encounter.get("privacy") == "public-approved" and identity.get("face_ref"):

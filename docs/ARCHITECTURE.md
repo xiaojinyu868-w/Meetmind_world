@@ -90,7 +90,18 @@ MVP2（2026-08-03 重设后）增加三条线：场景语言（点位交互/播�
       "id": "person_xxx",
       "position": { "x": 0, "z": 0, "yaw": 1.57 },
       "state": "walking | seated | talking | in-meeting",
-      "avatar": { "palette": { "jacket": "#...", "hair": "#..." } }
+      "avatar": {
+        "palette": { "jacket": "#...", "hair": "#..." },
+        "character_asset": {
+          "schema_version": "character-asset.v1",
+          "character_id": "char_person_xxx",
+          "revision": 2,
+          "glb_url": "/assets/characters/char_person_xxx/2/model.glb",
+          "content_hash": "<sha256>",
+          "runtime": { "scale_meters": 1.65, "ground_offset": 0, "forward_axis": "+Z", "animations": {} },
+          "qa": { "status": "passed" }
+        }
+      }
     }
   ],
   "modules": [ { "id": "booth_xxx", "type": "booth", "position": {} } ],
@@ -101,6 +112,7 @@ MVP2（2026-08-03 重设后）增加三条线：场景语言（点位交互/播�
 
 - 前端不推断状态，只渲染；快照未包含的信息前端无权知道。
 - 资料包内容（人脸照片、谈话记录）**不走快照**，由用户点击后经 API 按权限单独拉取。
+- `avatar.character_asset` 是唯一允许随快照下发的视觉资产描述，只含版本化公开 GLB、hash、运行时尺寸与 QA 结论；原图、生成 prompt、内部 URI 不得进入快照。
 - 场景语言（FR-2.8/2.9）的点位与播报内容：热点定义走 `modules`，播报文本走 `events`，均从快照消费，前端不自行编造。
 
 ## 5. 自进化权限矩阵（harness 圈层管理）
@@ -127,7 +139,7 @@ MVP2（2026-08-03 重设后）增加三条线：场景语言（点位交互/播�
   → K3 开发板处理整理 → 形成以个人为单位的 Package（事实层）
   → AI 生成图片贴图（头部五面 + 身体 atlas，输入为真实照片）
   → 体素 GLB 组装（固定体素身体 + 动态贴图）
-  → 登记入资产白名单 → 部署到 three.js 世界
+  → 发布 `character-asset.v1` → Package / 世界快照 → 部署到 three.js 世界
 ```
 
 **场域生成链路（FR-2.11，多模态情感可视化）**：场域表达"我与 TA 的关系"，而非 TA 这个人本身（2026-08-03 决策，TBD-F2）——输入以双方共同事件、互写印象与关系状态为主，而非对方全部素材。

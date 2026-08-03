@@ -1,4 +1,5 @@
 import { CAFE_LAYOUT } from "./CafeLayout.js";
+import { normalizeCharacterAsset } from "./CharacterAsset.js";
 
 
 export const SNAPSHOT_SCHEMA = "echo-snapshot.v1";
@@ -115,6 +116,7 @@ function adaptAgent(rawAgent, { knownPeople, takenSeats }) {
     snapshotPalette && typeof snapshotPalette === "object" && !Array.isArray(snapshotPalette)
       ? snapshotPalette
       : (knownPeople.get(id)?.palette ?? null);
+  const characterAsset = normalizeCharacterAsset(rawAgent.avatar?.character_asset);
 
   let seat = null;
   if (position) {
@@ -126,7 +128,7 @@ function adaptAgent(rawAgent, { knownPeople, takenSeats }) {
   }
   if (seat) takenSeats.add(`${seat.tableId}:${seat.seatIndex}`);
 
-  return { id, state, position, palette, seat };
+  return { id, state, position, palette, characterAsset, seat };
 }
 
 

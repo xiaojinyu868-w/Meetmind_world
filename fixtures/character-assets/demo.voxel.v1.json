@@ -1,0 +1,16 @@
+{
+  "schema_version": "character-asset.v1",
+  "character_id": "char_demo_voxel",
+  "revision": 1,
+  "glb_url": "models/characters/photo-derived/voxel/host.glb",
+  "content_hash": "1141152b6383f63ee502eb0df9aa8732a4065d37b4277986c36a2f6c199132ba",
+  "runtime": {
+    "scale_meters": 1.65,
+    "ground_offset": 0,
+    "forward_axis": "+Z",
+    "animations": {}
+  },
+  "qa": {
+    "status": "passed"
+  }
+}

@@ -9,6 +9,8 @@ npm run dev
 
 打开 `http://127.0.0.1:5173/`。桌面使用 `W/A/S/D` 移动；触屏设备显示虚拟摇杆。
 
+联调真实后端时先按 `backend/README.md` 启动 FastAPI，再打开 `http://127.0.0.1:5173/?api=live`。Vite 默认代理 `/api` 到 `http://127.0.0.1:8000`；后端使用其他端口时以 `VITE_API_PROXY_TARGET=http://127.0.0.1:<port> npm run dev` 启动前端。
+
 生产构建：
 
 ```powershell

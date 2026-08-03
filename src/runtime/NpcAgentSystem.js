@@ -53,6 +53,14 @@ export class NpcAgentSystem {
     return agent;
   }
 
+  replaceEntity(personId, entity) {
+    const agent = this.agents.get(personId);
+    if (!agent) return false;
+    agent.entity = entity;
+    entity.root.userData.agentState = agent.status;
+    return true;
+  }
+
   initializeCafe() {
     this.mode = "cafe";
     this.meetingPersonIds = [];
