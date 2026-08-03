@@ -8,9 +8,9 @@ EchoWorld Three.js 咖啡厅原型（包名 `echoworld-lowpoly-walk`）：一个
 
 体验闭环：标题页 → 3D Echo Cafe → Agent 自主交谈 → 点选人物看资料 → 圆桌会议 → 关系 Map → 从节点返回咖啡厅定位人物。
 
-- 纯静态站点，无后端；Agent 对话和桌位调度均为本地 mock，尚未接入 SSE/WebSocket。
+- 前端为静态站点（Vite 构建）；世界动态由 `backend/`（FastAPI）的世界快照驱动，LiveWorld 轮询 `/api/v0/world/snapshot`，后端不可用时自动降级本地 mock/内置快照（见"数据流"节）。
 - UI 语言为简体中文（`index.html` 为 `lang="zh-CN"`），文档与界面文案使用中文。
-- 场景：1 个玩家 + 6 个占位人物。人物共用同一套 Blender 无脸 GLB 几何（`character.faceless-prototype.v1`），按每人的调色板克隆独立材质换色；暂无骨骼动画，移动/入座为刚性模型的轻量表现。
+- 场景：1 个玩家 + 6 个占位人物。人物形象方向（2026-08-03，PRD P-6）为 MC 体素 + AI 生成图片贴图；当前启用 voxel 方案（固定体素身体 + 照片特征贴图），无脸 GLB（`character.faceless-prototype.v1`）仅作历史占位；暂无骨骼动画，移动/入座为刚性模型的轻量表现。
 - 中央六人圆桌只接受用户发起的会议邀请，普通 Agent 调度不会占用它。
 
 ## 技术栈

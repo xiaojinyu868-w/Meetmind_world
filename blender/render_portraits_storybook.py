@@ -95,10 +95,10 @@ def configure_studio() -> None:
     camera = bpy.data.objects.new("PREVIEW_PortraitCamera", camera_data)
     scene.collection.objects.link(camera)
     # Character faces -Y; camera sits in front at chest-head height.
-    camera.location = (0.0, -2.35, 1.46)
-    camera_data.lens = 72.0
+    camera.location = (0.0, -1.85, 1.52)
+    camera_data.lens = 78.0
     camera_data.sensor_width = 36.0
-    look_at(camera, Vector((0.0, 0.0, 1.26)))
+    look_at(camera, Vector((0.0, 0.0, 1.33)))
     scene.camera = camera
 
     key_data = bpy.data.lights.new("PREVIEW_KeyTop", type="AREA")
@@ -145,6 +145,7 @@ def configure_studio() -> None:
     scene.render.image_settings.file_format = "PNG"
     scene.render.image_settings.color_mode = "RGB"
     scene.render.image_settings.color_depth = "8"
+    scene.render.image_settings.compression = 100
     scene.render.film_transparent = False
     scene.view_settings.view_transform = "AgX"
     for look in ("AgX - Medium High Contrast", "AgX - Medium Low Contrast", "Medium High Contrast"):
@@ -166,6 +167,95 @@ def import_character(subject: str) -> list[bpy.types.Object]:
     return [obj for obj in bpy.context.scene.objects if obj not in before]
 
 
+def box_blur3(img: "object", passes: int = 2) -> "object":
+    # Separable 3x3 box blur on an HxWx3 float array; two passes approximate a
+    # gaussian. Pre-smoothing kills Cycles/atlas grain so palette indices stop
+    # flipping per-pixel (which was inflating the PNG IDAT).
+    import numpy as np
+
+    out = img.astype(np.float32)
+    for _ in range(passes):
+        padded = np.pad(out, ((1, 1), (1, 1), (0, 0)), mode="edge")
+        acc = np.zeros_like(out)
+        for dy in range(3):
+            for dx in range(3):
+                acc += padded[dy : dy + out.shape[0], dx : dx + out.shape[1]]
+        out = acc / 9.0
+    return out
+
+
+def quantize_to_palette_png(source: Path, target: Path, colors: int = 256) -> int:
+    # Cycles output + painted atlas grain makes RGB PNGs exceed the 500KB
+    # portrait budget; flat low-poly art survives a 256-color palette almost
+    # losslessly. Median-cut via numpy (bundled with Blender), stdlib PNG write.
+    import struct
+    import zlib
+
+    import numpy as np
+
+    image = bpy.data.images.load(str(source))
+    width, height = image.size
+    pixels = np.asarray(image.pixels[:], dtype=np.float32).reshape(height, width, 4)[:, :, :3]
+    bpy.data.images.remove(image)
+    smooth = box_blur3(pixels, passes=2)
+    rgb = np.clip(np.rint(smooth.reshape(-1, 3) * 255.0), 0, 255).astype(np.uint8)
+
+    boxes = [rgb]
+    while len(boxes) < colors:
+        # Split the box with the widest channel range at its median.
+        ranges = [(box.max(axis=0) - box.min(axis=0)).max() if len(box) else -1 for box in boxes]
+        index = int(np.argmax(ranges))
+        if ranges[index] <= 0:
+            break
+        box = boxes.pop(index)
+        channel = int(np.argmax(box.max(axis=0) - box.min(axis=0)))
+        order = np.argsort(box[:, channel], kind="stable")
+        median = len(box) // 2
+        boxes.append(box[order[:median]])
+        boxes.append(box[order[median:]])
+
+    palette = np.zeros((len(boxes), 3), dtype=np.uint8)
+    indexed = np.zeros(len(rgb), dtype=np.uint8)
+    for slot, box in enumerate(boxes):
+        palette[slot] = np.rint(box.mean(axis=0)).astype(np.uint8)
+    # Nearest-palette assignment (chunked to bound memory).
+    for start in range(0, len(rgb), 65536):
+        chunk = rgb[start : start + 65536].astype(np.int16)
+        distances = ((chunk[:, None, :] - palette[None, :, :].astype(np.int16)) ** 2).sum(axis=2)
+        indexed[start : start + 65536] = distances.argmin(axis=1).astype(np.uint8)
+
+    # Blender pixel buffers are bottom-up; PNG rows are top-down.
+    rows = indexed.reshape(height, width)[::-1]
+    raw = b"".join(b"\x00" + rows[y].tobytes() for y in range(height))
+
+    def chunk(tag: bytes, payload: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(payload))
+            + tag
+            + payload
+            + struct.pack(">I", zlib.crc32(tag + payload) & 0xFFFFFFFF)
+        )
+
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 3, 0, 0, 0)
+    plte = palette.tobytes().ljust(colors * 3, b"\x00")
+    png = (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", ihdr)
+        + chunk(b"PLTE", plte)
+        + chunk(b"IDAT", zlib.compress(raw, 9))
+        + chunk(b"IEND", b"")
+    )
+    target.write_bytes(png)
+    return len(png)
+
+
+def quantize_master(subject: str) -> int:
+    return quantize_to_palette_png(
+        STAGING_DIR / f"{subject}_rgb.png",
+        STAGING_DIR / f"{subject}.png",
+    )
+
+
 def render_all() -> None:
     STAGING_DIR.mkdir(parents=True, exist_ok=True)
     report: dict[str, dict[str, int | str]] = {}
@@ -174,8 +264,11 @@ def render_all() -> None:
         configure_studio()
         imported = import_character(subject)
         scene = bpy.context.scene
-        scene.render.filepath = str(STAGING_DIR / f"{subject}.png")
+        # Keep the RGB master so quantization can be re-run without re-rendering.
+        master = STAGING_DIR / f"{subject}_rgb.png"
+        scene.render.filepath = str(master)
         bpy.ops.render.render(write_still=True)
+        size_bytes = quantize_master(subject)
         meshes = [obj for obj in imported if obj.type == "MESH"]
         vertices = sum(len(obj.data.vertices) for obj in meshes)
         report[subject] = {
@@ -183,10 +276,17 @@ def render_all() -> None:
             "meshes": len(meshes),
             "vertices": vertices,
             "staging_png": f"renders/portraits_storybook/{subject}.png",
+            "png_bytes": size_bytes,
         }
-        print(f"[portrait] {subject} rendered")
+        print(f"[portrait] {subject} rendered ({size_bytes // 1024}KB)")
     MANIFEST_PATH.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report, indent=2))
+
+
+def requantize_all() -> None:
+    for subject in ALL_SUBJECTS:
+        size_bytes = quantize_master(subject)
+        print(f"[portrait] {subject} requantized ({size_bytes // 1024}KB)")
 
 
 def apply_portraits() -> None:
@@ -223,6 +323,8 @@ if __name__ == "__main__":
     argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     if "--apply-only" in argv:
         apply_portraits()
+    elif "--requantize" in argv:
+        requantize_all()
     else:
         render_all()
         if "--apply" in argv:

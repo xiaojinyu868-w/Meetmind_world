@@ -43,7 +43,7 @@ npm run build
 
 原始照片、声音、embedding、内部记忆和安全存储地址不得复制到 `public/`。前端只消费授权过滤后的 DTO、`CharacterAsset` 和实时 `AgentEvent`。
 
-人物生成分工、分支约定和 K3/Agent 跨模块契约见 [`docs/TEAM_WORKSTREAMS.md`](docs/TEAM_WORKSTREAMS.md)。
+人物生成分工、分支约定和 K3/Agent 跨模块契约见 [`docs/TEAM_WORKSTREAMS.md`](docs/TEAM_WORKSTREAMS.md)。后端服务（FastAPI）见 [`backend/README.md`](backend/README.md)；产品文档集（PRD、ROADMAP、架构、接口契约）见 [`docs/README.md`](docs/README.md)。
 
 ## 场景风格
 
@@ -66,7 +66,7 @@ V2 几何场景资产仍归档保留，但不再出现在前端选择器中，�
 
 ## 当前限制
 
-- Agent 对话和桌位调度为本地 mock，尚未连接 SSE/WebSocket 服务。
+- 世界动态由后端世界快照驱动（`GET /api/v0/world/snapshot`，2s 轮询；后端不可用时降级本地 mock/内置快照）；SSE/WebSocket 尚未启用。
 - 当前照片输入是合照，匿名槽位由主参考图从左到右确定；正式链路仍需要上游提供稳定的 `personId + boundingBox`。
 - 人物暂时没有骨骼动画；移动和入座采用刚性模型的轻量表现。
 - 咖啡厅使用运行时圆形桌面碰撞，尚未从 Blender 导出完整碰撞壳。

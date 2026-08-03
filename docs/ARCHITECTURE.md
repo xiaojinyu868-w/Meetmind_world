@@ -75,7 +75,7 @@
   → Three.js 渲染
 ```
 
-MVP2 起，编排层引入 Agent Runtime：规则调度（走动/访问/圆桌）产生事件 → World Service 消费事件更新状态 → 大模型分析互动记录 → 推送服务过滤后通知用户。
+MVP2（2026-08-03 重设后）增加三条线：场景语言（点位交互/播报，前端交互层）、场域生成管线（§5a 第三条生成线）、群体冷启动（合照分割 → 批量 confirm → 批量注册进世界）。原"Agent 价值分析 → 推送"编排整体暂缓，重议后再回本节。
 
 ## 4. 世界快照协议（前端唯一数据契约）
 
@@ -101,6 +101,7 @@ MVP2 起，编排层引入 Agent Runtime：规则调度（走动/访问/圆桌�
 
 - 前端不推断状态，只渲染；快照未包含的信息前端无权知道。
 - 资料包内容（人脸照片、谈话记录）**不走快照**，由用户点击后经 API 按权限单独拉取。
+- 场景语言（FR-2.8/2.9）的点位与播报内容：热点定义走 `modules`，播报文本走 `events`，均从快照消费，前端不自行编造。
 
 ## 5. 自进化权限矩阵（harness 圈层管理）
 
@@ -115,29 +116,30 @@ MVP2 起，编排层引入 Agent Runtime：规则调度（走动/访问/圆桌�
 - 长期记忆（人物事实）只能经由**用户确认流程**写入，自进化流程无权触碰（对应 P-3）。
 - 权限配置在 `backend/harness/permissions/`，修改权限配置 = 代码评审级变更。
 
-## 5a. 生成管线（照片 → 低多边形人物/场景模型）
+## 5a. 生成管线（照片 → 体素人物 / 场景模块 / 个人场域）
 
-每个真实的人和相遇第一现场都由统一管线建模，**人/场景解耦**：人是可动的 Agent 模型，场景是静态模块，只在世界快照中按坐标组合。
+**人物形象方向（2026-08-03 定，P-6）**：MC 体素（voxel）人物 + AI 生成图片贴图。原"照片 → 三视图 → lowpoly 有脸 GLB"方向废弃。三条生成线，**人/场景/场域解耦**：人是可动的 Agent 模型，场景是静态模块，场域是推断层的视觉化空间，只在世界快照中按坐标组合。
 
 **目标硬件链路**（Demo 阶段用手机摄像头替代眼镜，K3 开发板环节先由手机/服务器代行）：
 
 ```
 眼镜摄像头 + 麦克风（日常拍摄/录音）
   → K3 开发板处理整理 → 形成以个人为单位的 Package（事实层）
-  → AI 生成三视图（正面/侧面/背面）
-  → AI 调用 Blender 按三视图生成 lowpoly GLB（有脸，per-person）
+  → AI 生成图片贴图（头部五面 + 身体 atlas，输入为真实照片）
+  → 体素 GLB 组装（固定体素身体 + 动态贴图）
   → 登记入资产白名单 → 部署到 three.js 世界
 ```
 
 软件接口（`backend/pipeline/`，算法 mock、接口先行，逐个打磨）：
 
-| 模块 | 接口 | MVP1 实现 |
+| 模块 | 接口 | MVP 实现 |
 |---|---|---|
-| `three_view.py` | `generate(photos: list[Path]) -> ThreeViews` | mock：透传输入图 |
-| `blender_gen.py` | `generate(views: ThreeViews, style: StyleSpec) -> Path(glb)` | 无头 Blender 跑占位脚本（产物必须过 ART-BRIEF 契约：材质槽/根节点/朝向/身高） |
-| `person_builder.py` | `build(encounter_facts) -> avatar + asset_entry` | 编排上述两步并登记白名单 |
+| `texture_gen.py` | `generate(photos: list[Path]) -> TextureSet`（头部五面 + 身体 atlas） | mock：占位贴图 |
+| `voxel_gen.py` | `generate(textures: TextureSet, style: StyleSpec) -> Path(glb)`（体素组装） | 固定体素身体 + 贴图；产物必须过 ART-BRIEF 契约（贴图槽位/根节点/朝向/身高） |
+| `person_builder.py` | `build(encounter_facts) -> avatar + asset_entry` | 编排上述两步并登记白名单（全流程 mock 可跑通） |
+| `field_gen.py` | `generate(person_materials) -> FieldScene`（个人场域，FR-2.11） | mock：模板场景；产物标注生成物、带来源素材指针（P-3） |
 
-风格规范（头身比、五官简化规则、调色板提取）由美术在 ART-BRIEF.md 定义，管线读取，不硬编码。
+注：现有 `three_view.py` / `blender_gen.py` 将随代码同步改语义/重命名为上表形态（文档为准，同步前视为遗留实现）。风格规范（体素分辨率、贴图生成 prompt 模板、调色板提取）由美术在 ART-BRIEF.md 定义，管线读取，不硬编码。
 
 Agent 行为按场景半规则驱动（走动/访问/圆桌），由 Agent Runtime 发事件改变世界状态，前端只渲染快照（ADR-1）；世界的动态演化只允许 Agent 通过事件完成（见 §5 权限矩阵）。
 
@@ -156,15 +158,17 @@ Agent 行为按场景半规则驱动（走动/访问/圆桌），由 Agent Runti
 | ADR-3 | 世界快照是前端唯一数据源 | 防止前端与 Agent 状态耦合腐烂 |
 | ADR-4 | 自进化只能改"状态"，不能改"规则" | 权限失控是最大的产品风险（P-8） |
 | ADR-5 | 沿用现有 three.js 咖啡厅原型演进，不重写 | 原型已验证渲染与交互闭环 |
+| ADR-6 | 人物形象走"体素 + AI 图片贴图"，不走 per-person 高模管线（2026-08-03） | 现场场景下生成速度与成本优先；辨识度由照片贴图保证；P-6 |
 
 ## 8. TBD
 
 - TBD-ARCH-1：前端是否/何时迁移 TypeScript。
 - TBD-ARCH-2：人物数据何时从文件迁移到数据库（触发条件：单人 Package 数 > 500 或多人协作写入冲突出现）。
 - TBD-ARCH-3：世界快照传输方式（MVP1 轮询即可；MVP2 评估 SSE/WebSocket）。
+- TBD-ARCH-4（2026-08-03 新增）：联机与实时同步（FR-3.6：现场联机游戏模式、云端房间、好友注入单机世界）。涉及房间管理与 WebSocket 级状态同步；MVP2 现场演示模式（2.H.3）先在单机架构内实现，联机启动前必须架构评审，禁止在现有单机快照架构上打补丁式叠加。
 
 ## 变更记录
 
 - 2026-08-03 | 初始版本 | AI
 - 2026-08-03 | 新增 §5a 生成管线（硬件链路：眼镜/K3 → Package → 三视图 → Blender GLB；人/场景解耦；接口先行算法 mock） | 人（输入）+ AI（记录）
-- 2026-08-03 | 两级世界落地：大厅（Expo Hall，静态展位陈列，独立 WorldService 无 runtime）+ 咖啡厅（活的世界）；展位数据流：confirm → register_person → 快照 booth/at-booth → 前端 BoothSystem 渲染 | AI
+- 2026-08-03 | 依 8-03 晚决策：§5a 人物管线改为"照片 → AI 图片贴图 → 体素 GLB 组装"（原三视图/lowpoly 方向废弃），新增场域生成线 `field_gen.py`（推断层视觉化）；§3 主流程补 MVP2 重设说明；§4 补场景语言的快照消费约定；新增 ADR-6 与 TBD-ARCH-4（联机） | 人（决策）+ AI（记录）

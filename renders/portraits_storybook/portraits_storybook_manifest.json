@@ -1,0 +1,51 @@
+{
+  "host": {
+    "glb": "public/models/characters/photo-derived/storybook/host.glb",
+    "meshes": 32,
+    "vertices": 1938,
+    "staging_png": "renders/portraits_storybook/host.png",
+    "png_bytes": 88082
+  },
+  "person_01": {
+    "glb": "public/models/characters/photo-derived/storybook/person_01.glb",
+    "meshes": 29,
+    "vertices": 1848,
+    "staging_png": "renders/portraits_storybook/person_01.png",
+    "png_bytes": 78766
+  },
+  "person_02": {
+    "glb": "public/models/characters/photo-derived/storybook/person_02.glb",
+    "meshes": 38,
+    "vertices": 2470,
+    "staging_png": "renders/portraits_storybook/person_02.png",
+    "png_bytes": 94769
+  },
+  "person_03": {
+    "glb": "public/models/characters/photo-derived/storybook/person_03.glb",
+    "meshes": 39,
+    "vertices": 2034,
+    "staging_png": "renders/portraits_storybook/person_03.png",
+    "png_bytes": 93244
+  },
+  "person_04": {
+    "glb": "public/models/characters/photo-derived/storybook/person_04.glb",
+    "meshes": 42,
+    "vertices": 2370,
+    "staging_png": "renders/portraits_storybook/person_04.png",
+    "png_bytes": 118235
+  },
+  "person_05": {
+    "glb": "public/models/characters/photo-derived/storybook/person_05.glb",
+    "meshes": 31,
+    "vertices": 1968,
+    "staging_png": "renders/portraits_storybook/person_05.png",
+    "png_bytes": 86197
+  },
+  "person_06": {
+    "glb": "public/models/characters/photo-derived/storybook/person_06.glb",
+    "meshes": 35,
+    "vertices": 2004,
+    "staging_png": "renders/portraits_storybook/person_06.png",
+    "png_bytes": 93200
+  }
+}

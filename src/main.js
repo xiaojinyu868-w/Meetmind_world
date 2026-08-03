@@ -440,25 +440,31 @@ async function configureWorld(root) {
     });
   });
 
-  // 地面节点按 GROUND 前缀识别（咖啡厅 GROUND_CafeFloor / 大厅地坪 / 占位场地通用）；
-  // 命名不符时退化为以整个环境做地面射线目标，保证人物可站立可走
-  let groundRoot = root.getObjectByName("GROUND_CafeFloor") ?? null;
-  if (!groundRoot) {
-    root.traverse((object) => {
-      if (!groundRoot && object.name.startsWith("GROUND")) groundRoot = object;
-    });
-  }
-  if (!groundRoot) {
-    console.warn(`[EchoWorld] ${worldTitle}资产缺少 GROUND 地面节点，以整个环境作为地面射线目标`);
-    groundRoot = root;
-  }
-  groundRoot.traverse((object) => {
-    if (!object.isMesh) return;
-    object.castShadow = false;
-    object.receiveShadow = true;
-    groundMeshes.push(object);
+  // 地面节点按 GROUND 前缀识别（咖啡厅 GROUND_CafeFloor / 大厅地坪 / 集市街道
+  // GROUND_MarketStreet+GROUND_Grass_* / 占位场地通用）；收集全部 GROUND 节点
+  // （街道有草地+石板路多块地面，只取第一个会导致出生点落在采集范围外）；
+  // 一个都没有时退化为以整个环境做地面射线目标，保证人物可站立可走
+  const groundRoots = [];
+  const cafeFloor = root.getObjectByName("GROUND_CafeFloor");
+  if (cafeFloor) groundRoots.push(cafeFloor);
+  root.traverse((object) => {
+    if (object.name.startsWith("GROUND") && !groundRoots.includes(object)) {
+      groundRoots.push(object);
+    }
   });
-  if (groundRoot.isMesh) groundMeshes.push(groundRoot);
+  if (groundRoots.length === 0) {
+    console.warn(`[EchoWorld] ${worldTitle}资产缺少 GROUND 地面节点，以整个环境作为地面射线目标`);
+    groundRoots.push(root);
+  }
+  for (const groundRoot of groundRoots) {
+    groundRoot.traverse((object) => {
+      if (!object.isMesh) return;
+      object.castShadow = false;
+      object.receiveShadow = true;
+      groundMeshes.push(object);
+    });
+    if (groundRoot.isMesh) groundMeshes.push(groundRoot);
+  }
   const uniqueGroundMeshes = [...new Set(groundMeshes)];
   groundMeshes.length = 0;
   groundMeshes.push(...uniqueGroundMeshes);
