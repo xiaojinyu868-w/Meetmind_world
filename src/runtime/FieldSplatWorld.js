@@ -1,10 +1,10 @@
 import * as THREE from "three";
 import { SparkRenderer, SplatMesh } from "@sparkjsdev/spark";
 
-// Marble SPZ splat 资产坐标系为 marble_raw_opencv：官方查看器对 splat 统一
-// 绕 X 轴旋转 180°（见 docs.worldlabs.ai「Rendering Marble SPZ files in
-// third-party engines」）。**collider GLB 不翻**——它是面向引擎导出的标准
-// Y-up glTF（2026-08-04 实测：对其再翻转会让人站在"地形背面"、脚踩天空）。
+// 坐标系（2026-08-04 无头浏览器 A/B 实测）：worlds:generate 直接产出的
+// spz_urls 资产**已是 Y-up，默认不翻转**；Marble 文档中的 X 轴 180° 指导
+// 针对其他导出路径（PLY 等），需要时用 ?splatflip=1 强制翻转。
+// collider GLB 同为 Y-up，永不翻转。
 const SPLAT_FLIP_QUATERNION = new THREE.Quaternion(1, 0, 0, 0);
 
 // 对齐目标：可行走区域（朝上三角面的 XZ 分布）映射到这个尺度（~1/4 米制，
@@ -160,8 +160,8 @@ export async function tryLoadFieldSplatWorld({
   // 继承 scale/position（否则 splat 被缩放两次变成指甲盖）
   const splatGroup = new THREE.Group();
   splatGroup.name = "SPLAT_Flipped";
-  // 调试/回退开关：?splatflip=0 时关闭翻转（部分导出路径的 spz 已是 Y-up）
-  const flipEnabled = new URLSearchParams(window.location.search).get("splatflip") !== "0";
+  // 翻转开关：默认不翻（实测为 Y-up）；?splatflip=1 时强制翻转（备用导出路径）
+  const flipEnabled = new URLSearchParams(window.location.search).get("splatflip") === "1";
   if (flipEnabled) splatGroup.quaternion.copy(SPLAT_FLIP_QUATERNION);
   let spawnHint = null;
   if (walk) {
