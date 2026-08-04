@@ -61,12 +61,13 @@ src/runtime/
   SnapshotAdapter.js        快照 agent → 渲染结构映射（状态归一化 walking|seated|talking|in-meeting|at-booth、
                             CafeLayout 座位锚点对齐、事件 camelCase 归一化、modules 透传，纯函数可在 node 下自测）
   WalkSlide.js              live 插值轻量避障：位移将进入阻挡圆时投影到切线滑动（纯函数，圆键 r/radius 兼容）
-  ColliderRegistry.js       环境静态碰撞壳注册表（按环境资产 id 返回 bounds + 静态圆；摊位圆由 BoothSystem
-                            动态注入；NPC↔NPC 分离权威在后端；loadFromManifest 为 COLLIDER_* 导出预留桩）
-  WorldSwitch.js            三级世界切换（?world=hall|cafe|field，默认 hall）+ 场域 person 参数
+  ColliderRegistry.js       环境静态碰撞壳注册表（按环境资产 id 返回 bounds + 静态圆；hub-town 壳含建筑/
+                            篝火/大树/河带（桥与汀步留口）；摊位圆由 BoothSystem 动态注入；NPC↔NPC 分离权威在后端）
+  WorldSwitch.js            三级世界切换（?world=hall|cafe|field，默认 hall）+ 场域 person 参数；
+                            hall 使用小镇 Hub 夜集市环境（environment.hub-town.v1，入口/街道/篝火广场/花园小河）
   BoothSystem.js            展位系统：模板 GLB（module.market-stall.v2 商人推车，未到货降级简易占位展位）→
                             按快照 modules 克隆、MESH_* 展示面贴图/CanvasTexture 名牌与标签、增量同步、
-                            展位圆形阻挡与射线点选、0.3s 缩放入场
+                            每摊位按 personId 稳定配色变体（雨篷/车台布）、展位圆形阻挡与射线点选、0.3s 缩放入场
   RelationshipFieldSystem.js  `echo-field.v1` 关系场域程序化地形、实体、热点与动画
   WorldModuleRegistry.js    `echo-world-modules.v1` 挂载契约加载和严格校验
   WorldBroadcastSystem.js   咖啡厅 3D 播报屏与 DOM 晨报摘要

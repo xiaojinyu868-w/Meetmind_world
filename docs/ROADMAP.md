@@ -147,3 +147,4 @@
 - 2026-08-03 | ART-BRIEF v4（体素+AI 贴图契约，P-6/ADR-6）+ 首版不执行权限过滤（TBD-P3：展位上墙/对话上下文/资料包读取全量放开，privacy 字段保留默认 L1，身份确认 FR-1.3 与 harness 权限矩阵保留；115 backend tests 绿）+ 2.F.1/2.F.2 勾掉（市集街道与咖啡厅双世界已在线） | 人（决策）+ AI（实现）
 - 2026-08-04 | 2.H.2–2.H.4 与 2.I.3 完成：独立现场房间状态、第一印象推断、位置同步、“谁写的？”与结果回流；2.H.1 保持开放并明确由视觉上游负责，当前分支不实现图像/音视频处理 | 人（边界）+ AI（实现）
 - 2026-08-04 | MVP1 工程验收与 MVP2 场景闭环完成：跨重启事实/Package/展位恢复，E/F 热点与情境菜单、圆桌邀请、持久化播报、`echo-world-modules.v1` 挂载契约、`echo-field.v1` 关系场域；视觉贴图与音视频语义处理继续消费上游 DTO | 人（边界）+ AI（实现）
+- 2026-08-04 | 场景整体重构（84a074 箱庭布局）：小镇 Hub 夜集市环境（入口/市集街道/篝火广场/咖啡厅外观/花园小河，build_hub_town.py）取代 market-street 成为 hall 默认；咖啡厅外观模块（643e66a9，build_cafe_exterior.py）+ 木屋室内 v2（单层、18 座位契约零改动，build_cafe_interior_v2.py）成为默认 cafe；摊位 v2 商人推车按 personId 配色变体；篝火 E 围炉 = 现场联机入口、咖啡厅门口 E 进出；hubDusk 视觉 profile；hall 摊位锚点 12 容量（街道 8 + 广场北弧 4，backend/frontend/Blender 三方常量对齐）；193 backend tests 绿 | 人（参考图与需求）+ AI（实现）

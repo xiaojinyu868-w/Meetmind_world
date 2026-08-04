@@ -26,15 +26,37 @@ const DISPLAY_MESH_NAMES = Object.freeze(
 );
 const CANVAS_FONT = '"PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif';
 
-// mock 快照缺 booth 时的内置演示锚点：集市街道两侧两排，面向街道中心（间距 4m ≥ 2.2m 约定）
+// mock 快照缺 booth 时的内置演示锚点：小镇 Hub 街道两侧（与 build_hub_town.py PAD_Booth 一致，面向街道中心）
 const FALLBACK_BOOTH_POSITIONS = Object.freeze([
-  Object.freeze({ x: -3.5, z: -5, yaw: Math.PI / 2 }),
-  Object.freeze({ x: 3.5, z: -5, yaw: -Math.PI / 2 }),
-  Object.freeze({ x: -3.5, z: -1, yaw: Math.PI / 2 }),
-  Object.freeze({ x: 3.5, z: -1, yaw: -Math.PI / 2 }),
-  Object.freeze({ x: -3.5, z: 3, yaw: Math.PI / 2 }),
-  Object.freeze({ x: 3.5, z: 3, yaw: -Math.PI / 2 }),
+  Object.freeze({ x: -4.0, z: -12.6, yaw: Math.PI / 2 }),
+  Object.freeze({ x: 4.0, z: -12.6, yaw: -Math.PI / 2 }),
+  Object.freeze({ x: -4.0, z: -9.7, yaw: Math.PI / 2 }),
+  Object.freeze({ x: 4.0, z: -9.7, yaw: -Math.PI / 2 }),
+  Object.freeze({ x: -4.0, z: -6.8, yaw: Math.PI / 2 }),
+  Object.freeze({ x: 4.0, z: -6.8, yaw: -Math.PI / 2 }),
 ]);
+
+// 每个摊位的配色变体（雨篷主色 × 车台布色）：按 personId 稳定取色，世界因此「每个摊位不一样」
+const BOOTH_COLOR_VARIANTS = Object.freeze([
+  Object.freeze({ awning: "#c65f45", cloth: "#5b7ba6" }),
+  Object.freeze({ awning: "#3e7a8a", cloth: "#8a9ab0" }),
+  Object.freeze({ awning: "#d8913e", cloth: "#6e8a9a" }),
+  Object.freeze({ awning: "#8a5a7a", cloth: "#7fa3c4" }),
+  Object.freeze({ awning: "#4f7a5a", cloth: "#a68ab0" }),
+  Object.freeze({ awning: "#a6534a", cloth: "#5e7b9c" }),
+  Object.freeze({ awning: "#5b7ba6", cloth: "#c49a6a" }),
+  Object.freeze({ awning: "#7a8a4e", cloth: "#b06a4a" }),
+]);
+const BOOTH_TINT_MATERIALS = Object.freeze({
+  MAT_Stall_AwningRed: "awning",
+  MAT_Stall_ClothBlue: "cloth",
+});
+
+function boothVariantIndexFor(personId) {
+  let hash = 0;
+  for (const char of String(personId ?? "")) hash = (hash * 31 + char.codePointAt(0)) >>> 0;
+  return hash % BOOTH_COLOR_VARIANTS.length;
+}
 
 // 人物站位在展位正前方（出展人面向访客），与展位中心保持 0.85m
 const PERSON_ANCHOR_OFFSET = 0.85;
@@ -345,12 +367,19 @@ export class BoothSystem {
     root.scale.setScalar(0.01);
     root.userData.personId = booth.personId;
     root.userData.boothId = booth.id;
+    // 每摊位配色变体：雨篷/车台布材质独立克隆后换色（personId 稳定取色）
+    const variant = BOOTH_COLOR_VARIANTS[boothVariantIndexFor(booth.personId)];
     const displayMaterials = [];
     const displayMeshes = [];
     root.traverse((object) => {
       if (!object.isMesh) return;
       object.castShadow = true;
       object.receiveShadow = true;
+      const tintKey = BOOTH_TINT_MATERIALS[object.material?.name];
+      if (tintKey) {
+        object.material = object.material.clone();
+        object.material.color.set(variant[tintKey]);
+      }
       if (DISPLAY_MESH_NAMES.has(object.name)) {
         object.material = object.material.clone();
         displayMaterials.push(object.material);

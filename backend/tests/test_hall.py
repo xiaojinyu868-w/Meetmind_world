@@ -29,35 +29,43 @@ def client(tmp_path, monkeypatch):
 
 def test_layout_two_rows_alternating_and_facing_street():
     anchors = [booth_anchor(i) for i in range(12)]
-    # 左右两排交替：偶数左排 x=-3.8，奇数右排 x=+3.8；同侧 z 步进 2.4
-    for i, anchor in enumerate(anchors):
+    # 街道 8 摊左右交替：偶数左排 x=-4.0，奇数右排 x=+4.0；行距 2.9（同侧 2.9）
+    for i, anchor in enumerate(anchors[:8]):
         expected_x = -BOOTH_SIDE_X if i % 2 == 0 else BOOTH_SIDE_X
         assert anchor["x"] == expected_x
-        assert anchor["z"] == pytest.approx(-9.0 + (i // 2) * 2.4)
-    # 朝向街道中心：左排朝 +x（yaw=+90°），右排朝 -x（yaw=-90°）
-    for i, anchor in enumerate(anchors):
+        assert anchor["z"] == pytest.approx(-12.6 + (i // 2) * 2.9)
+    # 广场北弧 4 摊：在广场 r≈5 弧上且面朝广场中心
+    for anchor in anchors[8:]:
+        assert math.hypot(anchor["x"] - 0.0, anchor["z"] - 2.5) == pytest.approx(5.0, abs=0.05)
+        forward = (math.sin(anchor["yaw"]), math.cos(anchor["yaw"]))
+        to_center = (-anchor["x"], 2.5 - anchor["z"])
+        length = math.hypot(*to_center)
+        cos_sim = (forward[0] * to_center[0] + forward[1] * to_center[1]) / length
+        assert cos_sim > 0.999
+    # 朝向街道中心（街道段）：左排朝 +x（yaw=+90°），右排朝 -x（yaw=-90°）
+    for i, anchor in enumerate(anchors[:8]):
         forward = (math.sin(anchor["yaw"]), math.cos(anchor["yaw"]))
         toward_street = (1.0, 0.0) if i % 2 == 0 else (-1.0, 0.0)
         cos_sim = forward[0] * toward_street[0] + forward[1] * toward_street[1]
         assert cos_sim > 0.999
-    # 边界内 + 出生区留空（z ≤ 8 < 8.5）
+    # 边界内 + 出生区留空（摊位 z ≥ -12.6，出生区 z < -12.9）
     for anchor in anchors:
         assert HALL_BOUNDS["min_x"] <= anchor["x"] <= HALL_BOUNDS["max_x"]
         assert HALL_BOUNDS["min_z"] <= anchor["z"] <= HALL_BOUNDS["max_z"]
-        assert anchor["z"] < SPAWN_FREE_Z
-    # 任意两摊位间距 ≥ 2.2m（同侧 2.4、对街 7.6、对角更大）
+        assert anchor["z"] > SPAWN_FREE_Z
+    # 任意两摊位间距 ≥ 2.2m（同侧 2.9、对街 8.0、对角更大）
     for i, a in enumerate(anchors):
         for b in anchors[i + 1:]:
             assert math.hypot(a["x"] - b["x"], a["z"] - b["z"]) >= 2.2 - 1e-9
-    assert BOOTH_ROW_STEP >= 2.2
+    assert 2 * BOOTH_ROW_STEP >= 2.2
     assert 2 * BOOTH_SIDE_X >= 2.2
 
 
 def test_layout_capacity_and_overflow():
-    last = booth_anchor(BOOTH_CAPACITY - 1)
-    assert last["z"] <= BOOTH_ROW_Z_MAX  # 最后一个仍在出生区之前
+    last_street = booth_anchor(7)
+    assert last_street["z"] <= BOOTH_ROW_Z_MAX  # 街道段最后一个仍在广场之前
     with pytest.raises(ValueError, match="容量已满"):
-        booth_anchor(BOOTH_CAPACITY)  # 超出 z=8 上限，拒绝继续向出生区扩张
+        booth_anchor(BOOTH_CAPACITY)  # 超出 z=-3.9 上限，拒绝向篝火广场扩张
 
 
 def test_hall_registry_idempotent():

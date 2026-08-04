@@ -1,0 +1,34 @@
+{
+  "schema_version": "echo-cafe-exterior.v1",
+  "name": "EchoWorld Cafe Exterior (Wooden Cafe House)",
+  "style": "storybook timber cafe; blue-grey stone base, plaster+timber upper, slate gable roof with dormers, green-striped awning with scallop valance, terrace, warm windows",
+  "reference_image": "docs/643e66a9db8bcb96a9c3a1af7a1e5b7e.png",
+  "generator": "blender/build_cafe_exterior.py",
+  "seed": 26080504,
+  "blend": "blender/echo_world_cafe_exterior.blend",
+  "glb": "public/models/modules/echo_world_cafe_exterior_20260804.glb",
+  "preview": "renders/echo_world_cafe_exterior_preview.png",
+  "root_node": "ROOT_CafeExterior",
+  "door_anchor": "ANCHOR_CafeDoor",
+  "scale_contract": {
+    "unit": "meter",
+    "footprint_m": [
+      7.2,
+      6.0
+    ],
+    "wall_top_z_m": 3.1,
+    "roof_peak_z_m": 5.5,
+    "door_x_m": -1.9
+  },
+  "coordinate_contract": {
+    "origin": "building center on ground",
+    "front_side": "-Y in Blender, +Z after glTF export",
+    "up_axis_export": "+Y via glTF"
+  },
+  "export_excludes": [
+    "CAFE_ExteriorPreviewOnly collection",
+    "preview camera",
+    "preview lights",
+    "preview ground card"
+  ]
+}

@@ -1,0 +1,202 @@
+{
+  "schema_version": "echo-hub-town.v1",
+  "name": "EchoWorld Hub Town (Night Market Diorama)",
+  "style": "storybook hand-painted dusk market town; consistent with market-stall-v2 / cafe-exterior-v1",
+  "reference_image": "docs/84a074ecf6a20c847a41b64a0cdb7d9b.png",
+  "generator": "blender/build_hub_town.py",
+  "seed": 26080504,
+  "blend": "blender/echo_world_hub_town.blend",
+  "glb": "public/models/echo_world_hub_town.glb",
+  "previews": [
+    "renders/echo_world_hub_town_overview.png",
+    "renders/echo_world_hub_town_plaza.png"
+  ],
+  "root_node": "ROOT_HubTown",
+  "ground_nodes": [
+    "GROUND_HubBase",
+    "GROUND_Plaza",
+    "PATH_Street_*",
+    "PAD_Booth_*"
+  ],
+  "anchors": {
+    "ANCHOR_PlayerSpawn": {
+      "x": 0.0,
+      "z": -12.8
+    },
+    "ANCHOR_Campfire": {
+      "x": 0.0,
+      "z": 2.5
+    },
+    "ANCHOR_CafeDoor": {
+      "x": -4.1,
+      "z": 0.6
+    },
+    "ANCHOR_Broadcast": {
+      "x": 5.7,
+      "z": 2.8
+    },
+    "ANCHOR_Gate": {
+      "x": 0.0,
+      "z": -14.5
+    }
+  },
+  "layout": {
+    "gate": {
+      "x": 0.0,
+      "z": -14.5
+    },
+    "spawn": {
+      "x": 0.0,
+      "z": -12.8,
+      "yaw": 0.0
+    },
+    "street": {
+      "half_width": 1.8,
+      "z_min": -14.5,
+      "z_max": -3.5
+    },
+    "plaza": {
+      "x": 0.0,
+      "z": 2.5,
+      "radius": 4.6
+    },
+    "campfire": {
+      "x": 0.0,
+      "z": 2.5
+    },
+    "cafe": {
+      "x": -9.2,
+      "z": 2.5,
+      "rot_z_deg": 90,
+      "door_world": {
+        "x": -4.1,
+        "z": 0.6
+      }
+    },
+    "broadcast": {
+      "x": 5.7,
+      "z": 2.8
+    },
+    "river": {
+      "base_z": 10.2,
+      "bridge_x": -3.2,
+      "step_stones_x": 3.2
+    },
+    "bounds": {
+      "minX": -14.2,
+      "maxX": 14.2,
+      "minZ": -15.4,
+      "maxZ": 15.4
+    }
+  },
+  "booth_anchors": [
+    {
+      "index": 0,
+      "x": -4.0,
+      "z": -12.6,
+      "yaw": 1.5707963267948966
+    },
+    {
+      "index": 1,
+      "x": 4.0,
+      "z": -12.6,
+      "yaw": -1.5707963267948966
+    },
+    {
+      "index": 2,
+      "x": -4.0,
+      "z": -9.7,
+      "yaw": 1.5707963267948966
+    },
+    {
+      "index": 3,
+      "x": 4.0,
+      "z": -9.7,
+      "yaw": -1.5707963267948966
+    },
+    {
+      "index": 4,
+      "x": -4.0,
+      "z": -6.8,
+      "yaw": 1.5707963267948966
+    },
+    {
+      "index": 5,
+      "x": 4.0,
+      "z": -6.8,
+      "yaw": -1.5707963267948966
+    },
+    {
+      "index": 6,
+      "x": -4.0,
+      "z": -3.9000000000000004,
+      "yaw": 1.5707963267948966
+    },
+    {
+      "index": 7,
+      "x": 4.0,
+      "z": -3.9000000000000004,
+      "yaw": -1.5707963267948966
+    },
+    {
+      "index": 8,
+      "x": -4.095760221444959,
+      "z": -0.3678821817552307,
+      "yaw": 0.9599310885968813
+    },
+    {
+      "index": 9,
+      "x": -2.1130913087034973,
+      "z": -2.0315389351832494,
+      "yaw": 0.43633231299858244
+    },
+    {
+      "index": 10,
+      "x": 2.1130913087034973,
+      "z": -2.0315389351832494,
+      "yaw": -0.43633231299858244
+    },
+    {
+      "index": 11,
+      "x": 4.095760221444959,
+      "z": -0.3678821817552307,
+      "yaw": -0.9599310885968813
+    }
+  ],
+  "static_colliders": [
+    {
+      "x": -9.2,
+      "z": 2.5,
+      "r": 4.3,
+      "kind": "cafe-building"
+    },
+    {
+      "x": 0.0,
+      "z": 2.5,
+      "r": 1.05,
+      "kind": "campfire"
+    },
+    {
+      "x": -2.3,
+      "z": -14.5,
+      "r": 0.3,
+      "kind": "gate-post"
+    },
+    {
+      "x": 2.3,
+      "z": -14.5,
+      "r": 0.3,
+      "kind": "gate-post"
+    }
+  ],
+  "coordinate_contract": {
+    "origin": "town center on ground",
+    "north": "-Z (entrance gate side)",
+    "up_axis_export": "+Y via glTF"
+  },
+  "export_excludes": [
+    "HUB_TownPreviewOnly collection",
+    "preview camera",
+    "preview lights"
+  ]
+}

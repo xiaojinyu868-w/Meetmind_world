@@ -50,12 +50,45 @@ const RELATIONSHIP_FIELD_SHELL = Object.freeze({
   ]),
 });
 
+// 小镇 Hub（build_hub_town.py 布局常量的前端镜像：建筑/篝火/大树/长椅/河带）
+const HUB_TREE_COLLIDERS = [
+  [-5.6, -1.8, 0.8], [8.6, 7.2, 0.75], [-8.8, 12.8, 0.8], [12.2, 13.4, 0.7],
+  [-12.6, 6.8, 0.65], [12.6, -12.6, 0.75], [10.8, -6.2, 0.6], [-12.8, -6.8, 0.65],
+  [-13.0, -11.8, 0.6], [2.8, 14.0, 0.65], [-5.2, 13.8, 0.7], [8.2, 13.2, 0.6],
+  [-4.6, -14.2, 0.7], [4.8, -14.0, 0.7],
+];
+const HUB_RIVER_COLLIDERS = (() => {
+  const circles = [];
+  for (let x = -13.4; x <= 13.4; x += 2.2) {
+    if (Math.abs(x + 3.2) < 2.4 || Math.abs(x - 3.2) < 2.4) continue; // 木桥与汀步可通行
+    circles.push([x, 10.2 + 1.4 * Math.sin(x * 0.3), 2.0]);
+  }
+  return circles;
+})();
+const HUB_TOWN_SHELL = Object.freeze({
+  id: "hub-town",
+  bounds: Object.freeze({ minX: -14.2, maxX: 14.2, minZ: -15.4, maxZ: 15.4 }),
+  staticCircles: Object.freeze([
+    Object.freeze({ x: -9.2, z: 2.5, r: 4.35 }),
+    Object.freeze({ x: 0, z: 2.5, r: 1.05 }),
+    Object.freeze({ x: -2.3, z: -14.5, r: 0.32 }),
+    Object.freeze({ x: 2.3, z: -14.5, r: 0.32 }),
+    Object.freeze({ x: 6.2, z: 6.9, r: 0.7 }),
+    Object.freeze({ x: -6.4, z: 7.6, r: 0.7 }),
+    Object.freeze({ x: 5.6, z: -2.6, r: 0.7 }),
+    ...[...HUB_TREE_COLLIDERS, ...HUB_RIVER_COLLIDERS].map(([x, z, r]) =>
+      Object.freeze({ x, z, r })),
+  ]),
+});
+
 const SHELL_BY_ENVIRONMENT = Object.freeze({
   "environment.cafe.v1": CAFE_SHELL,
   // 美术变体几何不同，但活的世界锁定 v1 锚点（见 main.js 提示 Toast），碰撞同 v1
   "environment.cafe.reference.v1": CAFE_SHELL,
   "environment.cafe.painterly.v1": CAFE_SHELL,
   "environment.market-street.v1": MARKET_STREET_SHELL,
+  "environment.hub-town.v1": HUB_TOWN_SHELL,
+  "environment.cafe.interior.v2": CAFE_SHELL,
   "environment.expo-hall.v1": EXPO_HALL_SHELL,
   "environment.relationship-field.v1": RELATIONSHIP_FIELD_SHELL,
 });

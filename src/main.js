@@ -81,10 +81,12 @@ const isFieldWorld = activeWorld.id === "field";
 const fieldTargetPersonId = fieldPersonFromLocation() ?? people[0].id;
 const fieldTargetPerson = people.find((person) => person.id === fieldTargetPersonId) ?? people[0];
 const invitedPersonId = new URLSearchParams(window.location.search).get("invite");
-// 大厅暂只用 v1 视觉配置（专属 profile 后续）；环境资产/布局/出生点按世界选择
-const activeVisualProfile = isHallWorld || isFieldWorld
-  ? sceneVariantById("v1").visualProfile
-  : activeSceneVariant.visualProfile;
+// 大厅用专属黄昏夜集视觉（hub-town 环境）；场域沿用 v1 中性配置
+const activeVisualProfile = isHallWorld
+  ? "hubDusk"
+  : isFieldWorld
+    ? sceneVariantById("v1").visualProfile
+    : activeSceneVariant.visualProfile;
 const environmentAssetId = isHallWorld
   ? HALL_LAYOUT.environmentAssetId
   : isFieldWorld
@@ -193,11 +195,6 @@ const renderer = new THREE.WebGLRenderer({
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.shadowMap.enabled = true;
 installVisualProfile(scene, renderer, activeVisualProfile);
-if (isHallWorld) {
-  // 集市民谣氛围，待视觉 profile 正式化：亮蓝天背景 + 轻雾远景（在 current profile 基础上覆盖）
-  scene.background = new THREE.Color("#7ec8e3");
-  scene.fog = new THREE.Fog("#a8d8ec", 16, 42);
-}
 
 const timer = new THREE.Timer();
 timer.connect(document);
@@ -750,19 +747,39 @@ function rebuildSceneHotspots() {
 
   if (isHallWorld) {
     const cafeModule = worldModuleRegistry?.byId("venue.cafe.v1");
-    sceneHotspots = [{
-      id: "hall-cafe-door",
-      kind: "venue",
-      x: 0,
-      z: -9.15,
-      radius: cafeModule?.interaction?.radius ?? 1.9,
-      eyebrow: "市集街上的室内空间",
-      title: cafeModule?.label ?? "Echo Cafe",
-      detail: "咖啡厅适合熟人之间的一对一交流。进去坐下、邀请某个人，或在圆桌开启一次讨论。",
-      prompt: cafeModule?.interaction?.verb ?? "进入咖啡厅",
-      icon: "door-open",
-      actions: [{ id: "enter-cafe", label: "推门进入", description: "前往熟人交流空间", icon: "door-open" }],
-    }];
+    sceneHotspots = [
+      {
+        id: "hall-cafe-door",
+        kind: "venue",
+        // 咖啡厅外观模块门前的世界锚点（build_hub_town.py ANCHOR_CafeDoor）
+        x: -4.1,
+        z: 0.6,
+        radius: cafeModule?.interaction?.radius ?? 1.9,
+        eyebrow: "广场西侧的室内空间",
+        title: cafeModule?.label ?? "Echo Cafe",
+        detail: "咖啡厅适合熟人之间的一对一交流。进去坐下、邀请某个人，或在圆桌开启一次讨论。",
+        prompt: cafeModule?.interaction?.verb ?? "进入咖啡厅",
+        icon: "door-open",
+        actions: [{ id: "enter-cafe", label: "推门进入", description: "前往熟人交流空间", icon: "door-open" }],
+      },
+      {
+        id: "hall-campfire",
+        kind: "campfire",
+        x: 0,
+        z: 2.5,
+        radius: 2.55,
+        eyebrow: "篝火广场 · 多人社交",
+        title: "篝火边的位置还空着",
+        detail: playerSeatedAt === "campfire"
+          ? "联机入口已经打开：创建或加入现场房间，和同行的人坐到一起。"
+          : "篝火是现场联机的入口。坐下来，创建或加入一个现场房间，和同行的人围炉相聚。",
+        prompt: playerSeatedAt === "campfire" ? "篝火边（联机中）" : "在篝火边坐下（联机入口）",
+        icon: "users",
+        actions: playerSeatedAt === "campfire"
+          ? [{ id: "leave-fire", label: "起身离开", description: "退出联机入口，回到自己的世界", icon: "door-open" }]
+          : [{ id: "sit-by-fire", label: "围炉坐下", description: "打开现场联机入口", icon: "users" }],
+      },
+    ];
     for (const record of boothSystem?.booths.values() ?? []) {
       sceneHotspots.push({
         id: `booth-${record.personId}`,
@@ -807,6 +824,19 @@ function rebuildSceneHotspots() {
       : [{ id: "sit-at-table", label: "坐到桌边", description: "进入这张桌子的情境菜单", icon: "coffee" }],
   }));
   sceneHotspots = [
+    {
+      id: "cafe-exit-door",
+      kind: "exit",
+      x: 0,
+      z: 4.3,
+      radius: 1.6,
+      eyebrow: "回到室外",
+      title: "推开木门回到集市",
+      detail: "回到篝火广场与市集街道，去看看摊位和现场房间。",
+      prompt: "回到集市",
+      icon: "door-open",
+      actions: [{ id: "exit-cafe", label: "回到集市", description: "返回小镇广场", icon: "door-open" }],
+    },
     {
       id: "cafe-roundtable",
       kind: "roundtable",
@@ -936,6 +966,45 @@ function sitPlayerAt(tableId) {
 }
 
 
+// 篝火木凳（与 build_hub_town.py FIRE_Stool 布局一致）：5 个树桩围火
+const CAMPFIRE_CENTER = Object.freeze({ x: 0, z: 2.5 });
+const CAMPFIRE_STOOLS = Object.freeze(
+  Array.from({ length: 5 }, (_, index) => {
+    const angle = (index / 5) * Math.PI * 2 + 0.35;
+    return Object.freeze({
+      x: CAMPFIRE_CENTER.x + Math.cos(angle) * 1.75,
+      z: CAMPFIRE_CENTER.z + Math.sin(angle) * 1.75,
+    });
+  }),
+);
+
+
+function sitPlayerAtCampfire() {
+  if (meetingMode || !player) return false;
+  // 选离玩家最近的空木凳坐下，面向篝火
+  let stool = CAMPFIRE_STOOLS[0];
+  let best = Infinity;
+  for (const candidate of CAMPFIRE_STOOLS) {
+    const distance = Math.hypot(player.position.x - candidate.x, player.position.z - candidate.z);
+    if (distance < best) {
+      best = distance;
+      stool = candidate;
+    }
+  }
+  const yaw = Math.atan2(CAMPFIRE_CENTER.x - stool.x, CAMPFIRE_CENTER.z - stool.z);
+  actorAt(playerEntity, stool.x, stool.z, yaw, SEATED_ROOT_Y);
+  player.scale.set(1, SEATED_SCALE_Y, 1);
+  playerEntity.spec.behavior.idle_bob = 0.003;
+  playerGroundY = playerEntity.baseY;
+  playerMarker.visible = false;
+  currentHeading.set(Math.sin(yaw), 0, Math.cos(yaw));
+  playerSeatedAt = "campfire";
+  canvas.dataset.playerSeatedAt = "campfire";
+  rebuildSceneHotspots();
+  return true;
+}
+
+
 function leavePlayerSeat() {
   if (!playerSeatedAt) return false;
   const x = player.position.x;
@@ -995,6 +1064,28 @@ async function memoryNarrative(personId = null) {
 async function handleSceneInteraction(hotspot, actionId) {
   if (actionId === "enter-cafe") {
     navigateToWorld("cafe");
+    return { close: true };
+  }
+  if (actionId === "exit-cafe") {
+    navigateToWorld("hall");
+    return { close: true };
+  }
+  if (actionId === "sit-by-fire") {
+    sitPlayerAtCampfire();
+    integrations.groupPlay?.open();
+    void recordWorldEvent("campfire-joined", "你在篝火边坐下，打开了现场联机入口", []);
+    return {
+      eyebrow: "篝火广场 · 多人社交",
+      title: "你在篝火边坐下了",
+      detail: "联机入口已打开：创建或加入现场房间，和同行的人围炉相聚。想离开时，按 E 起身。",
+      icon: "users",
+      actions: [{ id: "leave-fire", label: "起身离开", icon: "door-open" }],
+    };
+  }
+  if (actionId === "leave-fire") {
+    leavePlayerSeat();
+    integrations.groupPlay?.close();
+    void recordWorldEvent("campfire-left", "你从篝火边起身，回到了自己的世界", []);
     return { close: true };
   }
   if (actionId === "open-package" || actionId.startsWith("open-package:")) {
@@ -1572,8 +1663,8 @@ function startLiveWorld() {
   liveWorld.onSnapshot(applyLiveSnapshot);
   liveWorld.onEvent(handleLiveEvent);
   liveWorld.start();
-  if (!isHallWorld && activeSceneVariant.id !== "v1") {
-    // 座位锚点/碰撞按 v1 原始咖啡厅标定：美术变体下活的世界仍按 v1 布局运转（提示一次，不改 URL）
+  if (!isHallWorld && !["v1", "v4"].includes(activeSceneVariant.id)) {
+    // 座位锚点/碰撞按 v1 原始咖啡厅标定（v4 木屋室内完全保留 v1 锚点，无需提示）
     pushLiveToast("活的世界目前基于原始咖啡厅布局");
   }
 }
@@ -1948,6 +2039,7 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (event.code === "Escape" && playerSeatedAt && !event.target.closest?.("input, textarea")) {
+    if (playerSeatedAt === "campfire") integrations.groupPlay?.close();
     leavePlayerSeat();
     event.preventDefault();
     return;

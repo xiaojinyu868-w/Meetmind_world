@@ -1,4 +1,4 @@
-"""展位大厅（Expo Hall / 露天集市街道）：展位锚点布局 + 展位注册表 + 展示内容组装。
+"""展位大厅（小镇 Hub / 箱庭夜集市）：展位锚点布局 + 展位注册表 + 展示内容组装。
 
 目的：落地 MVP1.5 的两级世界之一 —— 大厅负责陈列与找回（每个 Package 一个
       展位，人静立展位上不走动，呼应"无增量信息不演化"；串门见 hall_runtime）。
@@ -8,26 +8,39 @@
 验收：tests/test_hall.py —— 两排交替、朝向街道中心、间距 ≥2.2m、边界内、
       出生区留空；注册幂等；display 全量上墙（首版不过滤 TBD-P3）。
 
-布局算法（露天集市街道：主通道 x∈[-3,3]，摊位街道两侧两排）：
-  - 左排 x=-3.8（yaw=+90°，朝 +x 即街道中心），右排 x=+3.8（yaw=-90°）；
-  - z 从 -9 起，每侧行距 2.4m 交替填充（第 0 个左排 z=-9，第 1 个右排 z=-9，
-    第 2 个左排 z=-6.6……）；同侧相邻 2.4m、对街 7.6m，间距 ≥2.2m；
-  - 容量两侧各 8 排 = 16（z ≤ 8 为止），出生区 z>8.5 留空；
-  - 大厅边界 x∈[-6,6]、z∈[-10.5,10.5]（WorldService 实例化处同步传入）。
+布局算法（小镇 Hub 街道：与 blender/build_hub_town.py 的 PAD_Booth 一一对应）：
+  - 入口木门在北端（z=-14.5），出生区 z<-12.9 留空，不放展位；
+  - 左排 x=-4.0（yaw=+90°，朝 +x 即街道中心），右排 x=+4.0（yaw=-90°）；
+  - z 从 -12.6 起，每行左右各一，行距 2.9m（同侧相邻 2.9m、对街 8.0m，≥2.2m）；
+  - 容量 4 行 × 2 = 8（z ≤ -3.9 为止，篝火广场 z≥-3.5 留空）；
+  - 大厅边界 x∈[-14,14]、z∈[-15.2,15.2]（WorldService 实例化处同步传入）。
 """
 
 import math
 
-# 大厅有效区域（露天集市街道：主通道 x∈[-3,3]、z∈[-10,10] 留边；
-# 街道边界 x∈[-5.5,5.5]，摊位后方由摊位圆壳覆盖，见 world/colliders.py）
-HALL_BOUNDS = {"min_x": -5.5, "max_x": 5.5, "min_z": -10.5, "max_z": 10.5}
-SPAWN_FREE_Z = 8.5  # 出生区 z>8.5 留空，不放展位
+# 大厅有效区域（小镇 Hub：篝火广场 (0,2.5) r4.6、咖啡厅西侧、河南岸花园，
+# 环境几何见 blender/build_hub_town.py manifest；摊位后方由摊位圆壳覆盖）
+HALL_BOUNDS = {"min_x": -14.0, "max_x": 14.0, "min_z": -15.2, "max_z": 15.2}
+SPAWN_FREE_Z = -12.9  # 出生区 z<-12.9（入口木门内）留空，不放展位
 
-BOOTH_SIDE_X = 3.8          # 两侧摊位到街道中心线的距离（主通道半宽 3 + 摊位退线 0.8）
-BOOTH_ROW_Z_START = -9.0    # 第一排（街道尽头）起跑线
-BOOTH_ROW_STEP = 2.4        # 同侧行距（≥2.2m 间距要求）
-BOOTH_ROW_Z_MAX = 8.0       # 摊位最远 z（出生区留空）
-BOOTH_CAPACITY = 16         # 两侧各 8 排
+BOOTH_SIDE_X = 4.0          # 两侧摊位到街道中心线的距离（PAD_Booth 中心）
+BOOTH_ROW_Z_START = -12.6   # 第一排（入口侧）起跑线
+BOOTH_ROW_STEP = 2.9        # 行距（同侧相邻 2.9m，≥2.2m 间距要求）
+BOOTH_ROW_Z_MAX = -3.9      # 摊位最远 z（篝火广场留空）
+BOOTH_STREET_COUNT = 8      # 街道 4 行 × 两侧
+# 广场北弧 4 摊（r=5.0，面朝广场中心；与 PAD_Booth_Arc 一致）——广场是人流终点，摊位在弧上收尾
+PLAZA_CENTER = (0.0, 2.5)
+PLAZA_ARC_ANGLES = (-55.0, -25.0, 25.0, 55.0)  # 0=正北，度
+PLAZA_ARC_RADIUS = 5.0
+BOOTH_CAPACITY = 12         # 街道 8 + 广场北弧 4
+
+
+def _plaza_arc_anchor(angle_deg: float) -> dict:
+    angle = math.radians(angle_deg)
+    x = PLAZA_CENTER[0] + PLAZA_ARC_RADIUS * math.sin(angle)
+    z = PLAZA_CENTER[1] - PLAZA_ARC_RADIUS * math.cos(angle)
+    yaw = math.atan2(PLAZA_CENTER[0] - x, PLAZA_CENTER[1] - z)
+    return {"x": x, "z": z, "yaw": yaw}
 
 _LEFT, _RIGHT = 0, 1  # 交替填充：偶数序号左排，奇数序号右排
 
@@ -36,6 +49,10 @@ def booth_anchor(index: int) -> dict:
     """第 index 个展位锚点（0 起）：街道两侧交替填充，面向街道中心。"""
     if index < 0:
         raise ValueError("展位序号必须 ≥ 0")
+    if index >= BOOTH_CAPACITY:
+        raise ValueError(f"展位容量已满（{BOOTH_CAPACITY} 个），等待美术扩容街道")
+    if index >= BOOTH_STREET_COUNT:
+        return _plaza_arc_anchor(PLAZA_ARC_ANGLES[index - BOOTH_STREET_COUNT])
     row, side = divmod(index, 2)
     z = BOOTH_ROW_Z_START + row * BOOTH_ROW_STEP
     if z > BOOTH_ROW_Z_MAX:
