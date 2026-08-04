@@ -30,6 +30,27 @@ VOXEL_PORTRAIT_SIZE = 512
 STORY_TILE_SIZE = 64
 BASE_HEIGHT_M = 1.65
 ROOT_NODE_NAME = "ROOT_PhotoCharacter"
+RIG_OBJECT_NAME = "RIG_Voxel"
+RIG_BONE_NAMES = (
+    "Root",
+    "Torso",
+    "Head",
+    "Arm_L",
+    "Arm_R",
+    "Leg_L",
+    "Leg_R",
+)
+ANIMATION_ACTIONS = (
+    "Idle",
+    "Walk",
+    "Talk",
+    "SitDown",
+    "Sit",
+    "SitTalk",
+    "RaiseRightHand",
+    "RaiseBothHands",
+)
+ANIMATION_FPS = 24
 
 STORY_TILES = {
     "skin": (0, 0, 64, 64),
@@ -1323,6 +1344,295 @@ def build_voxel_body(
         )
 
 
+def set_pose_rotations(
+    armature: bpy.types.Object,
+    rotations: dict[str, tuple[float, float, float]],
+) -> None:
+    for bone_name, rotation in rotations.items():
+        pose_bone = armature.pose.bones[bone_name]
+        pose_bone.rotation_mode = "XYZ"
+        pose_bone.rotation_euler = rotation
+
+
+def action_fcurves(action: bpy.types.Action) -> list[bpy.types.FCurve]:
+    return [
+        fcurve
+        for layer in action.layers
+        for strip in layer.strips
+        if strip.type == "KEYFRAME"
+        for channelbag in strip.channelbags
+        for fcurve in channelbag.fcurves
+    ]
+
+
+def create_voxel_action(
+    armature: bpy.types.Object,
+    name: str,
+    frames: tuple[tuple[int, dict[str, tuple[float, float, float]]], ...],
+    *,
+    loop: bool,
+    location_frames: tuple[tuple[int, dict[str, tuple[float, float, float]]], ...] = (),
+) -> bpy.types.Action:
+    action = bpy.data.actions.new(name)
+    if action.name != name:
+        raise RuntimeError(f"Animation action name collision: expected {name}, got {action.name}")
+    action.use_fake_user = True
+    animation_data = armature.animation_data_create()
+    animation_data.action = action
+    for pose_bone in armature.pose.bones:
+        pose_bone.rotation_mode = "XYZ"
+        pose_bone.rotation_euler = (0.0, 0.0, 0.0)
+        pose_bone.location = (0.0, 0.0, 0.0)
+        pose_bone.scale = (1.0, 1.0, 1.0)
+    animated_bones = sorted({bone_name for _, pose in frames for bone_name in pose})
+    for frame, pose in frames:
+        frame_pose = {bone_name: pose.get(bone_name, (0.0, 0.0, 0.0)) for bone_name in animated_bones}
+        set_pose_rotations(armature, frame_pose)
+        for bone_name in animated_bones:
+            armature.pose.bones[bone_name].keyframe_insert(
+                data_path="rotation_euler",
+                frame=frame,
+                group=bone_name,
+            )
+    location_bones = sorted({bone_name for _, pose in location_frames for bone_name in pose})
+    for frame, pose in location_frames:
+        for bone_name in location_bones:
+            armature.pose.bones[bone_name].location = pose.get(bone_name, (0.0, 0.0, 0.0))
+            armature.pose.bones[bone_name].keyframe_insert(
+                data_path="location",
+                frame=frame,
+                group=bone_name,
+            )
+    action.use_frame_range = True
+    action.frame_start = frames[0][0]
+    action.frame_end = frames[-1][0]
+    action.use_cyclic = loop
+    action["playback"] = "loop" if loop else "once"
+    action["fps"] = ANIMATION_FPS
+    for fcurve in action_fcurves(action):
+        for keyframe in fcurve.keyframe_points:
+            keyframe.interpolation = "LINEAR"
+    action_slot = animation_data.action_slot
+    animation_data.action = None
+    track = animation_data.nla_tracks.new()
+    track.name = name
+    strip = track.strips.new(name, frames[0][0], action)
+    if strip.action_slot is None and action_slot is not None:
+        strip.action_slot = action_slot
+    if strip.action_slot is None:
+        raise RuntimeError(f"Animation action has no armature slot: {name}")
+    return action
+
+
+def create_voxel_animations(armature: bpy.types.Object) -> list[bpy.types.Action]:
+    radians = math.radians
+    leg_pivot_height = armature.data.bones["Leg_L"].head_local.z
+    sit_root_drop = max(0.0, leg_pivot_height - 0.50)
+    seated_legs = (radians(-90), 0.0, 0.0)
+
+    def seated_pose(head: tuple[float, float, float] = (0.0, 0.0, 0.0)) -> dict[str, tuple[float, float, float]]:
+        return {"Head": head, "Leg_L": seated_legs, "Leg_R": seated_legs}
+
+    actions = [
+        create_voxel_action(
+            armature,
+            "Idle",
+            (
+                (1, {"Torso": (0.0, 0.0, 0.0)}),
+                (25, {"Torso": (0.0, 0.0, 0.0)}),
+            ),
+            loop=True,
+        ),
+        create_voxel_action(
+            armature,
+            "Walk",
+            (
+                (1, {"Arm_L": (0.0, 0.0, 0.0), "Arm_R": (0.0, 0.0, 0.0), "Leg_L": (0.0, 0.0, 0.0), "Leg_R": (0.0, 0.0, 0.0)}),
+                (7, {"Arm_L": (radians(22), 0.0, 0.0), "Arm_R": (radians(-22), 0.0, 0.0), "Leg_L": (radians(-28), 0.0, 0.0), "Leg_R": (radians(28), 0.0, 0.0)}),
+                (13, {"Arm_L": (0.0, 0.0, 0.0), "Arm_R": (0.0, 0.0, 0.0), "Leg_L": (0.0, 0.0, 0.0), "Leg_R": (0.0, 0.0, 0.0)}),
+                (19, {"Arm_L": (radians(-22), 0.0, 0.0), "Arm_R": (radians(22), 0.0, 0.0), "Leg_L": (radians(28), 0.0, 0.0), "Leg_R": (radians(-28), 0.0, 0.0)}),
+                (25, {"Arm_L": (0.0, 0.0, 0.0), "Arm_R": (0.0, 0.0, 0.0), "Leg_L": (0.0, 0.0, 0.0), "Leg_R": (0.0, 0.0, 0.0)}),
+            ),
+            loop=True,
+        ),
+        create_voxel_action(
+            armature,
+            "Talk",
+            (
+                (1, {"Head": (0.0, 0.0, 0.0)}),
+                (5, {"Head": (radians(7), 0.0, 0.0)}),
+                (9, {"Head": (0.0, 0.0, 0.0)}),
+                (13, {"Head": (0.0, radians(7), 0.0)}),
+                (17, {"Head": (0.0, radians(-7), 0.0)}),
+                (21, {"Head": (0.0, 0.0, 0.0)}),
+                (25, {"Head": (radians(-5), 0.0, 0.0)}),
+                (29, {"Head": (0.0, 0.0, 0.0)}),
+                (33, {"Head": (0.0, 0.0, 0.0)}),
+            ),
+            loop=True,
+        ),
+        create_voxel_action(
+            armature,
+            "SitDown",
+            (
+                (1, {"Torso": (0.0, 0.0, 0.0), "Leg_L": (0.0, 0.0, 0.0), "Leg_R": (0.0, 0.0, 0.0)}),
+                (7, {"Torso": (radians(8), 0.0, 0.0), "Leg_L": (radians(-24), 0.0, 0.0), "Leg_R": (radians(-24), 0.0, 0.0)}),
+                (13, {"Torso": (radians(5), 0.0, 0.0), "Leg_L": (radians(-62), 0.0, 0.0), "Leg_R": (radians(-62), 0.0, 0.0)}),
+                (19, {"Torso": (0.0, 0.0, 0.0), "Leg_L": seated_legs, "Leg_R": seated_legs}),
+            ),
+            loop=False,
+            location_frames=(
+                (1, {"Root": (0.0, 0.0, 0.0)}),
+                (7, {"Root": (0.0, -sit_root_drop * 0.25, 0.0)}),
+                (13, {"Root": (0.0, -sit_root_drop * 0.72, 0.0)}),
+                (19, {"Root": (0.0, -sit_root_drop, 0.0)}),
+            ),
+        ),
+        create_voxel_action(
+            armature,
+            "Sit",
+            (
+                (1, seated_pose()),
+                (25, seated_pose()),
+            ),
+            loop=True,
+            location_frames=(
+                (1, {"Root": (0.0, -sit_root_drop, 0.0)}),
+                (25, {"Root": (0.0, -sit_root_drop, 0.0)}),
+            ),
+        ),
+        create_voxel_action(
+            armature,
+            "SitTalk",
+            (
+                (1, seated_pose()),
+                (5, seated_pose((radians(7), 0.0, 0.0))),
+                (9, seated_pose()),
+                (13, seated_pose((0.0, radians(7), 0.0))),
+                (17, seated_pose((0.0, radians(-7), 0.0))),
+                (21, seated_pose()),
+                (25, seated_pose((radians(-5), 0.0, 0.0))),
+                (29, seated_pose()),
+                (33, seated_pose()),
+            ),
+            loop=True,
+            location_frames=(
+                (1, {"Root": (0.0, -sit_root_drop, 0.0)}),
+                (33, {"Root": (0.0, -sit_root_drop, 0.0)}),
+            ),
+        ),
+        create_voxel_action(
+            armature,
+            "RaiseRightHand",
+            (
+                (1, {"Arm_R": (0.0, 0.0, 0.0)}),
+                (12, {"Arm_R": (0.0, 0.0, radians(-160))}),
+                (28, {"Arm_R": (0.0, 0.0, radians(-160))}),
+                (36, {"Arm_R": (0.0, 0.0, 0.0)}),
+            ),
+            loop=False,
+        ),
+        create_voxel_action(
+            armature,
+            "RaiseBothHands",
+            (
+                (1, {"Arm_L": (0.0, 0.0, 0.0), "Arm_R": (0.0, 0.0, 0.0)}),
+                (12, {"Arm_L": (0.0, 0.0, radians(160)), "Arm_R": (0.0, 0.0, radians(-160))}),
+                (28, {"Arm_L": (0.0, 0.0, radians(160)), "Arm_R": (0.0, 0.0, radians(-160))}),
+                (36, {"Arm_L": (0.0, 0.0, 0.0), "Arm_R": (0.0, 0.0, 0.0)}),
+            ),
+            loop=False,
+        ),
+    ]
+    if tuple(action.name for action in actions) != ANIMATION_ACTIONS:
+        raise RuntimeError("Voxel rig action set does not match the declared animation contract")
+    animation_data = armature.animation_data
+    animation_data.action = None
+    animation_data.use_nla = False
+    for pose_bone in armature.pose.bones:
+        pose_bone.rotation_mode = "XYZ"
+        pose_bone.rotation_euler = (0.0, 0.0, 0.0)
+        pose_bone.location = (0.0, 0.0, 0.0)
+        pose_bone.scale = (1.0, 1.0, 1.0)
+    bpy.context.scene.frame_set(1)
+    return actions
+
+
+def build_voxel_rig(
+    root: bpy.types.Object,
+    collection: bpy.types.Collection,
+) -> bpy.types.Object:
+    meshes = {obj.name: obj for obj in root.children if obj.type == "MESH"}
+    mesh_bones = {
+        "GEO_Head": "Head",
+        "GEO_Torso": "Torso",
+        "GEO_Arm_L": "Arm_L",
+        "GEO_Arm_R": "Arm_R",
+        "GEO_Leg_L": "Leg_L",
+        "GEO_Leg_R": "Leg_R",
+    }
+    if set(meshes) != set(mesh_bones):
+        raise RuntimeError(f"Unexpected voxel mesh set: {sorted(meshes)}")
+
+    torso = meshes["GEO_Torso"]
+    head = meshes["GEO_Head"]
+    arm_left = meshes["GEO_Arm_L"]
+    arm_right = meshes["GEO_Arm_R"]
+    leg_left = meshes["GEO_Leg_L"]
+    leg_right = meshes["GEO_Leg_R"]
+
+    armature_data = bpy.data.armatures.new(f"{RIG_OBJECT_NAME}_Armature")
+    armature = bpy.data.objects.new(RIG_OBJECT_NAME, armature_data)
+    collection.objects.link(armature)
+    parent_object(armature, root)
+    armature.show_in_front = True
+    armature_data.display_type = "STICK"
+    armature["rig_kind"] = "rigid-voxel-v1"
+    armature["bone_names"] = json.dumps(RIG_BONE_NAMES)
+
+    select_only([armature])
+    bpy.context.view_layer.objects.active = armature
+    bpy.ops.object.mode_set(mode="EDIT")
+    root_bone = armature_data.edit_bones.new("Root")
+    root_bone.head = (0.0, 0.0, 0.0)
+    root_bone.tail = (0.0, 0.0, 0.12)
+
+    torso_bone = armature_data.edit_bones.new("Torso")
+    torso_bone.head = (0.0, 0.0, torso.location.z - torso.dimensions.z * 0.5)
+    torso_bone.tail = (0.0, 0.0, torso.location.z + torso.dimensions.z * 0.5)
+    torso_bone.parent = root_bone
+
+    head_bone = armature_data.edit_bones.new("Head")
+    head_bone.head = (0.0, 0.0, head.location.z - head.dimensions.z * 0.5)
+    head_bone.tail = (0.0, 0.0, head.location.z + head.dimensions.z * 0.5)
+    head_bone.parent = torso_bone
+
+    for bone_name, mesh in (("Arm_L", arm_left), ("Arm_R", arm_right)):
+        bone = armature_data.edit_bones.new(bone_name)
+        bone.head = (mesh.location.x, 0.0, mesh.location.z + mesh.dimensions.z * 0.5)
+        bone.tail = (mesh.location.x, 0.0, mesh.location.z - mesh.dimensions.z * 0.5)
+        bone.parent = torso_bone
+    for bone_name, mesh in (("Leg_L", leg_left), ("Leg_R", leg_right)):
+        bone = armature_data.edit_bones.new(bone_name)
+        bone.head = (mesh.location.x, 0.0, mesh.location.z + mesh.dimensions.z * 0.5)
+        bone.tail = (mesh.location.x, 0.0, mesh.location.z - mesh.dimensions.z * 0.5)
+        bone.parent = root_bone
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    for mesh_name, bone_name in mesh_bones.items():
+        mesh = meshes[mesh_name]
+        mesh.parent = armature
+        vertex_group = mesh.vertex_groups.new(name=bone_name)
+        vertex_group.add(list(range(len(mesh.data.vertices))), 1.0, "REPLACE")
+        modifier = mesh.modifiers.new(name="RigidVoxelArmature", type="ARMATURE")
+        modifier.object = armature
+        modifier.use_vertex_groups = True
+        modifier.use_deform_preserve_volume = False
+
+    create_voxel_animations(armature)
+    return armature
+
+
 def build_voxel_character(
     spec: PersonSpec,
     collection: bpy.types.Collection,
@@ -1350,6 +1660,10 @@ def build_voxel_character(
     if spec.person_id == "person_04":
         root["special_mark"] = "abstract-gold-cyan-no-logo"
     build_voxel_body(spec, root, collection, material, template)
+    build_voxel_rig(root, collection)
+    root["rig_kind"] = "rigid-voxel-v1"
+    root["animation_actions"] = json.dumps(ANIMATION_ACTIONS)
+    root["animation_fps"] = ANIMATION_FPS
     root.scale = (spec.height_scale, spec.height_scale, spec.height_scale)
     return root, texture_path
 
@@ -1385,6 +1699,10 @@ def export_character(root: bpy.types.Object, path: Path) -> None:
         export_yup=True,
         export_apply=False,
         export_image_format="AUTO",
+        export_animations=True,
+        export_animation_mode="NLA_TRACKS",
+        export_nla_strips=True,
+        export_anim_single_armature=False,
     )
     root.name = original_name
     root.location = original_location
@@ -1591,6 +1909,22 @@ def mesh_triangle_count(root: bpy.types.Object) -> int:
     return count
 
 
+def namespace_character_actions(root: bpy.types.Object, namespace: str) -> None:
+    actions: dict[int, bpy.types.Action] = {}
+    for obj in descendants(root):
+        animation_data = obj.animation_data
+        if animation_data is None:
+            continue
+        if animation_data.action is not None:
+            actions[id(animation_data.action)] = animation_data.action
+        for track in animation_data.nla_tracks:
+            for strip in track.strips:
+                if strip.action is not None:
+                    actions[id(strip.action)] = strip.action
+    for action in actions.values():
+        action.name = f"{namespace}_{action.name}"
+
+
 def build_mode(mode: str, specs: list[PersonSpec]) -> list[dict[str, object]]:
     reset_scene()
     mode_collection = make_collection(f"CHARACTERS_{mode.upper()}")
@@ -1611,6 +1945,7 @@ def build_mode(mode: str, specs: list[PersonSpec]) -> list[dict[str, object]]:
         for obj in descendants(root):
             if obj is not root:
                 obj.name = f"{spec.person_id}_{mode}_{obj.name}"
+        namespace_character_actions(root, f"{spec.person_id}_{mode}")
         roots.append(root)
         records.append(
             {
@@ -1630,6 +1965,9 @@ def build_mode(mode: str, specs: list[PersonSpec]) -> list[dict[str, object]]:
                 "glb_sha256": sha256(glb_path),
                 "texture_sha256": sha256(texture_path),
                 "body_template": root.get("body_template", "feature-driven-lowpoly"),
+                "rig_kind": root.get("rig_kind"),
+                "animation_actions": list(ANIMATION_ACTIONS) if mode == "voxel" else [],
+                "animation_fps": ANIMATION_FPS if mode == "voxel" else None,
             }
         )
     if mode == "voxel":
@@ -1719,7 +2057,13 @@ def main() -> None:
             "voxel": {
                 "atlas_size": [128, 128],
                 "sampler": "nearest",
-                "geometry": "regular or tall fixed cuboid body",
+                "geometry": "regular or tall fixed cuboid body with rigid armature skinning",
+                "rig": {
+                    "kind": "rigid-voxel-v1",
+                    "bones": list(RIG_BONE_NAMES),
+                    "actions": list(ANIMATION_ACTIONS),
+                    "fps": ANIMATION_FPS,
+                },
                 "head_faces": ["front", "left", "right", "back", "top"],
                 "head_bottom": "design-default solid color",
                 "portrait": {

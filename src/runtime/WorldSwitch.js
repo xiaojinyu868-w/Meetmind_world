@@ -6,14 +6,10 @@ export const WORLDS = Object.freeze([
 
 export const DEFAULT_WORLD_ID = "hall";
 
-// 小镇 Hub 布局（blender/build_hub_town.py 为唯一事实源）：
-// 入口木门在北端（z=-14.5），出生点门内向南望（+Z，沿街道走向篝火广场）
+// Hub 的共享运行时契约。环境资产、摊位模板和镜头由 SceneVariants 独立选择。
 export const HALL_LAYOUT = Object.freeze({
   bounds: Object.freeze({ minX: -14.2, maxX: 14.2, minZ: -15.4, maxZ: 15.4 }),
   playerSpawn: Object.freeze({ x: 0, z: -12.8, yaw: 0 }),
-  // NPC 出生点不再用门口一排：出生即站在各自展位前（见 BoothSystem.fallbackBoothAnchor）
-  environmentAssetId: "environment.hub-town.v1",
-  boothTemplateAssetId: "module.market-stall.v2",
   // 大厅静止陈列，快照轮询低频即可；咖啡厅维持 2s 实时感
   snapshotPollMs: 10000,
   snapshotUrl: `${import.meta.env.BASE_URL}api/v0/world/snapshot?world=hall`,
@@ -50,6 +46,7 @@ export function navigateToWorld(worldId, location = window.location) {
   if (!world) return false;
   const nextUrl = new URL(location.href);
   nextUrl.searchParams.set("world", world.id);
+  nextUrl.searchParams.delete("scene");
   if (world.id !== "field") nextUrl.searchParams.delete("person");
   if (world.id !== "cafe") nextUrl.searchParams.delete("invite");
   location.assign(nextUrl.href);

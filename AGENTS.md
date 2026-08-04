@@ -18,12 +18,12 @@ EchoWorld Three.js 关系世界原型（包名 `echoworld-lowpoly-walk`）：包
 
 - 前端为静态站点（Vite 构建）；世界动态由 `backend/`（FastAPI）的世界快照驱动，LiveWorld 轮询 `/api/v0/world/snapshot`，后端不可用时自动降级本地 mock/内置快照（见"数据流"节）。
 - UI 语言为简体中文（`index.html` 为 `lang="zh-CN"`），文档与界面文案使用中文。
-- 场景：1 个玩家 + 6 个占位人物。人物形象方向（2026-08-03，PRD P-6）为 MC 体素 + AI 生成图片贴图；当前启用 voxel 方案（固定体素身体 + 照片特征贴图），无脸 GLB（`character.faceless-prototype.v1`）仅作历史占位；暂无骨骼动画，移动/入座为刚性模型的轻量表现。
+- 场景：1 个玩家 + 6 个占位人物。人物形象方向（2026-08-03，PRD P-6）为 MC 体素 + AI 生成图片贴图；当前启用 voxel 方案（固定体素身体 + 照片特征贴图），无脸 GLB（`character.faceless-prototype.v1`）仅作历史占位。Voxel GLB 使用 7 骨刚性骨架并内置 `Idle / Walk / Talk / SitDown / Sit / SitTalk / RaiseRightHand / RaiseBothHands`；入座由 Root 局部下沉和双腿旋转完成，不得再缩放角色根节点。
 - 中央六人圆桌承载两类会议：后端 runtime 自动调度（周期性）与用户发起（2026-08-04 起为真实 LLM 会议对话，`POST /api/v0/agents/meeting`，agent-talk 带 meeting_id 回流前端会议线程；非 live 模式保留本地轮播台词演示）。
 
 ## 技术栈
 
-- **Three.js `^0.185.1`**：WebGL 渲染，`GLTFLoader` 加载 GLB，`SkeletonUtils.clone` 克隆人物。
+- **Three.js `^0.185.1`**：WebGL 渲染，`GLTFLoader` 加载 GLB，`SkeletonUtils.clone` 克隆带骨骼人物，`AnimationMixer` 播放动作。
 - **Vite `^8.2.0`**（devDependency，基于 rolldown）：开发服务器与构建。
 - **lucide `^1.28.0`**：UI 图标（`createIcons`）。
 - 原生 ES Module JavaScript（`"type": "module"`），无框架、无 TypeScript、无 JSX。
@@ -35,10 +35,13 @@ npm install
 npm run dev       # vite --host 0.0.0.0 --port 5173 --strictPort，打开 http://127.0.0.1:5173/
 npm run build     # 输出到 dist/
 npm run preview   # 预览生产构建，--host 0.0.0.0
+npm run test:animation  # Node 内置测试：Idle/Walk/坐姿状态机、动作重入、单次 gesture、恢复与 animation-cue
+npm run test:controls   # Node 内置测试：第三人称相机/输入/胶囊滑动
+node --test tests/booth-layout.test.mjs  # 展位槽位/交互半径（未挂 npm script）
 ```
 
 - 没有配置 lint、格式化或类型检查工具。
-- **没有测试**：`package.json` 中没有 test 脚本，也没有 vitest/jest/playwright 依赖。验证方式为 `npm run build` 成功 + 浏览器手动走查体验闭环。
+- 没有通用测试框架；角色动作使用 Node 内置测试，其他验证仍为 `npm run build` 成功 + 浏览器手动走查体验闭环。
 - `dist/` 已提交进 Git（构建产物随仓库分发）。修改源码后如需更新分发产物，重新 `npm run build` 并提交 `dist/`。
 
 ## 目录结构
@@ -51,20 +54,29 @@ src/data/demoPeople.js      mock 数据：currentUser、6 个 NPC（含 palette 
 src/runtime/
   WorldSpec.js              world-spec.json 的加载与 schema 校验（echo-world.v1）、publicUrl() 处理 BASE_URL
   AssetCatalog.js           asset-catalog.json 白名单加载与校验（echo-assets.v1）
-  AssetStore.js             GLTF 场景与 JSON 的 Promise 缓存
+  AssetStore.js             完整 GLTF（scene + animations）与 JSON 的 Promise 缓存
   CafeLayout.js             咖啡厅边界、5 张桌、18 个 Blender 座位锚点（全部 Object.freeze）
-  CharacterSystem.js        人物 GLB 缓存、克隆、按调色板换材质色、实例生命周期
+  CharacterSystem.js        人物 GLB 克隆、换材质、AnimationMixer、状态/动作映射与实例生命周期
+  CharacterCapsule.js       角色竖直胶囊碰撞体（站/坐双高度）与 capsule 纯函数（footprint/penetration/fits）
+  CafeVariants.js           咖啡厅场景版本（?world=cafe&scene=original|reference|storybook，默认 storybook）
+  SceneVariants.js          大厅场景版本（?world=hall&scene=original|v1）：original=木屋夜集 hub-town（默认）、
+                            v1=村落市集（environment.village-market.v1，视觉层环境 + y=0 行走平面契约）
+  VillageMarketEnvironment.js 村落市集视觉层包装：GLB 整体上移对齐 y=0、透明行走平面为唯一地面射线目标、咖啡厅门锚点
+  HubBlockout.js            大厅几何 blockout 占位环境（environment.hub-blockout.v1，开发调试用）
+  ThirdPersonCamera.js      第三人称相机控制器（轨道/跟随、边界钳制、指针锁定视角）
+  Input.js                  键盘/触屏/指针输入统一采集
+  CameraRelativeMovement.js 相机相对移动向量解算（纯函数）
   NpcAgentSystem.js         普通桌随机分配、入座、同桌对话与会议调度（本地 mock；live 模式下由 main.js 注入开关停用）
   LiveWorld.js              世界快照轮询器（echo-snapshot.v1）：优先 /api/v0/world/snapshot，
                             降级 data/mock/snapshot.demo.json，再兜底内置快照；非 live 源由内置演化器驱动；
                             visibilitychange 时暂停；提供 onSnapshot/onEvent 订阅
   SnapshotAdapter.js        快照 agent → 渲染结构映射（状态归一化 walking|seated|talking|in-meeting|at-booth、
-                            CafeLayout 座位锚点对齐、事件 camelCase 归一化、modules 透传，纯函数可在 node 下自测）
+                            CafeLayout 座位锚点对齐、animation-cue/事件归一化、modules 透传，纯函数可在 node 下自测）
   WalkSlide.js              live 插值轻量避障：位移将进入阻挡圆时投影到切线滑动（纯函数，圆键 r/radius 兼容）
   ColliderRegistry.js       环境静态碰撞壳注册表（按环境资产 id 返回 bounds + 静态圆；hub-town 壳含建筑/
                             篝火/大树/河带（桥与汀步留口）；摊位圆由 BoothSystem 动态注入；NPC↔NPC 分离权威在后端）
   WorldSwitch.js            三级世界切换（?world=hall|cafe|field，默认 hall）+ 场域 person 参数；
-                            hall 使用小镇 Hub 夜集市环境（environment.hub-town.v1，入口/街道/篝火广场/花园小河）
+                            hall 的环境资产/摊位模板/镜头由 SceneVariants 场景版本独立选择（切换 world 时清掉 scene 参数）
   BoothSystem.js            展位系统：模板 GLB（module.market-stall.v2 商人推车，未到货降级简易占位展位）→
                             按快照 modules 克隆、MESH_* 展示面贴图/CanvasTexture 名牌与标签、增量同步、
                             每摊位按 personId 稳定配色变体（雨篷/车台布）、展位圆形阻挡与射线点选、0.3s 缩放入场
@@ -105,6 +117,7 @@ public/
   data/asset-catalog.json   环境/人物/资料资产白名单
   data/people/              人物 profile.json
 dist/                       构建产物（已提交 Git）
+tests/                      Node 内置测试（*.test.mjs）：character-animation / player-controls / booth-layout
 scripts/                    node 自测与冒烟：room-client.test.mjs（RoomClient 纯逻辑/状态机）、
                             smoke-room-client.mjs（真实后端双端 WS 冒烟，自动拉起本地 uvicorn）
 ```

@@ -61,6 +61,31 @@ const VISUAL_PROFILES = Object.freeze({
       Object.freeze({ position: [3.0, 1.6, 10.2], color: "#9ec2e8", intensity: 6, distance: 12 }),
     ]),
   }),
+  blockout: Object.freeze({
+    background: "#d9e2d7",
+    fog: Object.freeze({ color: "#d9e2d7", near: 24, far: 48 }),
+    toneMapping: THREE.NeutralToneMapping,
+    exposure: 1.02,
+    shadowType: THREE.PCFSoftShadowMap,
+    materialMode: "flat",
+    hemisphere: Object.freeze({ sky: "#eef5ef", ground: "#66705d", intensity: 1.25 }),
+    sun: Object.freeze({ color: "#ffe0a3", intensity: 3.2, position: [-8, 13, 7] }),
+    shadowBounds: Object.freeze({ left: -8, right: 8, top: 12, bottom: -14, far: 40 }),
+    points: Object.freeze([]),
+  }),
+  villageMarket: Object.freeze({
+    background: "#b8c8bc",
+    fog: Object.freeze({ color: "#b8c8bc", near: 42, far: 92 }),
+    toneMapping: THREE.ACESFilmicToneMapping,
+    exposure: 1.08,
+    shadowType: THREE.PCFSoftShadowMap,
+    materialMode: "gltf",
+    environmentMaterialMode: "gltf",
+    hemisphere: Object.freeze({ sky: "#e6efe4", ground: "#66704d", intensity: 1.28 }),
+    sun: Object.freeze({ color: "#ffd28f", intensity: 3.5, position: [-28, 42, 24] }),
+    shadowBounds: Object.freeze({ left: -34, right: 34, top: 34, bottom: -34, far: 110 }),
+    points: Object.freeze([]),
+  }),
 });
 
 let toonGradient = null;

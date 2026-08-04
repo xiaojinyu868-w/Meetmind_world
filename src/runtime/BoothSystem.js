@@ -19,6 +19,9 @@ import * as THREE from "three";
 export const BOOTH_BLOCKER_RADIUS = 0.9;
 export const BOOTH_TEMPLATE_ASSET_ID = "module.market-stall.v2";
 
+const MIN_BOOTH_INTERACTION_RADIUS = 2.15;
+const BOOTH_INTERACTION_MARGIN = 0.12;
+
 const ENTRANCE_DURATION = 0.3;
 const PLACEHOLDER_PORTRAIT = "portraits/photo-derived/voxel/host.png";
 const VOXEL_PORTRAITS = Object.freeze({
@@ -30,19 +33,30 @@ const VOXEL_PORTRAITS = Object.freeze({
   "su-he": "portraits/photo-derived/voxel/person_05.png",
   "tang-ke": "portraits/photo-derived/voxel/person_06.png",
 });
+const VILLAGE_MARKET_ENVIRONMENT_ASSET_ID = "environment.village-market.v1";
 const DISPLAY_MESH_NAMES = Object.freeze(
   new Set(["MESH_NamePlate", "MESH_Portrait", "MESH_PhotoFrame_01", "MESH_PhotoFrame_02", "MESH_Backdrop"]),
 );
 const CANVAS_FONT = '"PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif';
 
 // mock 快照缺 booth 时的内置演示锚点：小镇 Hub 街道两侧（与 build_hub_town.py PAD_Booth 一致，面向街道中心）
-const FALLBACK_BOOTH_POSITIONS = Object.freeze([
+const HUB_BOOTH_SLOTS = Object.freeze([
   Object.freeze({ x: -4.0, z: -12.6, yaw: Math.PI / 2 }),
   Object.freeze({ x: 4.0, z: -12.6, yaw: -Math.PI / 2 }),
   Object.freeze({ x: -4.0, z: -9.7, yaw: Math.PI / 2 }),
   Object.freeze({ x: 4.0, z: -9.7, yaw: -Math.PI / 2 }),
   Object.freeze({ x: -4.0, z: -6.8, yaw: Math.PI / 2 }),
   Object.freeze({ x: 4.0, z: -6.8, yaw: -Math.PI / 2 }),
+]);
+
+// 村落 1.0 使用环境 GLB 中现成的六张摊台。坐标由 GLB 包围盒标定；sourceNode 仅用于资产换版复核。
+const VILLAGE_MARKET_BOOTH_SLOTS = Object.freeze([
+  Object.freeze({ sourceNode: "samor_1112_119", x: 3.236, z: -10.894, yaw: Math.PI, personOffset: 1.7, personLateral: -0.6, blockerRadius: 1.4 }),
+  Object.freeze({ sourceNode: "samor_1112_116", x: 0.136, z: -9.634, yaw: Math.PI, personOffset: 1.7, blockerRadius: 1.4 }),
+  Object.freeze({ sourceNode: "samor_1112_113", x: 4.886, z: -7.864, yaw: Math.PI, personOffset: 1.7, blockerRadius: 1.4 }),
+  Object.freeze({ sourceNode: "samor_1112_184", x: -10.914, z: -4.454, yaw: Math.PI / 2, personOffset: 1.25, blockerRadius: 1.9 }),
+  Object.freeze({ sourceNode: "samor_1112_121", x: -9.864, z: 1.206, yaw: Math.PI, personOffset: 1.25, blockerRadius: 1.9 }),
+  Object.freeze({ sourceNode: "samor_1112_192", x: -6.394, z: 8.676, yaw: Math.PI, personOffset: 1.6, blockerRadius: 2.05 }),
 ]);
 
 // 每个摊位的配色变体（雨篷主色 × 车台布色）：按 personId 稳定取色，世界因此「每个摊位不一样」
@@ -67,29 +81,57 @@ function boothVariantIndexFor(personId) {
   return hash % BOOTH_COLOR_VARIANTS.length;
 }
 
-// 人物站位在展位正前方（出展人面向访客），与展位中心保持 0.85m
+// 人物站位在展位正前方（出展人面向访客）；具体摊台可覆盖默认距离。
 const PERSON_ANCHOR_OFFSET = 0.85;
 
 
+export function boothSlotsForEnvironment(environmentAssetId) {
+  return environmentAssetId === VILLAGE_MARKET_ENVIRONMENT_ASSET_ID
+    ? VILLAGE_MARKET_BOOTH_SLOTS
+    : HUB_BOOTH_SLOTS;
+}
+
+
+export function boothInteractionRadius(blockerRadius, visitorRadius = 0) {
+  const obstacleRadius = Math.max(0, finiteOr(blockerRadius, BOOTH_BLOCKER_RADIUS));
+  const actorRadius = Math.max(0, finiteOr(visitorRadius, 0));
+  return Math.max(
+    MIN_BOOTH_INTERACTION_RADIUS,
+    obstacleRadius + actorRadius + BOOTH_INTERACTION_MARGIN,
+  );
+}
+
+
 // 出生即站在自己的展位前：与 buildFallbackBooths 的人↔展位顺序同构
-export function fallbackBoothAnchor(index) {
-  const position = FALLBACK_BOOTH_POSITIONS[index % FALLBACK_BOOTH_POSITIONS.length];
+export function fallbackBoothAnchor(index, environmentAssetId = null) {
+  const slots = boothSlotsForEnvironment(environmentAssetId);
+  const position = slots[index % slots.length];
+  const personOffset = position.personOffset ?? PERSON_ANCHOR_OFFSET;
+  const personLateral = position.personLateral ?? 0;
   return {
-    x: position.x + Math.sin(position.yaw) * PERSON_ANCHOR_OFFSET,
-    z: position.z + Math.cos(position.yaw) * PERSON_ANCHOR_OFFSET,
+    x: position.x + Math.sin(position.yaw) * personOffset + Math.cos(position.yaw) * personLateral,
+    z: position.z + Math.cos(position.yaw) * personOffset - Math.sin(position.yaw) * personLateral,
     yaw: position.yaw,
   };
 }
 
 // 用现有 6 人构造演示展位（契约同构的 modules 条目）
-export function buildFallbackBooths(people) {
+export function buildFallbackBooths(people, environmentAssetId = null) {
+  const slots = boothSlotsForEnvironment(environmentAssetId);
   return (Array.isArray(people) ? people : []).map((person, index) => {
-    const position = FALLBACK_BOOTH_POSITIONS[index % FALLBACK_BOOTH_POSITIONS.length];
+    const position = slots[index % slots.length];
     return {
       id: `booth_${person.id}`,
       type: "booth",
       person_id: person.id,
-      position: { ...position },
+      position: {
+        x: position.x,
+        z: position.z,
+        yaw: position.yaw,
+        person_offset: position.personOffset ?? PERSON_ANCHOR_OFFSET,
+        person_lateral: position.personLateral ?? 0,
+        blocker_radius: position.blockerRadius ?? BOOTH_BLOCKER_RADIUS,
+      },
       display: {
         name: person.name,
         headline: person.headline ?? [person.role, person.city].filter(Boolean).join(" · "),
@@ -115,10 +157,29 @@ function normalizeBoothModule(raw) {
   const x = finiteOr(raw.position?.x, null);
   const z = finiteOr(raw.position?.z, null);
   if (x === null || z === null) return null;
+  const personOffset = Math.max(
+    0.7,
+    finiteOr(raw.position?.person_offset ?? raw.position?.personOffset, PERSON_ANCHOR_OFFSET),
+  );
+  const personLateral = finiteOr(
+    raw.position?.person_lateral ?? raw.position?.personLateral,
+    0,
+  );
+  const blockerRadius = Math.max(
+    0.35,
+    finiteOr(raw.position?.blocker_radius ?? raw.position?.blockerRadius, BOOTH_BLOCKER_RADIUS),
+  );
   return {
     id: typeof raw.id === "string" ? raw.id : `booth_${personId}`,
     personId,
-    position: { x, z, yaw: finiteOr(raw.position?.yaw, 0) },
+    position: {
+      x,
+      z,
+      yaw: finiteOr(raw.position?.yaw, 0),
+      personOffset,
+      personLateral,
+      blockerRadius,
+    },
     display: raw.display && typeof raw.display === "object" ? raw.display : {},
   };
 }
@@ -234,8 +295,8 @@ function orientDisplayTowardVisitor(mesh) {
 }
 
 
-// 模板 GLB 未到货时的简易占位展位：展示面网格同名，贴图/绘制路径一致
-function buildFallbackTemplate() {
+// 村落已有实体摊台时仅补资料板；资产加载失败时仍可生成带台箱的完整兜底展位。
+function buildFallbackTemplate({ includeCounter = true } = {}) {
   const group = new THREE.Group();
   group.name = "BOOTH_TemplateFallback";
   const wood = new THREE.MeshStandardMaterial({ color: "#8a6a4a", roughness: 0.9 });
@@ -243,28 +304,37 @@ function buildFallbackTemplate() {
   const displayMaterial = () =>
     new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 0.92 });
 
-  const counter = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.95, 0.6), wood);
-  counter.position.set(0, 0.475, 0.38);
+  const boardZ = includeCounter ? -0.46 : -1.45;
+  const displayZ = boardZ + 0.045;
   const backdrop3d = new THREE.Mesh(new THREE.BoxGeometry(2.0, 2.3, 0.08), board);
-  backdrop3d.position.set(0, 1.32, -0.46);
+  backdrop3d.name = "MESH_BackdropBoard";
+  backdrop3d.position.set(0, 1.32, boardZ);
 
   const backdrop = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 1.6), displayMaterial());
   backdrop.name = "MESH_Backdrop";
-  backdrop.position.set(0, 1.1, -0.415);
+  backdrop.position.set(0, 1.1, displayZ);
   const namePlate = new THREE.Mesh(new THREE.PlaneGeometry(1.35, 0.44), displayMaterial());
   namePlate.name = "MESH_NamePlate";
-  namePlate.position.set(0, 2.2, -0.415);
+  namePlate.position.set(0, 2.2, displayZ);
   const portrait = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.72), displayMaterial());
   portrait.name = "MESH_Portrait";
-  portrait.position.set(-0.55, 1.15, -0.41);
+  portrait.position.set(-0.55, 1.15, displayZ + 0.005);
   const photo1 = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.38), displayMaterial());
   photo1.name = "MESH_PhotoFrame_01";
-  photo1.position.set(0.48, 1.45, -0.41);
+  photo1.position.set(0.48, 1.45, displayZ + 0.005);
   const photo2 = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.38), displayMaterial());
   photo2.name = "MESH_PhotoFrame_02";
-  photo2.position.set(0.48, 0.95, -0.41);
+  photo2.position.set(0.48, 0.95, displayZ + 0.005);
 
-  group.add(counter, backdrop3d, backdrop, namePlate, portrait, photo1, photo2);
+  if (includeCounter) {
+    const counter = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.95, 0.6), wood);
+    counter.name = "MESH_FallbackCounter";
+    counter.position.set(0, 0.475, 0.38);
+    group.add(counter);
+  } else {
+    wood.dispose();
+  }
+  group.add(backdrop3d, backdrop, namePlate, portrait, photo1, photo2);
   return group;
 }
 
@@ -285,6 +355,10 @@ export class BoothSystem {
   }
 
   async prepare() {
+    if (!this.templateAssetId) {
+      this.template = buildFallbackTemplate({ includeCounter: false });
+      return this;
+    }
     try {
       const asset = this.assetCatalog.resolve(this.templateAssetId, "environment-module");
       this.template = await this.assetStore.loadScene(asset.resolvedUrl);
@@ -324,9 +398,11 @@ export class BoothSystem {
 
   get blockers() {
     return [...this.booths.values()].map((record) => ({
+      id: record.id,
+      personId: record.personId,
       x: record.position.x,
       z: record.position.z,
-      radius: BOOTH_BLOCKER_RADIUS,
+      radius: record.position.blockerRadius,
     }));
   }
 
@@ -347,14 +423,14 @@ export class BoothSystem {
     return null;
   }
 
-  // 出展人站位锚点：展位正前方 PERSON_ANCHOR_OFFSET 处，朝向与展位一致（面向访客）
+  // 出展人站位锚点：展位正前方，按摊台深度保留不穿模距离，朝向与展位一致。
   personAnchorFor(personId) {
     const record = this.boothForPerson(personId);
     if (!record) return null;
-    const { x, z, yaw } = record.position;
+    const { x, z, yaw, personOffset, personLateral } = record.position;
     return {
-      x: x + Math.sin(yaw) * PERSON_ANCHOR_OFFSET,
-      z: z + Math.cos(yaw) * PERSON_ANCHOR_OFFSET,
+      x: x + Math.sin(yaw) * personOffset + Math.cos(yaw) * personLateral,
+      z: z + Math.cos(yaw) * personOffset - Math.sin(yaw) * personLateral,
       yaw,
     };
   }
@@ -391,7 +467,11 @@ export class BoothSystem {
     }
     // hover 提示地环（初始隐藏，setHighlighted 控制）
     const hoverRing = new THREE.Mesh(
-      new THREE.RingGeometry(BOOTH_BLOCKER_RADIUS + 0.06, BOOTH_BLOCKER_RADIUS + 0.2, 40),
+      new THREE.RingGeometry(
+        booth.position.blockerRadius + 0.06,
+        booth.position.blockerRadius + 0.2,
+        40,
+      ),
       new THREE.MeshBasicMaterial({
         color: "#f2c55f",
         transparent: true,

@@ -265,22 +265,29 @@ function variantControlsMarkup({
   activeCharacterVariant,
   context,
 }) {
-  return `
-    <div class="variant-controls variant-controls--${context}">
-      ${variantSwitcherMarkup({
+  const sceneSwitcher = sceneVariants.length > 1 && activeSceneVariant
+    ? variantSwitcherMarkup({
         variants: sceneVariants,
         activeVariant: activeSceneVariant,
         context,
         kind: "scene",
-        label: "场景风格",
-      })}
-      ${characterVariants.length > 1 ? variantSwitcherMarkup({
+        label: "场景版本",
+      })
+    : "";
+  const characterSwitcher = characterVariants.length > 1 && activeCharacterVariant
+    ? variantSwitcherMarkup({
         variants: characterVariants,
         activeVariant: activeCharacterVariant,
         context,
         kind: "character",
         label: "人物生成方案",
-      }) : ""}
+      })
+    : "";
+  if (!sceneSwitcher && !characterSwitcher) return "";
+  return `
+    <div class="variant-controls variant-controls--${context}">
+      ${sceneSwitcher}
+      ${characterSwitcher}
     </div>`;
 }
 

@@ -3,18 +3,38 @@ import { currentUser, people, relationships } from "./data/demoPeople.js";
 import { personSignals } from "./data/demoSignals.js";
 import { AssetCatalog } from "./runtime/AssetCatalog.js";
 import { AssetStore } from "./runtime/AssetStore.js";
-import { BoothSystem, buildFallbackBooths, fallbackBoothAnchor } from "./runtime/BoothSystem.js";
+import {
+  BoothSystem,
+  boothInteractionRadius,
+  buildFallbackBooths,
+  fallbackBoothAnchor,
+} from "./runtime/BoothSystem.js";
 import { CAFE_LAYOUT, tableById } from "./runtime/CafeLayout.js";
+import {
+  CAFE_SCENE_VARIANTS,
+  cafeSceneVariantFromLocation,
+  navigateToCafeSceneVariant,
+} from "./runtime/CafeVariants.js";
 import { CharacterExpressionSystem } from "./runtime/CharacterExpressionSystem.js";
-import { CharacterSystem } from "./runtime/CharacterSystem.js";
+import { CHARACTER_ACTIONS, CharacterSystem } from "./runtime/CharacterSystem.js";
+import {
+  DEFAULT_CHARACTER_COLLIDER,
+  capsuleFitsAt,
+  capsulePenetrationAt,
+} from "./runtime/CharacterCapsule.js";
 import { colliderShellFor } from "./runtime/ColliderRegistry.js";
 import { HeartSignalSystem } from "./runtime/HeartSignalSystem.js";
+import { createHubBlockoutEnvironment } from "./runtime/HubBlockout.js";
 import { FALLBACK_SNAPSHOT, LiveWorld } from "./runtime/LiveWorld.js";
 import { NpcAgentSystem } from "./runtime/NpcAgentSystem.js";
 import { PersonSignalStore } from "./runtime/PersonSignalStore.js";
 import { RelationshipFieldSystem } from "./runtime/RelationshipFieldSystem.js";
 import { tryLoadFieldSplatWorld, snapObjectToFieldGround } from "./runtime/FieldSplatWorld.js";
 import { RoomClient } from "./runtime/CafeRoomClient.js";
+import {
+  createVillageMarketEnvironment,
+  VILLAGE_MARKET_LAYOUT,
+} from "./runtime/VillageMarketEnvironment.js";
 import { WorldBroadcastSystem } from "./runtime/WorldBroadcastSystem.js";
 import { WorldModuleRegistry } from "./runtime/WorldModuleRegistry.js";
 import {
@@ -26,12 +46,14 @@ import {
 import {
   SCENE_VARIANT_OPTIONS,
   navigateToSceneVariant,
-  sceneVariantById,
   sceneVariantFromLocation,
 } from "./runtime/SceneVariants.js";
 import { adaptSnapshot, normalizeEvent } from "./runtime/SnapshotAdapter.js";
 import { useLiveMode } from "./runtime/mock/MockApi.js";
-import { slideStepAroundBlockers } from "./runtime/WalkSlide.js";
+import { slideCapsuleStepAroundBlockers } from "./runtime/WalkSlide.js";
+import { CameraRelativeMovement } from "./runtime/CameraRelativeMovement.js";
+import { Input } from "./runtime/Input.js";
+import { ThirdPersonCamera } from "./runtime/ThirdPersonCamera.js";
 import {
   CAFE_WORLD,
   FIELD_WORLD,
@@ -55,15 +77,26 @@ import "./cafe.css";
 
 
 const WORLD_SPEC_URL = publicUrl("data/world-spec.json");
-const activeSceneVariant = sceneVariantFromLocation();
+const activeWorld = worldFromLocation();
+const isHallWorld = activeWorld.id === "hall";
+const isCafeWorld = activeWorld.id === "cafe";
+const isFieldWorld = activeWorld.id === "field";
+const activeSceneVariant = isHallWorld
+  ? sceneVariantFromLocation()
+  : isCafeWorld
+    ? cafeSceneVariantFromLocation()
+    : null;
 const activeCharacterVariant = characterVariantFromLocation();
 const canonicalUrl = new URL(window.location.href);
 let replaceCanonicalUrl = false;
-if (
+if ((isHallWorld || isCafeWorld) &&
   canonicalUrl.searchParams.has("scene") &&
   canonicalUrl.searchParams.get("scene") !== activeSceneVariant.id
 ) {
   canonicalUrl.searchParams.set("scene", activeSceneVariant.id);
+  replaceCanonicalUrl = true;
+} else if (isFieldWorld && canonicalUrl.searchParams.has("scene")) {
+  canonicalUrl.searchParams.delete("scene");
   replaceCanonicalUrl = true;
 }
 if (
@@ -77,11 +110,6 @@ if (replaceCanonicalUrl) {
   window.history.replaceState(window.history.state, "", canonicalUrl);
 }
 
-// 两级世界：展位大厅（hall，默认）/ 咖啡厅（cafe），?world= URL 参数 + 刷新切换
-const activeWorld = worldFromLocation();
-const isHallWorld = activeWorld.id === "hall";
-const isCafeWorld = activeWorld.id === "cafe";
-const isFieldWorld = activeWorld.id === "field";
 const fieldTargetPersonId = fieldPersonFromLocation() ?? people[0].id;
 const fieldTargetPerson = people.find((person) => person.id === fieldTargetPersonId) ?? people[0];
 const invitedPersonId = new URLSearchParams(window.location.search).get("invite");
@@ -91,35 +119,44 @@ const screenUrlParams = new URLSearchParams(window.location.search);
 const screenMode =
   screenUrlParams.get("role") === "screen" || screenUrlParams.get("groupScreen") === "1";
 const screenRoomId = screenUrlParams.get("room");
-// 大厅用专属黄昏夜集视觉（hub-town 环境）；场域沿用 v1 中性配置
+// 大厅视觉由场景版本驱动（original=hub-town 黄昏夜集 / v1=村落集市）；场域沿用中性配置
 const activeVisualProfile = isHallWorld
-  ? "hubDusk"
+  ? activeSceneVariant.visualProfile
   : isFieldWorld
-    ? sceneVariantById("v1").visualProfile
+    ? "current"
     : activeSceneVariant.visualProfile;
 const environmentAssetId = isHallWorld
-  ? HALL_LAYOUT.environmentAssetId
+  ? activeSceneVariant.environmentAssetId
   : isFieldWorld
     ? FIELD_WORLD.environmentAssetId
     : activeSceneVariant.environmentAssetId;
+const hallCafeDoor = environmentAssetId === "environment.village-market.v1"
+  ? VILLAGE_MARKET_LAYOUT.cafeDoor
+  : Object.freeze({ x: -4.1, z: 0.6 });
 // 静态碰撞壳（边界 + 静态圆）统一从注册表取数；大厅动态摊位圆由 BoothSystem 注入
 const worldShell = colliderShellFor(environmentAssetId);
 const worldBounds = worldShell.bounds;
 // splat 场域会在加载后按可行走面实测改写出生点（spawnHint），故用 let
 let worldPlayerSpawn = isHallWorld
-  ? HALL_LAYOUT.playerSpawn
+  ? activeSceneVariant.playerSpawn ?? HALL_LAYOUT.playerSpawn
   : isFieldWorld
     ? FIELD_WORLD.playerSpawn
     : CAFE_LAYOUT.playerSpawn;
-const worldTitle = isCafeWorld ? activeSceneVariant.title : activeWorld.title;
+const worldTitle = isHallWorld
+  ? activeSceneVariant.title
+  : isCafeWorld
+    ? activeSceneVariant.title
+    : activeWorld.title;
+const cinematicProfile = isHallWorld ? activeSceneVariant.cinematic : null;
 document.body.dataset.world = activeWorld.id;
 
 const MOVE_SPEED = 2.7;
 const PLAYER_FOOT_OFFSET = 0.018;
-const SEATED_SCALE_Y = 0.82;
-const SEATED_ROOT_Y = 0.025;
+const PLAYER_SEAT_ARRIVAL_DISTANCE = 0.06;
+const LIVE_SEAT_APPROACH_DISTANCE = 0.72;
+const LIVE_SEAT_ARRIVAL_DISTANCE = 0.08;
+const LIVE_SEAT_EXIT_DISTANCE = 0.24;
 const MODEL_FORWARD = new THREE.Vector3(0, 0, 1);
-const WORLD_UP = new THREE.Vector3(0, 1, 0);
 // 咖啡厅 NPC 出生的最后兜底（优先用 LiveWorld.FALLBACK_SNAPSHOT 的生活化座位/站位，
 // 避免快照到达前所有人在门口站成一排）
 const NPC_ENTRY_SPAWNS = Object.freeze([
@@ -134,7 +171,6 @@ const LIVE_WALK_SPEED = 1.5;
 const LIVE_BUBBLE_DURATION = 4;
 const HALL_GLANCE_DURATION = 0.9;
 const HALL_GLANCE_ANGLE = Math.PI / 12; // 主理人回眸幅度 15°
-const NPC_COLLIDER_RADIUS = 0.35; // 玩家 ↔ NPC 软碰撞圆半径
 
 // 快照新人（confirm 第 7 人+）缺调色板时，按 id 哈希从六人调色板确定性取一个
 const FALLBACK_PALETTES = Object.freeze(people.map((person) => person.palette));
@@ -215,8 +251,33 @@ const fatalError = document.querySelector("#fatal-error");
 
 const scene = new THREE.Scene();
 
-const camera = new THREE.PerspectiveCamera(48, 1, 0.06, 80);
+const input = new Input(canvas);
+const cameraController = new ThirdPersonCamera({
+  canvas,
+  fov: 48,
+  aspect: 1,
+  near: 0.06,
+  far: cinematicProfile?.far ?? 80,
+  distance: 4.8,
+  pitch: 0.42,
+});
+const camera = cameraController.camera;
 camera.position.set(6.7, 4.6, 8.2);
+// Cafe bounds are walls. Outdoor worlds get a wider shell so the camera can
+// orbit naturally at the edge of their walkable terrain.
+const cameraBounds = isCafeWorld
+  ? Object.freeze({
+      ...worldBounds,
+      openings: Object.freeze([
+        Object.freeze({ side: "maxZ", min: -1.65, max: 1.65 }),
+      ]),
+    })
+  : Object.freeze({
+      minX: worldBounds.minX - cameraController.maxDistance,
+      maxX: worldBounds.maxX + cameraController.maxDistance,
+      minZ: worldBounds.minZ - cameraController.maxDistance,
+      maxZ: worldBounds.maxZ + cameraController.maxDistance,
+    });
 
 const renderer = new THREE.WebGLRenderer({
   canvas,
@@ -236,21 +297,21 @@ const rayOrigin = new THREE.Vector3();
 const rayDown = new THREE.Vector3(0, -1, 0);
 const pointerNdc = new THREE.Vector2();
 const pointerStart = new THREE.Vector2();
-const pressedKeys = new Set();
+let pointerStartedLocked = false;
 const moveInput = new THREE.Vector2();
 const touchInput = new THREE.Vector2();
 const moveDirection = new THREE.Vector3();
-const movementForward = new THREE.Vector3();
-const movementRight = new THREE.Vector3();
 const currentHeading = new THREE.Vector3(0, 0, -1);
+const playerMovement = new CameraRelativeMovement({ speed: MOVE_SPEED });
 const desiredCameraPosition = new THREE.Vector3();
 const desiredLookTarget = new THREE.Vector3();
 const lookTarget = new THREE.Vector3(0, 0.85, 0);
 const projected = new THREE.Vector3();
 const candidatePosition = new THREE.Vector3();
-const slidePosition = new THREE.Vector3();
 const targetQuaternion = new THREE.Quaternion();
-const cinematicTarget = new THREE.Vector3(0, 0.72, -0.35);
+const cinematicBasePosition = new THREE.Vector3(...(cinematicProfile?.position ?? [6.45, 4.55, 8]));
+const cinematicTarget = new THREE.Vector3(...(cinematicProfile?.target ?? [0, 0.72, -0.35]));
+const cinematicOrbit = cinematicProfile?.orbit ?? [0.45, 0.12, 0.34];
 const groundMeshes = [];
 
 let worldReady = false;
@@ -295,6 +356,7 @@ let fieldSplatWorld = null;
 let worldBroadcastSystem = null;
 let worldModuleRegistry = null;
 let playerSeatedAt = null;
+let playerSeatTarget = null;
 let pendingSceneInviteId = people.some((person) => person.id === invitedPersonId)
   ? invitedPersonId
   : null;
@@ -316,14 +378,20 @@ const appShell = createCafeShell({
   currentUser,
   people,
   relationships,
-  sceneVariants: SCENE_VARIANT_OPTIONS,
+  sceneVariants: isHallWorld
+    ? SCENE_VARIANT_OPTIONS
+    : isCafeWorld
+      ? CAFE_SCENE_VARIANTS
+      : [],
   activeSceneVariant,
   characterVariants: CHARACTER_VARIANT_OPTIONS,
   activeCharacterVariant,
   signalStore: personSignalStore,
   onViewChange: setExperienceMode,
   onSceneVariantChange: (variantId) => {
-    if (variantId !== activeSceneVariant.id) navigateToSceneVariant(variantId);
+    if (variantId === activeSceneVariant?.id) return;
+    if (isHallWorld) navigateToSceneVariant(variantId);
+    else if (isCafeWorld) navigateToCafeSceneVariant(variantId);
   },
   onCharacterVariantChange: (variantId) => {
     if (variantId !== activeCharacterVariant.id) navigateToCharacterVariant(variantId);
@@ -475,13 +543,12 @@ function characterSpec(person, instanceId, spawn, idleBob = 0.005) {
 }
 
 
-function actorAt(entity, x, z, yaw, rootY = null) {
+function actorAt(entity, x, z, yaw) {
   const groundY = surfaceHeightAt(x, z);
   if (groundY === null) throw new Error(`人物坐标超出咖啡厅地面：${x}, ${z}`);
-  const y = rootY ?? groundY;
-  entity.root.position.set(x, y, z);
+  entity.root.position.set(x, groundY, z);
   entity.root.rotation.set(0, yaw, 0);
-  entity.baseY = y;
+  entity.baseY = groundY;
 }
 
 
@@ -517,13 +584,32 @@ async function spawnCharacters() {
   player = playerEntity.root;
   playerGroundY = player.position.y;
   currentHeading.copy(MODEL_FORWARD).applyQuaternion(player.quaternion).setY(0).normalize();
+  syncPlayerHeading(currentHeading);
   expressionSystem.register(playerEntity, currentUser.id, activeCharacterVariant.id);
 
   const visiblePeople = isFieldWorld ? [fieldTargetPerson] : people;
   npcSystem = new NpcAgentSystem({
     people: visiblePeople,
-    onConversation: (event) => appShell.showNpcConversation(event),
-    onStateChange: (state) => appShell.updateAgentState(state),
+    resolveMovement: ({ agent, entity, stepX, stepZ, targetX, targetZ }) =>
+      resolveCharacterMovement(entity, stepX, stepZ, {
+        targetX,
+        targetZ,
+        approachRadius: LIVE_SEAT_APPROACH_DISTANCE,
+        targetApproach: true,
+        targetBlockerId: agent.tableId,
+      }),
+    onConversation: (event) => {
+      appShell.showNpcConversation(event);
+      characterSystem.playAction(event.speakerId, CHARACTER_ACTIONS.TALK, {
+        durationMs: event.duration * 1000,
+      });
+    },
+    onStateChange: (state) => {
+      appShell.updateAgentState(state);
+      characterSystem.setState(npcSystem?.getEntity(state.personId), state.status, {
+        seated: state.status === "seated" || state.status === "in-meeting",
+      });
+    },
   });
 
   const fieldCompanion = relationshipField?.scene?.companion ?? { x: 0, z: -1.1, yaw: 0 };
@@ -533,7 +619,7 @@ async function spawnCharacters() {
     FALLBACK_SNAPSHOT.agents.map((agent) => [agent.id, agent.position]),
   );
   const npcSpawnFor = (person, index) => {
-    if (isHallWorld) return fallbackBoothAnchor(index);
+    if (isHallWorld) return fallbackBoothAnchor(index, environmentAssetId);
     if (isFieldWorld) return fieldCompanion;
     return fallbackSnapshotSpawn.get(person.id) ?? NPC_ENTRY_SPAWNS[index];
   };
@@ -619,11 +705,12 @@ async function configureWorld(root) {
   worldBroadcastSystem = new WorldBroadcastSystem({ scene, api, world: activeWorld.id });
   worldBroadcastSystem.mount();
   worldReady = true;
+  syncControlAvailability();
   canvas.dataset.ready = "true";
   canvas.dataset.characterCount = String(characterSystem.entities.length);
   canvas.dataset.npcCount = String(npcSystem.agents.size);
   canvas.dataset.environment = environmentAssetId;
-  canvas.dataset.sceneVariant = activeSceneVariant.id;
+  canvas.dataset.sceneVariant = activeSceneVariant?.id ?? "field";
   setProgress(1, `${worldTitle} 已准备好`);
   appShell.setWorldReady(true);
   startLiveWorld();
@@ -644,14 +731,72 @@ async function configureWorld(root) {
 function setExperienceMode(mode) {
   experienceMode = mode;
   canvas.dataset.appView = mode;
-  pressedKeys.clear();
-  touchInput.set(0, 0);
-  touchKnob.style.transform = "translate(0, 0)";
+  resetPlayerInput();
+  if (mode !== "cafe") characterSystem?.setActivity(playerEntity);
   if (playerMarker) playerMarker.visible = mode === "cafe" && !meetingMode;
   if (mode !== "cafe") playerLabel.style.opacity = "0";
   tickBadge.style.display = mode === "cafe" && !isFieldWorld ? "flex" : "none";
   heartSignalSystem.setVisible(mode === "cafe" && !isFieldWorld);
-  if (mode === "cafe") canvas.focus({ preventScroll: true });
+  if (mode === "cafe") {
+    canvas.focus({ preventScroll: true });
+    if (player) {
+      cameraController.snapTo(player.position, {
+        groundHeightAt: surfaceHeightAt,
+        blockers: currentBlockers(),
+        bounds: cameraBounds,
+      });
+    }
+  }
+  syncControlAvailability();
+}
+
+
+function resetPlayerInput() {
+  input.reset();
+  touchInput.set(0, 0);
+  touchKnob.style.transform = "translate(0, 0)";
+}
+
+
+function syncPlayerHeading(direction) {
+  currentHeading.copy(direction).setY(0);
+  if (currentHeading.lengthSq() < 1e-6) currentHeading.set(0, 0, -1);
+  currentHeading.normalize();
+  playerMovement.reset(currentHeading);
+  cameraController.setYawFromHeading(currentHeading);
+}
+
+
+function hasBlockingWorldUi() {
+  const integrationIsOpen = (surface) => {
+    const openState = surface?.isOpen;
+    return typeof openState === "function"
+      ? Boolean(openState.call(surface))
+      : Boolean(openState);
+  };
+  return Boolean(
+    sceneInteraction?.isOpen ||
+    appShell?.isMeetingSheetOpen ||
+    integrationIsOpen(integrations.panel) ||
+    integrationIsOpen(integrations.flow) ||
+    integrationIsOpen(integrations.onboardingFlow) ||
+    integrationIsOpen(integrations.groupPlay),
+  );
+}
+
+
+function syncControlAvailability() {
+  const uiBlocked = hasBlockingWorldUi();
+  const freeCamera = (
+    worldReady &&
+    experienceMode === "cafe" &&
+    !meetingMode &&
+    !playerSeatedAt &&
+    !playerSeatTarget &&
+    !uiBlocked
+  );
+  input.setPointerLockEnabled(freeCamera);
+  cameraController.setEnabled(freeCamera);
 }
 
 
@@ -661,6 +806,7 @@ function selectWorldPerson(personId) {
   appShell.selectWorldPerson(selectedPersonId);
   canvas.dataset.selectedPerson = selectedPersonId ?? "";
   onPersonSelected(selectedPersonId);
+  syncControlAvailability();
   if (!selectionMarker) return person;
   selectionMarker.visible = Boolean(person);
   updateSelectionMarker();
@@ -681,6 +827,61 @@ function updateSelectionMarker() {
     entity.root.position.z,
   );
   selectionMarker.material.opacity = 0.58 + Math.sin(elapsed * 4.2) * 0.12;
+}
+
+
+function seatedAnimationComplete(entity) {
+  const animation = entity?.animation;
+  return !animation || (
+    animation.posture === "seated" &&
+    animation.currentRole !== CHARACTER_ACTIONS.SIT_DOWN
+  );
+}
+
+
+function meetingActorsReady(personIds) {
+  if (
+    playerSeatTarget ||
+    playerSeatedAt !== CAFE_LAYOUT.roundtable.id ||
+    !seatedAnimationComplete(playerEntity)
+  ) return false;
+
+  return personIds.every((personId) => {
+    const entity = npcSystem.getEntity(personId);
+    if (!entity || !seatedAnimationComplete(entity)) return false;
+    if (liveEnabled) {
+      const target = liveMeetingOverrides.get(personId);
+      return Boolean(
+        target &&
+        entity.root.userData.characterSeatKey === liveSeatKey(target),
+      );
+    }
+    const state = npcSystem.getState(personId);
+    return state?.status === "in-meeting" && state.tableId === CAFE_LAYOUT.roundtable.id;
+  });
+}
+
+
+function waitForMeetingActors(personIds, timeoutMs = 15000) {
+  const startedAt = performance.now();
+  return new Promise((resolve, reject) => {
+    const check = () => {
+      if (!meetingMode) {
+        reject(new Error("Meeting was cancelled before everyone was seated"));
+        return;
+      }
+      if (meetingActorsReady(personIds)) {
+        resolve();
+        return;
+      }
+      if (performance.now() - startedAt >= timeoutMs) {
+        reject(new Error("Timed out while waiting for meeting participants to sit"));
+        return;
+      }
+      requestAnimationFrame(check);
+    };
+    check();
+  });
 }
 
 
@@ -764,14 +965,9 @@ async function startMeeting(personIds, topic = null) {
     : [0, ...accepted.map((_, index) => index + 1)];
   meetingMode = true;
   const playerSeat = CAFE_LAYOUT.roundtable.seats[0];
-  actorAt(playerEntity, playerSeat.x, playerSeat.z, playerSeat.yaw, SEATED_ROOT_Y);
-  player.scale.set(1, SEATED_SCALE_Y, 1);
-  playerMarker.visible = false;
-  playerEntity.spec.behavior.idle_bob = 0.003;
-  currentHeading.set(Math.sin(playerSeat.yaw), 0, Math.cos(playerSeat.yaw));
-  pressedKeys.clear();
-  touchInput.set(0, 0);
+  beginPlayerSeatApproach(CAFE_LAYOUT.roundtable.id, playerSeat);
   canvas.dataset.meetingActive = "true";
+  canvas.dataset.meetingReady = "false";
   canvas.dataset.meetingInvited = accepted.join(",");
   await recordWorldEvent(
     "meeting-started",
@@ -779,6 +975,13 @@ async function startMeeting(personIds, topic = null) {
     accepted,
     { table_id: CAFE_LAYOUT.roundtable.id },
   );
+  try {
+    await waitForMeetingActors(accepted);
+  } catch (error) {
+    if (meetingMode) await endMeeting();
+    throw error;
+  }
+  canvas.dataset.meetingReady = "true";
   return accepted;
 }
 
@@ -794,17 +997,33 @@ function teardownMeetingLocalState() {
     roomMeetingId = null;
     roomInvitationId = null;
   }
+  playerSeatTarget = null;
+  playerSeatedAt = null;
+  canvas.dataset.playerSeatTarget = "";
+  canvas.dataset.playerSeatedAt = "";
   player.scale.set(1, 1, 1);
   playerMarker.visible = experienceMode === "cafe";
   playerEntity.spec.behavior.idle_bob = 0;
   actorAt(playerEntity, 0, 3.12, Math.PI);
+  characterSystem.setActivity(playerEntity);
   playerGroundY = playerEntity.baseY;
   updatePlayerMarker();
-  currentHeading.set(0, 0, -1);
-  liveMeetingOverrides.clear();
+  syncPlayerHeading(new THREE.Vector3(0, 0, -1));
+  cameraController.snapTo(player.position, {
+    groundHeightAt: surfaceHeightAt,
+    blockers: currentBlockers(),
+    bounds: cameraBounds,
+  });
+  syncControlAvailability();
+  if (liveEnabled) {
+    liveMeetingOverrides.clear();
+  } else {
+    npcSystem.endMeeting();
+  }
   liveMeetingSeatIndices = [];
   liveMeetingId = null;
   canvas.dataset.meetingActive = "false";
+  canvas.dataset.meetingReady = "false";
   canvas.dataset.meetingInvited = "";
 }
 
@@ -924,9 +1143,8 @@ function rebuildSceneHotspots() {
       {
         id: "hall-cafe-door",
         kind: "venue",
-        // 咖啡厅外观模块门前的世界锚点（build_hub_town.py ANCHOR_CafeDoor）
-        x: -4.1,
-        z: 0.6,
+        x: hallCafeDoor.x,
+        z: hallCafeDoor.z,
         radius: cafeModule?.interaction?.radius ?? 1.9,
         eyebrow: "广场西侧的室内空间",
         title: cafeModule?.label ?? "Echo Cafe",
@@ -955,7 +1173,10 @@ function rebuildSceneHotspots() {
         kind: "booth",
         x: record.position.x,
         z: record.position.z,
-        radius: 2.15,
+        radius: boothInteractionRadius(
+          record.position.blockerRadius,
+          DEFAULT_CHARACTER_COLLIDER.radius,
+        ),
         personId: record.personId,
         eyebrow: "人 ↔ 共同课题 ↔ 人",
         title: `${record.displayName ?? nameOf(record.personId)}的摊位`,
@@ -1129,6 +1350,47 @@ function inviteActions() {
 }
 
 
+function finishPlayerSeatApproach() {
+  const target = playerSeatTarget;
+  if (!target) return false;
+  playerSeatTarget = null;
+  actorAt(playerEntity, target.x, target.z, target.yaw);
+  playerGroundY = playerEntity.baseY;
+  playerEntity.spec.behavior.idle_bob = 0;
+  playerMarker.visible = false;
+  syncPlayerHeading(new THREE.Vector3(Math.sin(target.yaw), 0, Math.cos(target.yaw)));
+  playerSeatedAt = target.id;
+  canvas.dataset.playerSeatTarget = "";
+  canvas.dataset.playerSeatedAt = target.id;
+  characterSystem.setActivity(playerEntity, { seated: true });
+  rebuildSceneHotspots();
+  syncControlAvailability();
+  return true;
+}
+
+
+function beginPlayerSeatApproach(id, seat) {
+  if (!playerEntity || !seat) return false;
+  playerSeatTarget = {
+    id,
+    x: seat.x,
+    z: seat.z,
+    yaw: seat.yaw,
+  };
+  playerSeatedAt = null;
+  canvas.dataset.playerSeatedAt = "";
+  canvas.dataset.playerSeatTarget = id;
+  playerEntity.spec.behavior.idle_bob = 0;
+  playerMarker.visible = experienceMode === "cafe";
+  resetPlayerInput();
+  syncControlAvailability();
+  characterSystem.setActivity(playerEntity);
+  const distance = Math.hypot(seat.x - player.position.x, seat.z - player.position.z);
+  if (distance <= PLAYER_SEAT_ARRIVAL_DISTANCE) finishPlayerSeatApproach();
+  return true;
+}
+
+
 function sitPlayerAt(tableId) {
   const table = tableById(tableId);
   if (!table || meetingMode) return false;
@@ -1141,16 +1403,7 @@ function sitPlayerAt(tableId) {
   const seatIndex = table.seats.findIndex((_, index) => !occupied.has(index));
   if (seatIndex < 0) return false; // 桌子坐满：保持站立，由调用方给出提示
   const seat = table.seats[seatIndex];
-  actorAt(playerEntity, seat.x, seat.z, seat.yaw, SEATED_ROOT_Y);
-  player.scale.set(1, SEATED_SCALE_Y, 1);
-  playerEntity.spec.behavior.idle_bob = 0.003;
-  playerGroundY = playerEntity.baseY;
-  playerMarker.visible = false;
-  currentHeading.set(Math.sin(seat.yaw), 0, Math.cos(seat.yaw));
-  playerSeatedAt = tableId;
-  canvas.dataset.playerSeatedAt = tableId;
-  rebuildSceneHotspots();
-  return true;
+  return beginPlayerSeatApproach(tableId, seat);
 }
 
 
@@ -1180,32 +1433,27 @@ function sitPlayerAtCampfire() {
     }
   }
   const yaw = Math.atan2(CAMPFIRE_CENTER.x - stool.x, CAMPFIRE_CENTER.z - stool.z);
-  actorAt(playerEntity, stool.x, stool.z, yaw, SEATED_ROOT_Y);
-  player.scale.set(1, SEATED_SCALE_Y, 1);
-  playerEntity.spec.behavior.idle_bob = 0.003;
-  playerGroundY = playerEntity.baseY;
-  playerMarker.visible = false;
-  currentHeading.set(Math.sin(yaw), 0, Math.cos(yaw));
-  playerSeatedAt = "campfire";
-  canvas.dataset.playerSeatedAt = "campfire";
-  rebuildSceneHotspots();
-  return true;
+  return beginPlayerSeatApproach("campfire", { ...stool, yaw });
 }
 
 
 function leavePlayerSeat() {
-  if (!playerSeatedAt) return false;
+  if (!playerSeatedAt && !playerSeatTarget) return false;
   const x = player.position.x;
   const z = player.position.z;
   const yaw = Math.atan2(currentHeading.x, currentHeading.z);
+  playerSeatTarget = null;
   actorAt(playerEntity, x, z, yaw);
+  syncPlayerHeading(currentHeading);
   playerGroundY = playerEntity.baseY;
-  player.scale.set(1, 1, 1);
   playerEntity.spec.behavior.idle_bob = 0;
   playerMarker.visible = experienceMode === "cafe";
   playerSeatedAt = null;
+  canvas.dataset.playerSeatTarget = "";
   canvas.dataset.playerSeatedAt = "";
+  characterSystem.setActivity(playerEntity);
   rebuildSceneHotspots();
+  syncControlAvailability();
   return true;
 }
 
@@ -1509,7 +1757,7 @@ function applyLiveSnapshot(rawSnapshot) {
     const booths =
       boothModules.length > 0
         ? boothModules
-        : (liveWorld?.source === "live" ? [] : buildFallbackBooths(people));
+        : (liveWorld?.source === "live" ? [] : buildFallbackBooths(people, environmentAssetId));
     canvas.dataset.boothCount = String(boothSystem.sync(booths));
     canvas.dataset.boothReadablePanelCount = String(boothSystem.readablePanelCount);
     rebuildSceneHotspots();
@@ -1524,6 +1772,15 @@ function applyLiveSnapshot(rawSnapshot) {
     if (agent.id === currentUser.id || liveMeetingOverrides.has(agent.id)) continue;
     const entity = npcSystem?.getEntity(agent.id);
     if (!entity) {
+      if (!isHallWorld && agent.position) {
+        liveTargets.set(agent.id, {
+          x: agent.seat?.x ?? agent.position.x,
+          z: agent.seat?.z ?? agent.position.z,
+          yaw: agent.seat?.yaw ?? agent.position.yaw,
+          state: agent.state,
+          seat: agent.seat,
+        });
+      }
       // 新面孔（confirm 新人等）：异步现场生成实体，后续快照接管站位与状态
       void ensureAgentEntity(agent);
       continue;
@@ -1539,14 +1796,15 @@ function applyLiveSnapshot(rawSnapshot) {
           seat: null,
         });
       } else {
-        // 到位：吸附展位站位锚点（快照 position 即锚点；本地 fallback 用 BoothSystem 锚点）
-        const anchor = boothSystem?.personAnchorFor(agent.id) ?? agent.position;
+        // Preserve a live snapshot position; local fallback agents use their booth anchor.
+        const anchor = agent.position ?? boothSystem?.personAnchorFor(agent.id);
         if (anchor) {
           liveTargets.set(agent.id, {
             x: anchor.x,
             z: anchor.z,
             yaw: anchor.yaw ?? 0,
             state: "at-booth",
+            animationState: agent.state,
             seat: null,
           });
         }
@@ -1586,7 +1844,18 @@ function handleLiveEvent(rawEvent) {
       appShell.ingestMeetingMessage({ personId: event.agentId, text: event.text });
     }
     showLiveTalk(event.agentId, event.text);
+    characterSystem.playAction(event.agentId, CHARACTER_ACTIONS.TALK, {
+      durationMs: LIVE_BUBBLE_DURATION * 1000,
+    });
     pushLiveToast(`${nameOf(event.agentId)} 和 ${nameOf(event.toAgentId)} 聊了起来`);
+    return;
+  }
+  if (event.type === "animation-cue") {
+    if (!event.agentId || !event.action) return;
+    const applied = characterSystem.playAction(event.agentId, event.action, {
+      durationMs: event.durationMs,
+    });
+    canvas.dataset.lastCharacterAction = `${event.agentId}:${event.action}:${applied}`;
     return;
   }
   if (event.type === "meeting-started") {
@@ -1620,6 +1889,15 @@ function hallGlanceFor(personId) {
 }
 
 
+function liveSeatKey(target) {
+  const tableId = target.seat?.tableId;
+  const seatIndex = target.seat?.seatIndex;
+  if (tableId && Number.isInteger(seatIndex)) return `${tableId}:${seatIndex}`;
+  if (!["seated", "talking", "in-meeting"].includes(target.state)) return null;
+  return `position:${target.x.toFixed(1)}:${target.z.toFixed(1)}`;
+}
+
+
 function updateLiveAgents(delta) {
   if (!npcSystem) return;
   for (const personId of new Set([
@@ -1634,76 +1912,143 @@ function updateLiveAgents(delta) {
     if (!target || !entity) continue;
     const root = entity.root;
     if (target.state === "at-booth") {
-      // 大厅展位站位：直接吸附展位锚点，不做插值走动；主理人微动作——
-      // 加重呼吸起伏（±0.01）+ 错相回眸 + 玩家走近（<2.5m）转身面向玩家
-      root.position.x = target.x;
-      root.position.z = target.z;
+      const dx = target.x - root.position.x;
+      const dz = target.z - root.position.z;
+      const distance = Math.hypot(dx, dz);
+      const stepLength = Math.min(distance, LIVE_WALK_SPEED * delta);
+      const [stepX, stepZ] = distance > 1e-5
+        ? resolveCharacterMovement(
+            entity,
+            (dx / distance) * stepLength,
+            (dz / distance) * stepLength,
+            {
+              targetX: target.x,
+              targetZ: target.z,
+              approachRadius: LIVE_SEAT_APPROACH_DISTANCE,
+              targetApproach: true,
+              targetBlockerId: boothSystem?.boothForPerson(personId)?.id ?? null,
+            },
+          )
+        : [0, 0];
+      root.position.x += stepX;
+      root.position.z += stepZ;
+      entity.collider?.sync(entity);
       entity.spec.behavior.idle_bob = 0.01;
+      const actualStep = Math.hypot(stepX, stepZ);
       let facingYaw = target.yaw;
-      const playerDistance = player
-        ? Math.hypot(player.position.x - target.x, player.position.z - target.z)
-        : Infinity;
-      if (playerDistance < 2.5) {
-        facingYaw = Math.atan2(player.position.x - target.x, player.position.z - target.z);
+      if (actualStep > 1e-5) {
+        liveFacing.set(stepX / actualStep, 0, stepZ / actualStep);
+      } else if (distance > 0.05) {
+        liveFacing.set(dx / distance, 0, dz / distance);
       } else {
-        const glance = hallGlanceFor(personId);
-        if (elapsed >= glance.nextAt) {
-          glance.until = elapsed + HALL_GLANCE_DURATION;
-          glance.side = Math.random() < 0.5 ? -1 : 1;
-          glance.nextAt = elapsed + 6 + Math.random() * 4;
+        const playerDistance = player
+          ? Math.hypot(player.position.x - root.position.x, player.position.z - root.position.z)
+          : Infinity;
+        if (playerDistance < 2.5) {
+          facingYaw = Math.atan2(player.position.x - root.position.x, player.position.z - root.position.z);
+        } else {
+          const glance = hallGlanceFor(personId);
+          if (elapsed >= glance.nextAt) {
+            glance.until = elapsed + HALL_GLANCE_DURATION;
+            glance.side = Math.random() < 0.5 ? -1 : 1;
+            glance.nextAt = elapsed + 6 + Math.random() * 4;
+          }
+          if (elapsed < glance.until) {
+            const progress = 1 - (glance.until - elapsed) / HALL_GLANCE_DURATION;
+            facingYaw += glance.side * HALL_GLANCE_ANGLE * Math.sin(progress * Math.PI);
+          }
         }
-        if (elapsed < glance.until) {
-          const progress = 1 - (glance.until - elapsed) / HALL_GLANCE_DURATION;
-          facingYaw += glance.side * HALL_GLANCE_ANGLE * Math.sin(progress * Math.PI);
-        }
+        liveFacing.set(Math.sin(facingYaw), 0, Math.cos(facingYaw));
       }
-      liveFacing.set(Math.sin(facingYaw), 0, Math.cos(facingYaw));
       targetQuaternion.setFromUnitVectors(MODEL_FORWARD, liveFacing);
       root.quaternion.slerp(targetQuaternion, 1 - Math.exp(-10 * delta));
       root.scale.y += (1 - root.scale.y) * (1 - Math.exp(-7 * delta));
-      entity.baseY = 0;
+      entity.baseY = surfaceHeightAt(root.position.x, root.position.z) ?? entity.baseY;
+      characterSystem.setActivity(entity, {
+        moving: actualStep > 1e-5,
+        talking: actualStep <= 1e-5 && target.animationState === "talking",
+      });
+      root.userData.characterSeatKey = null;
       continue;
     }
-    entity.spec.behavior.idle_bob = 0.005;
+    entity.spec.behavior.idle_bob = 0;
     const dx = target.x - root.position.x;
     const dz = target.z - root.position.z;
     const distance = Math.hypot(dx, dz);
-    const moving = distance > 0.05;
-    const seated = !moving && target.state !== "walking";
+    const hasTrustedSeat = Boolean(
+      target.seat?.tableId && Number.isInteger(target.seat?.seatIndex),
+    );
+    const targetWantsSeat = hasTrustedSeat
+      && ["seated", "talking", "in-meeting"].includes(target.state);
+    const targetSeatKey = liveSeatKey(target);
+    const alreadySeated = entity.animation?.posture === "seated";
+    const arrivalDistance = targetWantsSeat ? LIVE_SEAT_ARRIVAL_DISTANCE : 0.05;
+    const holdingSeat = (
+      alreadySeated &&
+      targetWantsSeat &&
+      targetSeatKey !== null &&
+      root.userData.characterSeatKey === targetSeatKey &&
+      distance <= LIVE_SEAT_EXIT_DISTANCE
+    );
+    const moving = !holdingSeat && distance > arrivalDistance;
+    const seated = targetWantsSeat && !moving;
+    let movedThisFrame = false;
 
     if (moving) {
       // 匀速逼近快照目标：轮询节拍之间保持连续走动，而不是脉冲式追赶
       const stepLength = Math.min(distance, LIVE_WALK_SPEED * delta);
-      // 轻量避障：下一步进入静态壳/摊位圆时沿切线滑动，缓解快照直线路径穿模；
-      // yaw 跟随实际（滑动后的）移动方向。
-      // 注意：此处不加入其他 NPC 圆——NPC↔NPC 分离解算权威在后端，前端只做静态壳保险
-      const [stepX, stepZ] = slideStepAroundBlockers(
-        root.position.x,
-        root.position.z,
+      // The live target remains authoritative; local capsule sliding only resolves render overlap.
+      const [stepX, stepZ] = resolveCharacterMovement(
+        entity,
         (dx / distance) * stepLength,
         (dz / distance) * stepLength,
-        currentBlockers(),
-        { targetX: target.x, targetZ: target.z },
+        {
+          targetX: target.x,
+          targetZ: target.z,
+          approachRadius: targetWantsSeat ? LIVE_SEAT_APPROACH_DISTANCE : 0,
+          targetApproach: targetWantsSeat,
+          targetBlockerId: target.seat?.tableId ?? null,
+        },
       );
       root.position.x += stepX;
       root.position.z += stepZ;
+      entity.collider?.sync(entity);
       const actualStep = Math.hypot(stepX, stepZ);
       if (actualStep > 1e-5) {
+        movedThisFrame = true;
         liveFacing.set(stepX / actualStep, 0, stepZ / actualStep);
       } else {
         liveFacing.set(Math.sin(target.yaw), 0, Math.cos(target.yaw));
       }
     } else {
-      root.position.x = target.x;
-      root.position.z = target.z;
+      const [snapX, snapZ] = resolveCharacterMovement(
+        entity,
+        target.x - root.position.x,
+        target.z - root.position.z,
+        {
+          targetX: target.x,
+          targetZ: target.z,
+          approachRadius: targetWantsSeat ? LIVE_SEAT_APPROACH_DISTANCE : 0,
+          targetApproach: targetWantsSeat,
+          targetBlockerId: target.seat?.tableId ?? null,
+        },
+      );
+      root.position.x += snapX;
+      root.position.z += snapZ;
+      entity.collider?.sync(entity);
       liveFacing.set(Math.sin(target.yaw), 0, Math.cos(target.yaw));
     }
     targetQuaternion.setFromUnitVectors(MODEL_FORWARD, liveFacing);
     root.quaternion.slerp(targetQuaternion, 1 - Math.exp(-10 * delta));
 
-    const targetScaleY = seated ? SEATED_SCALE_Y : 1;
-    root.scale.y += (targetScaleY - root.scale.y) * (1 - Math.exp(-7 * delta));
-    entity.baseY = seated ? SEATED_ROOT_Y : 0;
+    root.scale.y += (1 - root.scale.y) * (1 - Math.exp(-7 * delta));
+    entity.baseY = surfaceHeightAt(root.position.x, root.position.z) ?? 0;
+    characterSystem.setActivity(entity, {
+      moving: movedThisFrame,
+      seated,
+      talking: target.state === "talking",
+    });
+    root.userData.characterSeatKey = seated ? targetSeatKey : null;
   }
 }
 
@@ -1874,10 +2219,6 @@ function startLiveWorld({ force = false } = {}) {
   liveWorld.onSnapshot(applyLiveSnapshot);
   liveWorld.onEvent(handleLiveEvent);
   liveWorld.start();
-  if (!isHallWorld && !["v1", "v4"].includes(activeSceneVariant.id)) {
-    // 座位锚点/碰撞按 v1 原始咖啡厅标定（v4 木屋室内完全保留 v1 锚点，无需提示）
-    pushLiveToast("活的世界目前基于原始咖啡厅布局");
-  }
 }
 
 
@@ -2010,11 +2351,12 @@ function syncRoomPlayerPosition() {
 
 function readMovementInput() {
   moveInput.set(0, 0);
-  if (pressedKeys.has("KeyA")) moveInput.x -= 1;
-  if (pressedKeys.has("KeyD")) moveInput.x += 1;
-  if (pressedKeys.has("KeyW")) moveInput.y += 1;
-  if (pressedKeys.has("KeyS")) moveInput.y -= 1;
-  moveInput.add(touchInput);
+  if (input.isDown("KeyA")) moveInput.x += 1;
+  if (input.isDown("KeyD")) moveInput.x -= 1;
+  if (input.isDown("KeyW")) moveInput.y += 1;
+  if (input.isDown("KeyS")) moveInput.y -= 1;
+  moveInput.x -= touchInput.x;
+  moveInput.y += touchInput.y;
   if (moveInput.lengthSq() > 1) moveInput.normalize();
   return moveInput;
 }
@@ -2022,35 +2364,150 @@ function readMovementInput() {
 
 function currentBlockers() {
   // 静态壳来自 ColliderRegistry；大厅摊位圆为动态锚点，由 BoothSystem 快照同步后注入。
-  // 注意：不含 NPC 圆——NPC↔NPC 分离解算权威在后端，前端只保静态壳与玩家软碰撞，防双权威打架
   return isHallWorld
     ? [...worldShell.staticCircles, ...(boothSystem?.blockers ?? [])]
     : worldShell.staticCircles;
 }
 
 
-// 当前世界 NPC 实体的动态碰撞圆（含动态生成的新人；玩家自身不在 npcSystem 中，天然排除）
-function npcColliders() {
+// CharacterSystem owns every capsule; this view stays current for local and live NPCs.
+function npcCapsules(excludeEntity = null) {
   if (!npcSystem) return [];
-  const circles = [];
+  const colliders = [];
   for (const agent of npcSystem.agents.values()) {
-    const position = agent.entity.root.position;
-    circles.push({ x: position.x, z: position.z, r: NPC_COLLIDER_RADIUS });
+    if (agent.entity === excludeEntity || !agent.entity.collider) continue;
+    agent.entity.collider.sync(agent.entity);
+    colliders.push(agent.entity.collider);
   }
-  return circles;
+  return colliders;
 }
 
 
-function isWalkable(position) {
-  if (
-    position.x < worldBounds.minX ||
-    position.x > worldBounds.maxX ||
-    position.z < worldBounds.minZ ||
-    position.z > worldBounds.maxZ
-  ) return false;
-  return !currentBlockers().some(
-    (blocker) => Math.hypot(position.x - blocker.x, position.z - blocker.z) < (blocker.r ?? blocker.radius),
+function characterBlockers(excludeEntity = null) {
+  const blockers = [...currentBlockers()];
+  if (playerEntity?.collider && playerEntity !== excludeEntity) {
+    playerEntity.collider.sync(playerEntity);
+    blockers.push(playerEntity.collider);
+  }
+  blockers.push(...npcCapsules(excludeEntity));
+  return blockers;
+}
+
+
+function targetBlockerFor(entity, blockers, targetBlockerId, targetX, targetZ) {
+  if (targetX === null || targetZ === null) return null;
+  const named = targetBlockerId
+    ? blockers.find((blocker) => !blocker?.capsule && blocker?.id === targetBlockerId)
+    : null;
+  if (named) {
+    const radius = named.r ?? named.radius ?? 0;
+    if (
+      Math.hypot(targetX - named.x, targetZ - named.z)
+      < radius + (entity.collider?.radius ?? 0) + 0.08
+    ) return named;
+  }
+  return blockers.find((blocker) => {
+    if (blocker?.capsule || !Number.isFinite(blocker?.x) || !Number.isFinite(blocker?.z)) {
+      return false;
+    }
+    const radius = blocker.r ?? blocker.radius ?? 0;
+    return Math.hypot(targetX - blocker.x, targetZ - blocker.z)
+      < radius + (entity.collider?.radius ?? 0) + 0.08;
+  }) ?? null;
+}
+
+
+function resolveCharacterMovement(
+  entity,
+  stepX,
+  stepZ,
+  {
+    targetX = null,
+    targetZ = null,
+    approachRadius = 0,
+    targetApproach = false,
+    targetBlockerId = null,
+  } = {},
+) {
+  if (!entity?.collider) return [stepX, stepZ];
+  entity.collider.sync(entity);
+  const blockers = characterBlockers(entity);
+  const remaining = targetX === null || targetZ === null
+    ? Infinity
+    : Math.hypot(targetX - entity.root.position.x, targetZ - entity.root.position.z);
+  const ignoredBlocker = targetApproach && remaining < approachRadius
+    ? targetBlockerFor(entity, blockers, targetBlockerId, targetX, targetZ)
+    : null;
+  const options = { ignore: ignoredBlocker };
+  const penetrationOptions = { ...options, bounds: worldBounds };
+  const currentPenetration = capsulePenetrationAt(
+    entity.collider,
+    entity.root.position.x,
+    entity.root.position.z,
+    blockers,
+    penetrationOptions,
   );
+  const [slideX, slideZ] = slideCapsuleStepAroundBlockers(
+    entity.collider,
+    stepX,
+    stepZ,
+    blockers,
+    options,
+  );
+  const candidate = {
+    x: entity.root.position.x + slideX,
+    z: entity.root.position.z + slideZ,
+  };
+  const candidatePenetration = capsulePenetrationAt(
+    entity.collider,
+    candidate.x,
+    candidate.z,
+    blockers,
+    penetrationOptions,
+  );
+  if (candidatePenetration <= 1e-5 || candidatePenetration < currentPenetration - 1e-5) {
+    return [slideX, slideZ];
+  }
+
+  const xOnly = { x: entity.root.position.x + slideX, z: entity.root.position.z };
+  const xPenetration = capsulePenetrationAt(
+    entity.collider,
+    xOnly.x,
+    xOnly.z,
+    blockers,
+    penetrationOptions,
+  );
+  if (xPenetration <= 1e-5 || xPenetration < currentPenetration - 1e-5) {
+    return [slideX, 0];
+  }
+  const zOnly = { x: entity.root.position.x, z: entity.root.position.z + slideZ };
+  const zPenetration = capsulePenetrationAt(
+    entity.collider,
+    zOnly.x,
+    zOnly.z,
+    blockers,
+    penetrationOptions,
+  );
+  if (zPenetration <= 1e-5 || zPenetration < currentPenetration - 1e-5) {
+    return [0, slideZ];
+  }
+  return [0, 0];
+}
+
+
+function isWalkable(position, entity = playerEntity, blockers = characterBlockers(entity)) {
+  if (!entity?.collider) {
+    return (
+      position.x >= worldBounds.minX &&
+      position.x <= worldBounds.maxX &&
+      position.z >= worldBounds.minZ &&
+      position.z <= worldBounds.maxZ
+    );
+  }
+  entity.collider.sync(entity);
+  return capsuleFitsAt(entity.collider, position.x, position.z, blockers, {
+    bounds: worldBounds,
+  });
 }
 
 
@@ -2066,51 +2523,108 @@ function commitCandidatePosition(nextPosition) {
 
 
 function updatePlayer(delta) {
-  if (meetingMode || playerSeatedAt || sceneInteraction.isOpen || appShell.isMeetingSheetOpen) return;
-  const input = readMovementInput();
-  const moving = input.lengthSq() > 0.0025;
-
-  if (moving) {
-    movementForward.copy(currentHeading).setY(0).normalize();
-    movementRight.crossVectors(movementForward, WORLD_UP).normalize();
-    moveDirection
-      .copy(movementForward)
-      .multiplyScalar(input.y)
-      .addScaledVector(movementRight, input.x)
-      .normalize();
-    candidatePosition.copy(player.position).addScaledVector(moveDirection, MOVE_SPEED * delta);
-
-    // 玩家 ↔ NPC 软碰撞：NPC 实体作动态圆（r=0.35，含新人实体），目标位置进圆则沿切线滑动。
-    // NPC↔NPC 分离权威在后端，这里只保玩家不穿人；圆位置随帧更新
-    const npcCircles = npcColliders();
-    if (npcCircles.length > 0) {
-      const [npcStepX, npcStepZ] = slideStepAroundBlockers(
-        player.position.x,
-        player.position.z,
-        candidatePosition.x - player.position.x,
-        candidatePosition.z - player.position.z,
-        npcCircles,
-      );
-      candidatePosition.set(player.position.x + npcStepX, 0, player.position.z + npcStepZ);
+  if (playerSeatTarget) {
+    const dx = playerSeatTarget.x - player.position.x;
+    const dz = playerSeatTarget.z - player.position.z;
+    const distance = Math.hypot(dx, dz);
+    if (distance <= PLAYER_SEAT_ARRIVAL_DISTANCE) {
+      finishPlayerSeatApproach();
+      return;
     }
 
-    if (isWalkable(candidatePosition)) {
-      commitCandidatePosition(candidatePosition);
-    } else {
-      slidePosition.set(candidatePosition.x, player.position.y, player.position.z);
-      if (isWalkable(slidePosition)) commitCandidatePosition(slidePosition);
-      else {
-        slidePosition.set(player.position.x, player.position.y, candidatePosition.z);
-        if (isWalkable(slidePosition)) commitCandidatePosition(slidePosition);
-      }
+    const stepLength = Math.min(distance, MOVE_SPEED * delta);
+    const [stepX, stepZ] = resolveCharacterMovement(
+      playerEntity,
+      (dx / distance) * stepLength,
+      (dz / distance) * stepLength,
+      {
+        targetX: playerSeatTarget.x,
+        targetZ: playerSeatTarget.z,
+        approachRadius: LIVE_SEAT_APPROACH_DISTANCE,
+        targetApproach: true,
+        targetBlockerId: playerSeatTarget.id,
+      },
+    );
+    const movedThisFrame = Math.hypot(stepX, stepZ) > 1e-5;
+    player.position.x += stepX;
+    player.position.z += stepZ;
+    playerGroundY = surfaceHeightAt(player.position.x, player.position.z) ?? playerGroundY;
+    playerEntity.baseY = playerGroundY;
+    playerEntity.collider?.sync(playerEntity);
+    if (movedThisFrame) {
+      moveDirection.set(stepX, 0, stepZ).normalize();
+      targetQuaternion.setFromUnitVectors(MODEL_FORWARD, moveDirection);
+      player.quaternion.slerp(targetQuaternion, 1 - Math.exp(-14 * delta));
+      currentHeading.lerp(moveDirection, 1 - Math.exp(-9 * delta)).normalize();
     }
 
-    targetQuaternion.setFromUnitVectors(MODEL_FORWARD, moveDirection);
-    player.quaternion.slerp(targetQuaternion, 1 - Math.exp(-14 * delta));
-    currentHeading.lerp(moveDirection, 1 - Math.exp(-9 * delta)).normalize();
+    if (
+      Math.hypot(
+        playerSeatTarget.x - player.position.x,
+        playerSeatTarget.z - player.position.z,
+      ) <= PLAYER_SEAT_ARRIVAL_DISTANCE
+    ) {
+      finishPlayerSeatApproach();
+      return;
+    }
+
+    characterSystem.setActivity(playerEntity, { moving: movedThisFrame });
+    const hasWalkClip = playerEntity?.animation?.clipsByRole.has(CHARACTER_ACTIONS.WALK);
+    const bob = movedThisFrame && !hasWalkClip
+      ? Math.abs(Math.sin(elapsed * 9.2)) * 0.028
+      : 0;
+    player.position.y = playerGroundY + PLAYER_FOOT_OFFSET + bob;
+    updatePlayerMarker();
+    return;
   }
 
-  const bob = moving
+  if (meetingMode || playerSeatedAt) {
+    characterSystem.setActivity(playerEntity, { seated: true });
+    return;
+  }
+  if (hasBlockingWorldUi()) {
+    characterSystem.setActivity(playerEntity);
+    return;
+  }
+  const movementInput = readMovementInput();
+  const movementState = playerMovement.update(
+    delta,
+    movementInput,
+    cameraController.getHorizontalAngle(),
+    { run: input.isDown("ShiftLeft") || input.isDown("ShiftRight") },
+  );
+  const wantsToMove = movementState.moving;
+  let movedThisFrame = false;
+  moveDirection.copy(movementState.direction);
+
+  if (wantsToMove) {
+    const startX = player.position.x;
+    const startZ = player.position.z;
+    candidatePosition.copy(player.position).addScaledVector(
+      moveDirection,
+      movementState.speed * delta,
+    );
+
+    // Resolve the full player capsule against the scene and every other character.
+    const [stepX, stepZ] = resolveCharacterMovement(
+      playerEntity,
+      candidatePosition.x - player.position.x,
+      candidatePosition.z - player.position.z,
+    );
+    candidatePosition.set(player.position.x + stepX, 0, player.position.z + stepZ);
+    commitCandidatePosition(candidatePosition);
+    playerEntity.collider?.sync(playerEntity);
+    movedThisFrame = Math.hypot(player.position.x - startX, player.position.z - startZ) > 1e-5;
+
+  }
+
+  targetQuaternion.setFromUnitVectors(MODEL_FORWARD, moveDirection);
+  player.quaternion.slerp(targetQuaternion, 1 - Math.exp(-14 * delta));
+  currentHeading.copy(moveDirection);
+
+  characterSystem.setActivity(playerEntity, { moving: movedThisFrame });
+  const hasWalkClip = playerEntity?.animation?.clipsByRole.has(CHARACTER_ACTIONS.WALK);
+  const bob = movedThisFrame && !hasWalkClip
     ? Math.abs(Math.sin(elapsed * 9.2)) * 0.028
     : Math.sin(elapsed * 2.1) * 0.004;
   player.position.y = playerGroundY + PLAYER_FOOT_OFFSET + bob;
@@ -2126,17 +2640,12 @@ function updatePlayerMarker() {
 
 
 function updateFollowCamera(delta) {
-  desiredCameraPosition
-    .copy(player.position)
-    .addScaledVector(currentHeading, -3.75)
-    .addScaledVector(WORLD_UP, 2.35);
-  desiredLookTarget
-    .copy(player.position)
-    .addScaledVector(WORLD_UP, 0.78)
-    .addScaledVector(currentHeading, 0.58);
-  camera.position.lerp(desiredCameraPosition, 1 - Math.exp(-6.2 * delta));
-  lookTarget.lerp(desiredLookTarget, 1 - Math.exp(-8.5 * delta));
-  camera.lookAt(lookTarget);
+  cameraController.update(player.position, {
+    delta,
+    groundHeightAt: surfaceHeightAt,
+    blockers: currentBlockers(),
+    bounds: cameraBounds,
+  });
 }
 
 
@@ -2152,9 +2661,9 @@ function updateMeetingCamera(delta) {
 function updateCinematicCamera(delta) {
   const orbit = elapsed * 0.065;
   desiredCameraPosition.set(
-    6.45 + Math.sin(orbit) * 0.45,
-    4.55 + Math.sin(orbit * 0.8) * 0.12,
-    8.0 + Math.cos(orbit) * 0.34,
+    cinematicBasePosition.x + Math.sin(orbit) * cinematicOrbit[0],
+    cinematicBasePosition.y + Math.sin(orbit * 0.8) * cinematicOrbit[1],
+    cinematicBasePosition.z + Math.cos(orbit) * cinematicOrbit[2],
   );
   camera.position.lerp(desiredCameraPosition, 1 - Math.exp(-2.7 * delta));
   lookTarget.lerp(cinematicTarget, 1 - Math.exp(-4 * delta));
@@ -2162,9 +2671,14 @@ function updateCinematicCamera(delta) {
 }
 
 
-// 大屏只读（?role=screen）：绕场地中心缓慢环视，覆盖整条街道/咖啡厅
-const SCREEN_ORBIT_RADIUS = isHallWorld ? 11.5 : 7.5;
-const SCREEN_ORBIT_HEIGHT = isHallWorld ? 7.4 : 5.6;
+// 大屏只读（?role=screen）：绕场地中心缓慢环视，覆盖整条街道/咖啡厅；
+// 半径随世界边界放大（村落市集 60m 见方，夜集街道 28m）
+const SCREEN_ORBIT_RADIUS = isHallWorld
+  ? Math.max(11.5, (worldBounds.maxX - worldBounds.minX) * 0.38)
+  : 7.5;
+const SCREEN_ORBIT_HEIGHT = isHallWorld
+  ? Math.max(7.4, (worldBounds.maxX - worldBounds.minX) * 0.24)
+  : 5.6;
 function updateScreenCamera(delta) {
   const orbit = elapsed * 0.08;
   desiredCameraPosition.set(
@@ -2248,6 +2762,12 @@ function refreshDiagnostics() {
   canvas.dataset.cameraPosition = [camera.position.x, camera.position.y, camera.position.z]
     .map((value) => value.toFixed(4))
     .join(",");
+  canvas.dataset.cameraOrbit = [
+    cameraController.yaw,
+    cameraController.pitch,
+    cameraController.distance,
+  ].map((value) => value.toFixed(4)).join(",");
+  canvas.dataset.pointerLocked = String(input.pointerLocked);
   canvas.dataset.npcAssignments = states
     .map((state) => `${state.personId}:${state.tableId}:${state.status}`)
     .join("|");
@@ -2271,8 +2791,19 @@ function refreshDiagnostics() {
   canvas.dataset.triangles = String(renderer.info.render.triangles);
   canvas.dataset.centerPixel = sampleCenterPixel().join(",");
   canvas.dataset.sceneHotspotCount = String(sceneHotspots.length);
+  canvas.dataset.cafeDoorPosition = `${hallCafeDoor.x.toFixed(2)},${hallCafeDoor.z.toFixed(2)}`;
   canvas.dataset.fieldEntityCount = String(relationshipFieldSystem?.hotspots.length ?? 0);
   canvas.dataset.worldModuleCount = String(worldModuleRegistry?.modules.length ?? 0);
+  const characterDiagnostics = characterSystem.getAnimationDiagnostics();
+  canvas.dataset.characterActions = characterDiagnostics
+    .map((entry) => `${entry.personId}:${entry.active ?? "idle"}`)
+    .join("|");
+  canvas.dataset.characterColliders = characterDiagnostics
+    .map((entry) => {
+      const collider = entry.collider;
+      return `${entry.personId}:${collider?.shape ?? "none"}:${collider?.radius.toFixed(3) ?? "0"}`;
+    })
+    .join("|");
 }
 
 
@@ -2282,7 +2813,9 @@ function animate(timestamp) {
   elapsed += delta;
 
   if (worldReady) {
-    characterSystem.update(delta, elapsed);
+    syncControlAvailability();
+    const { dx, dy } = input.consumeMouseDelta();
+    cameraController.applyMouseDelta(dx, dy);
     boothSystem?.update(delta);
     relationshipFieldSystem?.update(elapsed);
     if (liveEnabled) updateLiveAgents(delta);
@@ -2301,6 +2834,7 @@ function animate(timestamp) {
     } else {
       updateCinematicCamera(delta);
     }
+    characterSystem.update(delta, elapsed);
     updateSelectionMarker();
     updateSpeechPositions();
     updateLiveBubbles();
@@ -2309,6 +2843,7 @@ function animate(timestamp) {
 
   renderer.render(scene, camera);
   if (worldReady && diagnosticFrame++ % 15 === 0) refreshDiagnostics();
+  input.endFrame();
   requestAnimationFrame(animate);
 }
 
@@ -2351,6 +2886,7 @@ function personRootFromHit(object) {
 
 canvas.addEventListener("pointerdown", (event) => {
   pointerStart.set(event.clientX, event.clientY);
+  pointerStartedLocked = input.pointerLocked;
 });
 
 // 大厅展位 hover：指针位置跟踪（射线在每帧 animate 中做，避免 pointermove 高频触发）
@@ -2371,6 +2907,7 @@ canvas.addEventListener("pointerleave", () => {
 
 canvas.addEventListener("pointerup", (event) => {
   if (!worldReady || experienceMode !== "cafe" || meetingMode || screenMode) return;
+  if (pointerStartedLocked || input.pointerLocked) return;
   if (pointerStart.distanceTo(new THREE.Vector2(event.clientX, event.clientY)) > 8) return;
   const bounds = canvas.getBoundingClientRect();
   pointerNdc.set(
@@ -2414,9 +2951,16 @@ window.addEventListener("keydown", (event) => {
       return;
     }
   }
-  if (event.code === "Escape" && playerSeatedAt && !event.target.closest?.("input, textarea")) {
-    if (playerSeatedAt === "campfire") integrations.groupPlay?.close();
-    leavePlayerSeat();
+  if (
+    event.code === "Escape" &&
+    (playerSeatedAt || playerSeatTarget) &&
+    !event.target.closest?.("input, textarea")
+  ) {
+    if (meetingMode) void endMeeting();
+    else {
+      if ((playerSeatedAt ?? playerSeatTarget?.id) === "campfire") integrations.groupPlay?.close();
+      leavePlayerSeat();
+    }
     event.preventDefault();
     return;
   }
@@ -2426,21 +2970,23 @@ window.addEventListener("keydown", (event) => {
     ["KeyW", "KeyA", "KeyS", "KeyD"].includes(event.code) &&
     !event.target.closest?.("input, textarea")
   ) {
-    pressedKeys.add(event.code);
     event.preventDefault();
   }
 });
 
-window.addEventListener("keyup", (event) => pressedKeys.delete(event.code));
 window.addEventListener("blur", () => {
-  pressedKeys.clear();
-  touchInput.set(0, 0);
-  touchKnob.style.transform = "translate(0, 0)";
+  resetPlayerInput();
 });
 
 
 function updateTouchStick(event) {
-  if (experienceMode !== "cafe" || meetingMode) return;
+  if (
+    experienceMode !== "cafe" ||
+    meetingMode ||
+    playerSeatedAt ||
+    playerSeatTarget ||
+    hasBlockingWorldUi()
+  ) return;
   const bounds = touchStick.getBoundingClientRect();
   const centerX = bounds.left + bounds.width * 0.5;
   const centerY = bounds.top + bounds.height * 0.5;
@@ -2470,6 +3016,8 @@ for (const eventName of ["pointerup", "pointercancel"]) {
 
 window.addEventListener("resize", resizeRenderer);
 window.addEventListener("beforeunload", () => {
+  input.destroy();
+  cameraController.dispose();
   appShell.destroy();
   sceneInteraction.destroy();
   relationshipFieldSystem?.dispose();
@@ -2538,7 +3086,7 @@ async function boot() {
       assetStore,
       assetCatalog,
       resolveMediaUrl,
-      templateAssetId: HALL_LAYOUT.boothTemplateAssetId,
+      templateAssetId: activeSceneVariant.boothTemplateAssetId,
     });
     await boothSystem.prepare();
   }
@@ -2597,11 +3145,17 @@ async function boot() {
     canvas.dataset.fieldSchema = relationshipField.schema;
     canvas.dataset.fieldGenerated = String(relationshipField.generated);
     canvas.dataset.fieldWorld = fieldSplatWorld ? `splat:${fieldSplatWorld.quality}` : "procedural";
+  } else if (isHallWorld && environmentAssetId === "environment.hub-blockout.v1") {
+    setProgress(0.12, `正在搭建${worldTitle}`);
+    environment = createHubBlockoutEnvironment();
   } else {
     try {
       const environmentAsset = assetCatalog.resolve(environmentAssetId, "environment");
       setProgress(0.12, `正在搭建${worldTitle}`);
       environment = await assetStore.loadScene(environmentAsset.resolvedUrl);
+      if (environmentAssetId === "environment.village-market.v1") {
+        environment = createVillageMarketEnvironment(environment);
+      }
     } catch (error) {
       console.warn(`[EchoWorld] 环境资产 ${environmentAssetId} 未就绪，使用简易占位场地`, error);
       environment = buildFallbackEnvironment();
@@ -2614,6 +3168,13 @@ async function boot() {
 
 async function setCharacterExpression(personId, expression, metadata = {}) {
   const applied = await expressionSystem.setExpression(personId, expression);
+  if (
+    ["npc-conversation", "roundtable-opening", "roundtable-reply"].includes(metadata.source)
+  ) {
+    characterSystem.playAction(personId, CHARACTER_ACTIONS.TALK, {
+      durationMs: Math.max(350, Number(metadata.duration ?? 1) * 1000),
+    });
+  }
   canvas.dataset.lastExpression = `${personId}:${expression}:${applied ? "applied" : "fallback"}`;
   canvas.dataset.expressionSource = metadata.source ?? "programmatic";
   return applied;
@@ -2661,6 +3222,8 @@ window.__echoWorld = {
       ]),
     );
   },
+  get characterActions() { return { ...CHARACTER_ACTIONS }; },
+  get characterAnimationState() { return characterSystem?.getAnimationDiagnostics() ?? []; },
   get personSignals() {
     return Object.fromEntries(
       personSignalStore.list().map((snapshot) => [snapshot.personId, snapshot]),
@@ -2684,6 +3247,16 @@ window.__echoWorld = {
   getAgentState: (personId) => worldAgentState(personId),
   selectPerson: selectWorldPerson,
   setExpression: setCharacterExpression,
+  playCharacterAction(personId, action, options = {}) {
+    const applied = characterSystem?.playAction(personId, action, options) ?? false;
+    canvas.dataset.lastCharacterAction = `${personId}:${action}:${applied}`;
+    return applied;
+  },
+  raiseRightHand: (personId) =>
+    characterSystem?.playAction(personId, CHARACTER_ACTIONS.RAISE_RIGHT_HAND) ?? false,
+  raiseBothHands: (personId) =>
+    characterSystem?.playAction(personId, CHARACTER_ACTIONS.RAISE_BOTH_HANDS) ?? false,
+  stopCharacterAction: (personId) => characterSystem?.stopAction(personId) ?? false,
   ingestPersonSignal: (event) => personSignalStore.ingestEvent(event),
   setPersonSignal: (snapshot) => personSignalStore.upsert(snapshot),
   startMeeting,

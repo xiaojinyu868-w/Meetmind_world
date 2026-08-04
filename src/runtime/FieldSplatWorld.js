@@ -1,11 +1,11 @@
 import * as THREE from "three";
 import { SparkRenderer, SplatMesh } from "@sparkjsdev/spark";
 
-// Marble SPZ 资产坐标系为 marble_raw_opencv：Marble 官方查看器对生成资产
-// 统一绕 X 轴旋转 180°（见 docs.worldlabs.ai「Rendering Marble SPZ files in
-// third-party engines」）。
+// Marble SPZ splat 资产坐标系为 marble_raw_opencv：官方查看器对 splat 统一
+// 绕 X 轴旋转 180°（见 docs.worldlabs.ai「Rendering Marble SPZ files in
+// third-party engines」）。**collider GLB 不翻**——它是面向引擎导出的标准
+// Y-up glTF（2026-08-04 实测：对其再翻转会让人站在"地形背面"、脚踩天空）。
 const SPLAT_FLIP_QUATERNION = new THREE.Quaternion(1, 0, 0, 0);
-const FLIP_MATRIX = new THREE.Matrix4().makeRotationX(Math.PI);
 
 // 对齐目标：可行走区域（朝上三角面的 XZ 分布）映射到这个尺度，而不是包围盒——
 // Marble 世界的包围盒常含天空/地裙，bbox 定中会把内容甩到远处（2026-08-04 教训）
@@ -57,9 +57,9 @@ export function analyzeWalkableSurface(colliderScene) {
       const i0 = index ? index.getX(t * 3) : t * 3;
       const i1 = index ? index.getX(t * 3 + 1) : t * 3 + 1;
       const i2 = index ? index.getX(t * 3 + 2) : t * 3 + 2;
-      va.fromBufferAttribute(pos, i0).applyMatrix4(object.matrixWorld).applyMatrix4(FLIP_MATRIX);
-      vb.fromBufferAttribute(pos, i1).applyMatrix4(object.matrixWorld).applyMatrix4(FLIP_MATRIX);
-      vc.fromBufferAttribute(pos, i2).applyMatrix4(object.matrixWorld).applyMatrix4(FLIP_MATRIX);
+      va.fromBufferAttribute(pos, i0).applyMatrix4(object.matrixWorld);
+      vb.fromBufferAttribute(pos, i1).applyMatrix4(object.matrixWorld);
+      vc.fromBufferAttribute(pos, i2).applyMatrix4(object.matrixWorld);
       ab.subVectors(vb, va); ac.subVectors(vc, va);
       n.crossVectors(ab, ac);
       const doubleArea = n.length();
@@ -155,19 +155,24 @@ export async function tryLoadFieldSplatWorld({
   const walk = analyzeWalkableSurface(colliderScene);
   const metricGroup = new THREE.Group();
   metricGroup.name = "WORLD_MarbleSplat";
-  metricGroup.quaternion.copy(SPLAT_FLIP_QUATERNION);
+  const splatGroup = new THREE.Group();
+  splatGroup.name = "SPLAT_Flipped";
+  splatGroup.quaternion.copy(SPLAT_FLIP_QUATERNION); // 只有 splat 翻转
   let spawnHint = null;
   if (walk) {
     const scale = THREE.MathUtils.clamp(
       WALK_TARGET_EXTENT_METERS / walk.extent, FIT_CLAMP.min, FIT_CLAMP.max);
-    metricGroup.scale.setScalar(scale);
-    metricGroup.position.set(
-      -walk.centerX * scale,
-      -walk.groundY * scale,
-      -walk.centerZ * scale,
-    );
+    // collider 为原生 Y-up：splat 翻转后与 collider 同帧（collider = flip(splat_raw)），
+    // 两组共用同一 scale/position 即对齐
+    for (const group of [metricGroup, splatGroup]) {
+      group.scale.setScalar(scale);
+      group.position.set(
+        -walk.centerX * scale,
+        -walk.groundY * scale,
+        -walk.centerZ * scale,
+      );
+    }
     if (walk.spawn) {
-      // 翻转后坐标系内的偏移直接线性映射；朝向面向可行走中心
       spawnHint = {
         x: (walk.spawn.x - walk.centerX) * scale,
         z: (walk.spawn.z - walk.centerZ) * scale,
@@ -175,10 +180,11 @@ export async function tryLoadFieldSplatWorld({
       };
     }
   } else {
-    // collider 无可用地面（异常资产）：不缩放不定中，仅翻转，交给安全网兜底
+    // collider 无可用地面（异常资产）：不缩放不定中，交给安全网兜底
     console.warn("[FieldSplatWorld] collider 无可行走面，使用单位变换");
   }
-  metricGroup.add(splat);
+  splatGroup.add(splat);
+  metricGroup.add(splatGroup);
   metricGroup.add(groundGroup);
 
   const root = new THREE.Group();
