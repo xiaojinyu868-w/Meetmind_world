@@ -32,7 +32,7 @@ export const CHARACTER_VARIANTS = Object.freeze([
   Object.freeze({
     id: "voxel",
     label: "像素角色",
-    title: "固定方块身体与五面像素头像",
+    title: "刚性骨骼方块身体与五面像素头像",
     assetByPersonId: PHOTO_CHARACTER_ASSETS.voxel,
     fallbackAssetId: "character.faceless-painterly-adventure.v1",
     textureFilter: "nearest",

@@ -7,7 +7,7 @@ npm install
 npm run dev
 ```
 
-打开 `http://127.0.0.1:5173/`。桌面使用 `W/A/S/D` 移动；触屏设备显示虚拟摇杆。
+打开 `http://127.0.0.1:5173/`。桌面点击 3D 场景后，用鼠标环视、滚轮缩放、`W/A/S/D` 沿镜头方向移动，按住 `Shift` 跑动；触屏设备继续使用虚拟摇杆。
 
 生产构建：
 
@@ -61,6 +61,7 @@ npm run build
 - `src/runtime/RelationshipFieldSystem.js`：消费 `echo-field.v1` 生成可进入的关系场域与 4 类热点。
 - `src/runtime/WorldModuleRegistry.js`：严格校验 `echo-world-modules.v1` 小屋/场域挂载契约。
 - `src/runtime/WorldBroadcastSystem.js`：咖啡厅/集市大厅 3D 播报屏（位置按世界配置）与晨报摘要。
+- `src/runtime/Input.js`、`CameraRelativeMovement.js`、`ThirdPersonCamera.js`：Pointer Lock 输入、镜头相对移动与第三人称轨道相机。
 - `src/ui/SceneInteraction.js`：统一 E/F、触屏提示与情境菜单。
 - `src/data/demoSignals.js`：6 个 NPC 的 `person-signal.v1` 占位快照，正式接口可直接替换。
 - `src/main.js`：Three.js 场景、第三人称相机、移动、碰撞、射线选择和会议编排。
@@ -83,7 +84,7 @@ V2 几何场景资产仍归档保留，但不再出现在前端选择器中，�
 
 绘本人物资产仍归档保留，但不再出现在前端选择器中，旧 `?character=storybook` 地址会回落到 `voxel`。
 
-人物与表情生产契约、照片输入边界和服务接口见 [`docs/PHOTO_CHARACTER_PIPELINES.md`](docs/PHOTO_CHARACTER_PIPELINES.md)。运行时表情使用 `neutral / happy / surprised / thinking`，每次切换同一人物的完整 128x128 像素 atlas，并使用 nearest 采样。
+人物、表情和骨骼动作的生产契约、照片输入边界与服务接口见 [`docs/PHOTO_CHARACTER_PIPELINES.md`](docs/PHOTO_CHARACTER_PIPELINES.md)。运行时表情使用 `neutral / happy / surprised / thinking`，每次切换同一人物的完整 128x128 像素 atlas，并使用 nearest 采样；身体动作由 GLB 内的 `Idle / Walk / Talk / SitDown / Sit / SitTalk / RaiseRightHand / RaiseBothHands` 驱动。
 
 ![几何 Low-poly 版本](renders/echo_world_cafe_reference-lowpoly-v2_preview.png)
 
@@ -94,6 +95,6 @@ V2 几何场景资产仍归档保留，但不再出现在前端选择器中，�
 - 现有 3D 世界仍纯读轮询 `GET /api/v0/world/snapshot`，后端不可用时降级本地 mock/内置快照；MVP2 房间 WebSocket 已在后端 `/api/v1/rooms/{id}/stream` 启用，但多人控制 UI 尚未接线。
 - 心动值、生理指标和 AI 解释当前是明确标注的演示数据；正式值必须由后端统计与推断服务提供，前端不自行判断喜欢、厌恶或医疗状态。
 - 合照入场的照片输入已接真实链路：qwen-vl 定位前景人脸 bbox（OpenCV 兜底），逐脸确认姓名后批量建档；识别质量仍受照片清晰度影响，支持人工跳过/重新认脸。
-- 人物暂时没有骨骼动画；移动和入座采用刚性模型的轻量表现。
+- 人物已具备整肢刚性骨骼动画，可静止、走路、入座、保持坐姿、坐姿点头/摇头、举右手和举双手；当前没有肘、膝等分段骨骼，因此坐姿采用整条腿从髋部旋转的体素风表现。
 - 咖啡厅使用运行时圆形桌面碰撞，尚未从 Blender 导出完整碰撞壳。
 - 人脸/人物贴图生产与音视频上下文处理由上游团队负责；当前运行时只消费其 DTO/资产引用，详见 [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md)。

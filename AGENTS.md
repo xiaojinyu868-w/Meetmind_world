@@ -18,12 +18,12 @@ EchoWorld Three.js 关系世界原型（包名 `echoworld-lowpoly-walk`）：包
 
 - 前端为静态站点（Vite 构建）；世界动态由 `backend/`（FastAPI）的世界快照驱动，LiveWorld 轮询 `/api/v0/world/snapshot`，后端不可用时自动降级本地 mock/内置快照（见"数据流"节）。
 - UI 语言为简体中文（`index.html` 为 `lang="zh-CN"`），文档与界面文案使用中文。
-- 场景：1 个玩家 + 6 个占位人物。人物形象方向（2026-08-03，PRD P-6）为 MC 体素 + AI 生成图片贴图；当前启用 voxel 方案（固定体素身体 + 照片特征贴图），无脸 GLB（`character.faceless-prototype.v1`）仅作历史占位；暂无骨骼动画，移动/入座为刚性模型的轻量表现。
+- 场景：1 个玩家 + 6 个占位人物。人物形象方向（2026-08-03，PRD P-6）为 MC 体素 + AI 生成图片贴图；当前启用 voxel 方案（固定体素身体 + 照片特征贴图），无脸 GLB（`character.faceless-prototype.v1`）仅作历史占位。Voxel GLB 使用 7 骨刚性骨架并内置 `Idle / Walk / Talk / SitDown / Sit / SitTalk / RaiseRightHand / RaiseBothHands`；入座由 Root 局部下沉和双腿旋转完成，不得再缩放角色根节点。
 - 中央六人圆桌只接受用户发起的会议邀请，普通 Agent 调度不会占用它。
 
 ## 技术栈
 
-- **Three.js `^0.185.1`**：WebGL 渲染，`GLTFLoader` 加载 GLB，`SkeletonUtils.clone` 克隆人物。
+- **Three.js `^0.185.1`**：WebGL 渲染，`GLTFLoader` 加载 GLB，`SkeletonUtils.clone` 克隆带骨骼人物，`AnimationMixer` 播放动作。
 - **Vite `^8.2.0`**（devDependency，基于 rolldown）：开发服务器与构建。
 - **lucide `^1.28.0`**：UI 图标（`createIcons`）。
 - 原生 ES Module JavaScript（`"type": "module"`），无框架、无 TypeScript、无 JSX。
@@ -35,10 +35,11 @@ npm install
 npm run dev       # vite --host 0.0.0.0 --port 5173 --strictPort，打开 http://127.0.0.1:5173/
 npm run build     # 输出到 dist/
 npm run preview   # 预览生产构建，--host 0.0.0.0
+npm run test:animation  # Node 内置测试：Idle/Walk/坐姿状态机、动作重入、单次 gesture、恢复与 animation-cue
 ```
 
 - 没有配置 lint、格式化或类型检查工具。
-- **没有测试**：`package.json` 中没有 test 脚本，也没有 vitest/jest/playwright 依赖。验证方式为 `npm run build` 成功 + 浏览器手动走查体验闭环。
+- 没有通用测试框架；角色动作使用 Node 内置测试，其他验证仍为 `npm run build` 成功 + 浏览器手动走查体验闭环。
 - `dist/` 已提交进 Git（构建产物随仓库分发）。修改源码后如需更新分发产物，重新 `npm run build` 并提交 `dist/`。
 
 ## 目录结构
@@ -51,15 +52,15 @@ src/data/demoPeople.js      mock 数据：currentUser、6 个 NPC（含 palette 
 src/runtime/
   WorldSpec.js              world-spec.json 的加载与 schema 校验（echo-world.v1）、publicUrl() 处理 BASE_URL
   AssetCatalog.js           asset-catalog.json 白名单加载与校验（echo-assets.v1）
-  AssetStore.js             GLTF 场景与 JSON 的 Promise 缓存
+  AssetStore.js             完整 GLTF（scene + animations）与 JSON 的 Promise 缓存
   CafeLayout.js             咖啡厅边界、5 张桌、18 个 Blender 座位锚点（全部 Object.freeze）
-  CharacterSystem.js        人物 GLB 缓存、克隆、按调色板换材质色、实例生命周期
+  CharacterSystem.js        人物 GLB 克隆、换材质、AnimationMixer、状态/动作映射与实例生命周期
   NpcAgentSystem.js         普通桌随机分配、入座、同桌对话与会议调度（本地 mock；live 模式下由 main.js 注入开关停用）
   LiveWorld.js              世界快照轮询器（echo-snapshot.v1）：优先 /api/v0/world/snapshot，
                             降级 data/mock/snapshot.demo.json，再兜底内置快照；非 live 源由内置演化器驱动；
                             visibilitychange 时暂停；提供 onSnapshot/onEvent 订阅
   SnapshotAdapter.js        快照 agent → 渲染结构映射（状态归一化 walking|seated|talking|in-meeting|at-booth、
-                            CafeLayout 座位锚点对齐、事件 camelCase 归一化、modules 透传，纯函数可在 node 下自测）
+                            CafeLayout 座位锚点对齐、animation-cue/事件归一化、modules 透传，纯函数可在 node 下自测）
   WalkSlide.js              live 插值轻量避障：位移将进入阻挡圆时投影到切线滑动（纯函数，圆键 r/radius 兼容）
   ColliderRegistry.js       环境静态碰撞壳注册表（按环境资产 id 返回 bounds + 静态圆；hub-town 壳含建筑/
                             篝火/大树/河带（桥与汀步留口）；摊位圆由 BoothSystem 动态注入；NPC↔NPC 分离权威在后端）

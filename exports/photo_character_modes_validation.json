@@ -21,7 +21,8 @@
       "seven_voxel_portraits": true,
       "raw_photos_not_copied": true,
       "source_photo_crops_forbidden": true,
-      "hashes_match": true
+      "hashes_match": true,
+      "voxel_rig_actions_declared": true
     },
     "passed": true
   },
@@ -70,6 +71,8 @@
       ],
       "voxel_head_uv_region_triangles": null,
       "missing_nodes": [],
+      "rig": null,
+      "actions": {},
       "checks": {
         "root_present": true,
         "root_at_origin": true,
@@ -131,6 +134,8 @@
       ],
       "voxel_head_uv_region_triangles": null,
       "missing_nodes": [],
+      "rig": null,
+      "actions": {},
       "checks": {
         "root_present": true,
         "root_at_origin": true,
@@ -192,6 +197,8 @@
       ],
       "voxel_head_uv_region_triangles": null,
       "missing_nodes": [],
+      "rig": null,
+      "actions": {},
       "checks": {
         "root_present": true,
         "root_at_origin": true,
@@ -253,6 +260,8 @@
       ],
       "voxel_head_uv_region_triangles": null,
       "missing_nodes": [],
+      "rig": null,
+      "actions": {},
       "checks": {
         "root_present": true,
         "root_at_origin": true,
@@ -316,6 +325,8 @@
       ],
       "voxel_head_uv_region_triangles": null,
       "missing_nodes": [],
+      "rig": null,
+      "actions": {},
       "checks": {
         "root_present": true,
         "root_at_origin": true,
@@ -377,6 +388,8 @@
       ],
       "voxel_head_uv_region_triangles": null,
       "missing_nodes": [],
+      "rig": null,
+      "actions": {},
       "checks": {
         "root_present": true,
         "root_at_origin": true,
@@ -438,6 +451,8 @@
       ],
       "voxel_head_uv_region_triangles": null,
       "missing_nodes": [],
+      "rig": null,
+      "actions": {},
       "checks": {
         "root_present": true,
         "root_at_origin": true,
@@ -463,8 +478,8 @@
       "asset_id": "character.photo.person_01.voxel.v1",
       "path": "public/models/characters/photo-derived/voxel/person_01.glb",
       "exists": true,
-      "bytes": 11560,
-      "sha256": "73c08f0c65baf9dd106a3f6ebacd065d0675495c713c7dd5f862c5f600d8183c",
+      "bytes": 43400,
+      "sha256": "d46804c356a0413d1cb0731d322204c92817babc7b90a598240e628c72d3179a",
       "root_location": [
         0.0,
         0.0,
@@ -474,7 +489,7 @@
         "min": [
           -0.4,
           -0.215,
-          0.0
+          -0.0
         ],
         "max": [
           0.4,
@@ -506,6 +521,188 @@
         "bottom": 2
       },
       "missing_nodes": [],
+      "rig": {
+        "armatures": [
+          "RIG_Voxel"
+        ],
+        "bones": [
+          "Arm_L",
+          "Arm_R",
+          "Head",
+          "Leg_L",
+          "Leg_R",
+          "Root",
+          "Torso"
+        ],
+        "skins": {
+          "GEO_Head": {
+            "bone": "Head",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Torso": {
+            "bone": "Torso",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Arm_L": {
+            "bone": "Arm_L",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Arm_R": {
+            "bone": "Arm_R",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Leg_L": {
+            "bone": "Leg_L",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Leg_R": {
+            "bone": "Leg_R",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          }
+        }
+      },
+      "actions": {
+        "Idle": {
+          "frame_range": [
+            1.0,
+            25.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "RaiseBothHands": {
+          "frame_range": [
+            1.0,
+            36.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "RaiseRightHand": {
+          "frame_range": [
+            1.0,
+            36.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "SitTalk": {
+          "frame_range": [
+            1.0,
+            33.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "Sit": {
+          "frame_range": [
+            1.0,
+            25.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "SitDown": {
+          "frame_range": [
+            1.0,
+            19.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "Talk": {
+          "frame_range": [
+            1.0,
+            33.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "Walk": {
+          "frame_range": [
+            1.0,
+            25.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        }
+      },
       "checks": {
         "root_present": true,
         "root_at_origin": true,
@@ -526,7 +723,21 @@
         "no_runtime_camera_or_light": true,
         "fixed_body_template": true,
         "head_six_cube_sides_uv_mapped": true,
-        "head_declares_five_generated_faces": true
+        "head_declares_five_generated_faces": true,
+        "single_armature": true,
+        "rig_object_name": true,
+        "required_bones_exact": true,
+        "all_meshes_have_armature_skin": true,
+        "all_meshes_have_rigid_100_percent_weights": true,
+        "exactly_declared_actions": true,
+        "actions_are_nonempty": true,
+        "actions_target_required_bones": true,
+        "idle_root_is_static": true,
+        "sit_root_is_lowered_and_static": true,
+        "sit_down_lowers_root": true,
+        "sit_legs_are_bent": true,
+        "sit_down_bends_legs": true,
+        "animation_metadata": true
       },
       "passed": true
     },
@@ -534,8 +745,8 @@
       "asset_id": "character.photo.person_02.voxel.v1",
       "path": "public/models/characters/photo-derived/voxel/person_02.glb",
       "exists": true,
-      "bytes": 11608,
-      "sha256": "3b275c02b3266411e0f86eaa4ae342c8e4afcf515b65a37ee088e8ca0b7a2bdd",
+      "bytes": 43952,
+      "sha256": "ed1d86bb1c8b059bad99c8e94f9e70274a5da708612fe0857df5d873a308a24c",
       "root_location": [
         0.0,
         0.0,
@@ -545,7 +756,7 @@
         "min": [
           -0.396,
           -0.21285,
-          -0.0
+          0.0
         ],
         "max": [
           0.396,
@@ -577,6 +788,188 @@
         "bottom": 2
       },
       "missing_nodes": [],
+      "rig": {
+        "armatures": [
+          "RIG_Voxel"
+        ],
+        "bones": [
+          "Arm_L",
+          "Arm_R",
+          "Head",
+          "Leg_L",
+          "Leg_R",
+          "Root",
+          "Torso"
+        ],
+        "skins": {
+          "GEO_Head": {
+            "bone": "Head",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Torso": {
+            "bone": "Torso",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Arm_L": {
+            "bone": "Arm_L",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Arm_R": {
+            "bone": "Arm_R",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Leg_L": {
+            "bone": "Leg_L",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Leg_R": {
+            "bone": "Leg_R",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          }
+        }
+      },
+      "actions": {
+        "Idle": {
+          "frame_range": [
+            1.0,
+            25.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "RaiseBothHands": {
+          "frame_range": [
+            1.0,
+            36.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "RaiseRightHand": {
+          "frame_range": [
+            1.0,
+            36.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "SitTalk": {
+          "frame_range": [
+            1.0,
+            33.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "Sit": {
+          "frame_range": [
+            1.0,
+            25.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "SitDown": {
+          "frame_range": [
+            1.0,
+            19.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "Talk": {
+          "frame_range": [
+            1.0,
+            33.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "Walk": {
+          "frame_range": [
+            1.0,
+            25.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        }
+      },
       "checks": {
         "root_present": true,
         "root_at_origin": true,
@@ -597,7 +990,21 @@
         "no_runtime_camera_or_light": true,
         "fixed_body_template": true,
         "head_six_cube_sides_uv_mapped": true,
-        "head_declares_five_generated_faces": true
+        "head_declares_five_generated_faces": true,
+        "single_armature": true,
+        "rig_object_name": true,
+        "required_bones_exact": true,
+        "all_meshes_have_armature_skin": true,
+        "all_meshes_have_rigid_100_percent_weights": true,
+        "exactly_declared_actions": true,
+        "actions_are_nonempty": true,
+        "actions_target_required_bones": true,
+        "idle_root_is_static": true,
+        "sit_root_is_lowered_and_static": true,
+        "sit_down_lowers_root": true,
+        "sit_legs_are_bent": true,
+        "sit_down_bends_legs": true,
+        "animation_metadata": true
       },
       "passed": true
     },
@@ -605,8 +1012,8 @@
       "asset_id": "character.photo.person_03.voxel.v1",
       "path": "public/models/characters/photo-derived/voxel/person_03.glb",
       "exists": true,
-      "bytes": 11512,
-      "sha256": "12b132213b24917cca29abc12bf18409445183c2d782e1f925be01df03ee4dde",
+      "bytes": 43352,
+      "sha256": "edf9231d9fbbcfb589998c12ea6b2ca3dd8557e3f0a9d8bffd44d246036cd83e",
       "root_location": [
         0.0,
         0.0,
@@ -616,7 +1023,7 @@
         "min": [
           -0.4,
           -0.215,
-          0.0
+          -0.0
         ],
         "max": [
           0.4,
@@ -648,6 +1055,188 @@
         "bottom": 2
       },
       "missing_nodes": [],
+      "rig": {
+        "armatures": [
+          "RIG_Voxel"
+        ],
+        "bones": [
+          "Arm_L",
+          "Arm_R",
+          "Head",
+          "Leg_L",
+          "Leg_R",
+          "Root",
+          "Torso"
+        ],
+        "skins": {
+          "GEO_Head": {
+            "bone": "Head",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Torso": {
+            "bone": "Torso",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Arm_L": {
+            "bone": "Arm_L",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Arm_R": {
+            "bone": "Arm_R",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Leg_L": {
+            "bone": "Leg_L",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Leg_R": {
+            "bone": "Leg_R",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          }
+        }
+      },
+      "actions": {
+        "Idle": {
+          "frame_range": [
+            1.0,
+            25.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "RaiseBothHands": {
+          "frame_range": [
+            1.0,
+            36.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "RaiseRightHand": {
+          "frame_range": [
+            1.0,
+            36.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "SitTalk": {
+          "frame_range": [
+            1.0,
+            33.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "Sit": {
+          "frame_range": [
+            1.0,
+            25.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "SitDown": {
+          "frame_range": [
+            1.0,
+            19.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "Talk": {
+          "frame_range": [
+            1.0,
+            33.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "Walk": {
+          "frame_range": [
+            1.0,
+            25.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        }
+      },
       "checks": {
         "root_present": true,
         "root_at_origin": true,
@@ -668,7 +1257,21 @@
         "no_runtime_camera_or_light": true,
         "fixed_body_template": true,
         "head_six_cube_sides_uv_mapped": true,
-        "head_declares_five_generated_faces": true
+        "head_declares_five_generated_faces": true,
+        "single_armature": true,
+        "rig_object_name": true,
+        "required_bones_exact": true,
+        "all_meshes_have_armature_skin": true,
+        "all_meshes_have_rigid_100_percent_weights": true,
+        "exactly_declared_actions": true,
+        "actions_are_nonempty": true,
+        "actions_target_required_bones": true,
+        "idle_root_is_static": true,
+        "sit_root_is_lowered_and_static": true,
+        "sit_down_lowers_root": true,
+        "sit_legs_are_bent": true,
+        "sit_down_bends_legs": true,
+        "animation_metadata": true
       },
       "passed": true
     },
@@ -676,8 +1279,8 @@
       "asset_id": "character.photo.person_04.voxel.v1",
       "path": "public/models/characters/photo-derived/voxel/person_04.glb",
       "exists": true,
-      "bytes": 11656,
-      "sha256": "bf3020203133c0d416286f8b675563ce2da42649bb1e59c0be7c99de8abe223e",
+      "bytes": 43508,
+      "sha256": "4deea953e76030250eede912680482c7545659643a3e4af34b060c8b8e8057fa",
       "root_location": [
         0.0,
         0.0,
@@ -687,7 +1290,7 @@
         "min": [
           -0.432,
           -0.2322,
-          0.0
+          -0.0
         ],
         "max": [
           0.432,
@@ -719,6 +1322,188 @@
         "bottom": 2
       },
       "missing_nodes": [],
+      "rig": {
+        "armatures": [
+          "RIG_Voxel"
+        ],
+        "bones": [
+          "Arm_L",
+          "Arm_R",
+          "Head",
+          "Leg_L",
+          "Leg_R",
+          "Root",
+          "Torso"
+        ],
+        "skins": {
+          "GEO_Head": {
+            "bone": "Head",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Torso": {
+            "bone": "Torso",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Arm_L": {
+            "bone": "Arm_L",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Arm_R": {
+            "bone": "Arm_R",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Leg_L": {
+            "bone": "Leg_L",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Leg_R": {
+            "bone": "Leg_R",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          }
+        }
+      },
+      "actions": {
+        "Idle": {
+          "frame_range": [
+            1.0,
+            25.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "RaiseBothHands": {
+          "frame_range": [
+            1.0,
+            36.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "RaiseRightHand": {
+          "frame_range": [
+            1.0,
+            36.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "SitTalk": {
+          "frame_range": [
+            1.0,
+            33.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "Sit": {
+          "frame_range": [
+            1.0,
+            25.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "SitDown": {
+          "frame_range": [
+            1.0,
+            19.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "Talk": {
+          "frame_range": [
+            1.0,
+            33.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "Walk": {
+          "frame_range": [
+            1.0,
+            25.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        }
+      },
       "checks": {
         "root_present": true,
         "root_at_origin": true,
@@ -740,7 +1525,21 @@
         "abstract_mark_no_logo": true,
         "fixed_body_template": true,
         "head_six_cube_sides_uv_mapped": true,
-        "head_declares_five_generated_faces": true
+        "head_declares_five_generated_faces": true,
+        "single_armature": true,
+        "rig_object_name": true,
+        "required_bones_exact": true,
+        "all_meshes_have_armature_skin": true,
+        "all_meshes_have_rigid_100_percent_weights": true,
+        "exactly_declared_actions": true,
+        "actions_are_nonempty": true,
+        "actions_target_required_bones": true,
+        "idle_root_is_static": true,
+        "sit_root_is_lowered_and_static": true,
+        "sit_down_lowers_root": true,
+        "sit_legs_are_bent": true,
+        "sit_down_bends_legs": true,
+        "animation_metadata": true
       },
       "passed": true
     },
@@ -748,8 +1547,8 @@
       "asset_id": "character.photo.person_05.voxel.v1",
       "path": "public/models/characters/photo-derived/voxel/person_05.glb",
       "exists": true,
-      "bytes": 11576,
-      "sha256": "648d9bd6fd813a014ed7f8c05bec0c0d306341685edd02f4d106339e1183c053",
+      "bytes": 43444,
+      "sha256": "45292e02f351db05eb71140b6bbf2904d592511a6681029d68d4bf4c3d9afef5",
       "root_location": [
         0.0,
         0.0,
@@ -759,7 +1558,7 @@
         "min": [
           -0.408,
           -0.2193,
-          0.0
+          -0.0
         ],
         "max": [
           0.408,
@@ -791,6 +1590,188 @@
         "bottom": 2
       },
       "missing_nodes": [],
+      "rig": {
+        "armatures": [
+          "RIG_Voxel"
+        ],
+        "bones": [
+          "Arm_L",
+          "Arm_R",
+          "Head",
+          "Leg_L",
+          "Leg_R",
+          "Root",
+          "Torso"
+        ],
+        "skins": {
+          "GEO_Head": {
+            "bone": "Head",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Torso": {
+            "bone": "Torso",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Arm_L": {
+            "bone": "Arm_L",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Arm_R": {
+            "bone": "Arm_R",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Leg_L": {
+            "bone": "Leg_L",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Leg_R": {
+            "bone": "Leg_R",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          }
+        }
+      },
+      "actions": {
+        "Idle": {
+          "frame_range": [
+            1.0,
+            25.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "RaiseBothHands": {
+          "frame_range": [
+            1.0,
+            36.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "RaiseRightHand": {
+          "frame_range": [
+            1.0,
+            36.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "SitTalk": {
+          "frame_range": [
+            1.0,
+            33.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "Sit": {
+          "frame_range": [
+            1.0,
+            25.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "SitDown": {
+          "frame_range": [
+            1.0,
+            19.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "Talk": {
+          "frame_range": [
+            1.0,
+            33.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "Walk": {
+          "frame_range": [
+            1.0,
+            25.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        }
+      },
       "checks": {
         "root_present": true,
         "root_at_origin": true,
@@ -811,7 +1792,21 @@
         "no_runtime_camera_or_light": true,
         "fixed_body_template": true,
         "head_six_cube_sides_uv_mapped": true,
-        "head_declares_five_generated_faces": true
+        "head_declares_five_generated_faces": true,
+        "single_armature": true,
+        "rig_object_name": true,
+        "required_bones_exact": true,
+        "all_meshes_have_armature_skin": true,
+        "all_meshes_have_rigid_100_percent_weights": true,
+        "exactly_declared_actions": true,
+        "actions_are_nonempty": true,
+        "actions_target_required_bones": true,
+        "idle_root_is_static": true,
+        "sit_root_is_lowered_and_static": true,
+        "sit_down_lowers_root": true,
+        "sit_legs_are_bent": true,
+        "sit_down_bends_legs": true,
+        "animation_metadata": true
       },
       "passed": true
     },
@@ -819,8 +1814,8 @@
       "asset_id": "character.photo.person_06.voxel.v1",
       "path": "public/models/characters/photo-derived/voxel/person_06.glb",
       "exists": true,
-      "bytes": 11596,
-      "sha256": "cbf9d468086c2fc62e70e10e277a91581cc350cfa22f53130dd28f3db9021751",
+      "bytes": 43468,
+      "sha256": "a8a147f436be7288e3fba8fd4e96475cde1b10ecf888469ba8885cf0a17f451f",
       "root_location": [
         0.0,
         0.0,
@@ -862,6 +1857,188 @@
         "bottom": 2
       },
       "missing_nodes": [],
+      "rig": {
+        "armatures": [
+          "RIG_Voxel"
+        ],
+        "bones": [
+          "Arm_L",
+          "Arm_R",
+          "Head",
+          "Leg_L",
+          "Leg_R",
+          "Root",
+          "Torso"
+        ],
+        "skins": {
+          "GEO_Head": {
+            "bone": "Head",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Torso": {
+            "bone": "Torso",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Arm_L": {
+            "bone": "Arm_L",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Arm_R": {
+            "bone": "Arm_R",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Leg_L": {
+            "bone": "Leg_L",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Leg_R": {
+            "bone": "Leg_R",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          }
+        }
+      },
+      "actions": {
+        "Idle": {
+          "frame_range": [
+            1.0,
+            25.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "RaiseBothHands": {
+          "frame_range": [
+            1.0,
+            36.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "RaiseRightHand": {
+          "frame_range": [
+            1.0,
+            36.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "SitTalk": {
+          "frame_range": [
+            1.0,
+            33.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "Sit": {
+          "frame_range": [
+            1.0,
+            25.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "SitDown": {
+          "frame_range": [
+            1.0,
+            19.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "Talk": {
+          "frame_range": [
+            1.0,
+            33.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "Walk": {
+          "frame_range": [
+            1.0,
+            25.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        }
+      },
       "checks": {
         "root_present": true,
         "root_at_origin": true,
@@ -882,7 +2059,21 @@
         "no_runtime_camera_or_light": true,
         "fixed_body_template": true,
         "head_six_cube_sides_uv_mapped": true,
-        "head_declares_five_generated_faces": true
+        "head_declares_five_generated_faces": true,
+        "single_armature": true,
+        "rig_object_name": true,
+        "required_bones_exact": true,
+        "all_meshes_have_armature_skin": true,
+        "all_meshes_have_rigid_100_percent_weights": true,
+        "exactly_declared_actions": true,
+        "actions_are_nonempty": true,
+        "actions_target_required_bones": true,
+        "idle_root_is_static": true,
+        "sit_root_is_lowered_and_static": true,
+        "sit_down_lowers_root": true,
+        "sit_legs_are_bent": true,
+        "sit_down_bends_legs": true,
+        "animation_metadata": true
       },
       "passed": true
     },
@@ -890,8 +2081,8 @@
       "asset_id": "character.photo.host.voxel.v1",
       "path": "public/models/characters/photo-derived/voxel/host.glb",
       "exists": true,
-      "bytes": 11540,
-      "sha256": "1141152b6383f63ee502eb0df9aa8732a4065d37b4277986c36a2f6c199132ba",
+      "bytes": 43380,
+      "sha256": "a48becca0f584d06bda6ced40f30c12e7457335026123da9b0e204368915a664",
       "root_location": [
         0.0,
         0.0,
@@ -901,7 +2092,7 @@
         "min": [
           -0.4,
           -0.215,
-          0.0
+          -0.0
         ],
         "max": [
           0.4,
@@ -933,6 +2124,188 @@
         "bottom": 2
       },
       "missing_nodes": [],
+      "rig": {
+        "armatures": [
+          "RIG_Voxel"
+        ],
+        "bones": [
+          "Arm_L",
+          "Arm_R",
+          "Head",
+          "Leg_L",
+          "Leg_R",
+          "Root",
+          "Torso"
+        ],
+        "skins": {
+          "GEO_Head": {
+            "bone": "Head",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Torso": {
+            "bone": "Torso",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Arm_L": {
+            "bone": "Arm_L",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Arm_R": {
+            "bone": "Arm_R",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Leg_L": {
+            "bone": "Leg_L",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          },
+          "GEO_Leg_R": {
+            "bone": "Leg_R",
+            "armature_modifiers": 1,
+            "modifier_targets_rig": true,
+            "rigid_weight": true
+          }
+        }
+      },
+      "actions": {
+        "Idle": {
+          "frame_range": [
+            1.0,
+            25.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "RaiseBothHands": {
+          "frame_range": [
+            1.0,
+            36.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "RaiseRightHand": {
+          "frame_range": [
+            1.0,
+            36.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "SitTalk": {
+          "frame_range": [
+            1.0,
+            33.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "Sit": {
+          "frame_range": [
+            1.0,
+            25.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "SitDown": {
+          "frame_range": [
+            1.0,
+            19.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "Talk": {
+          "frame_range": [
+            1.0,
+            33.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        },
+        "Walk": {
+          "frame_range": [
+            1.0,
+            25.0
+          ],
+          "target_bones": [
+            "Arm_L",
+            "Arm_R",
+            "Head",
+            "Leg_L",
+            "Leg_R",
+            "Root",
+            "Torso"
+          ],
+          "nonempty": true
+        }
+      },
       "checks": {
         "root_present": true,
         "root_at_origin": true,
@@ -953,7 +2326,21 @@
         "no_runtime_camera_or_light": true,
         "fixed_body_template": true,
         "head_six_cube_sides_uv_mapped": true,
-        "head_declares_five_generated_faces": true
+        "head_declares_five_generated_faces": true,
+        "single_armature": true,
+        "rig_object_name": true,
+        "required_bones_exact": true,
+        "all_meshes_have_armature_skin": true,
+        "all_meshes_have_rigid_100_percent_weights": true,
+        "exactly_declared_actions": true,
+        "actions_are_nonempty": true,
+        "actions_target_required_bones": true,
+        "idle_root_is_static": true,
+        "sit_root_is_lowered_and_static": true,
+        "sit_down_lowers_root": true,
+        "sit_legs_are_bent": true,
+        "sit_down_bends_legs": true,
+        "animation_metadata": true
       },
       "passed": true
     }
@@ -1264,7 +2651,7 @@
         512
       ],
       "bytes": 241019,
-      "sha256": "9caed5f79045a725a03f094cee75ee113214acec3c92db3fd56907f0a13081d6",
+      "sha256": "71ce69ff0eca8c60a11edbe0f08e8d2ee88c1fefe590169e203524361158ece3",
       "sampled_color_bins": 58,
       "checks": {
         "exists": true,
@@ -1283,8 +2670,8 @@
         512,
         512
       ],
-      "bytes": 240483,
-      "sha256": "0e8a4a83f011997073ef00cc6ba232b243b3a28ae446b9eab359c41cc9c162c3",
+      "bytes": 240626,
+      "sha256": "bbf7cd1d917c977fde3460fff6d1bf7958d849a01a2847127c6fca96e78399c2",
       "sampled_color_bins": 53,
       "checks": {
         "exists": true,
@@ -1304,7 +2691,7 @@
         512
       ],
       "bytes": 240903,
-      "sha256": "daabf45874cc278959be3b7c98d9e8bdaaa57693d06aafa8a13bbcd2d45133c5",
+      "sha256": "e6197de2c7c62b0b5acc49dcac2671e8969bdaa5747ea07fa3ff05ea6468fe87",
       "sampled_color_bins": 49,
       "checks": {
         "exists": true,
@@ -1323,8 +2710,8 @@
         512,
         512
       ],
-      "bytes": 241738,
-      "sha256": "a3336b1a0db471a6b21c8f030e65bb68b59b68ca2b1320b696d2a6c3f5b31335",
+      "bytes": 241749,
+      "sha256": "28dd0cb0447a75822dd7d6f2d89ff9cc036e951353fc5ecbf27344f2bdae100c",
       "sampled_color_bins": 49,
       "checks": {
         "exists": true,
@@ -1344,7 +2731,7 @@
         512
       ],
       "bytes": 236750,
-      "sha256": "69e547544df3c0c7553f9a4b9f38c73526ddcf3ac360a4320e63a97e73ab1e71",
+      "sha256": "897925d89da6b77904b41eae9cb1833bd3aedb147fa265d70ba1bd1ed1e9acd1",
       "sampled_color_bins": 30,
       "checks": {
         "exists": true,
@@ -1363,8 +2750,8 @@
         512,
         512
       ],
-      "bytes": 239772,
-      "sha256": "36bccd08ad2b2ac1b879d359c3243fcfe29c23c20365ca3c2cb30190a0625c1f",
+      "bytes": 239748,
+      "sha256": "052acaf7b7bc33669a2ecc39063a9748eab34906bf05e902abb92decf78acddd",
       "sampled_color_bins": 48,
       "checks": {
         "exists": true,
@@ -1384,7 +2771,7 @@
         512
       ],
       "bytes": 241374,
-      "sha256": "0f3172c53c0f6266bdb9b398726d4bf81d99f103639f0ad3248c75089cf716a7",
+      "sha256": "9c368a87306ae13dc3d0e0f3713319fa0e09b32f621cc707b73d25b2f6348ec5",
       "sampled_color_bins": 62,
       "checks": {
         "exists": true,
@@ -1419,7 +2806,7 @@
         1600,
         900
       ],
-      "bytes": 1379112,
+      "bytes": 1379150,
       "checks": {
         "exists": true,
         "resolution": true,

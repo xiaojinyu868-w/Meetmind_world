@@ -38,6 +38,8 @@ const ROUNDTABLE_SEATS = Object.freeze(
 const EVENT_TYPE_ALIASES = Object.freeze({
   "meeting-start": "meeting-started",
   "meeting-end": "meeting-ended",
+  "animation.cue": "animation-cue",
+  animation_cue: "animation-cue",
 });
 
 
@@ -57,12 +59,18 @@ export function normalizeEvent(rawEvent) {
   if (!rawEvent || typeof rawEvent !== "object") return null;
   const rawType = String(rawEvent.type ?? "").trim();
   if (!rawType) return null;
+  const payload =
+    rawEvent.payload && typeof rawEvent.payload === "object" && !Array.isArray(rawEvent.payload)
+      ? rawEvent.payload
+      : {};
   return {
     type: EVENT_TYPE_ALIASES[rawType] ?? rawType,
     agentId:
       typeof rawEvent.agent_id === "string"
         ? rawEvent.agent_id
-        : (typeof rawEvent.agentId === "string" ? rawEvent.agentId : null),
+        : (typeof rawEvent.agentId === "string"
+            ? rawEvent.agentId
+            : (typeof rawEvent.actor_id === "string" ? rawEvent.actor_id : null)),
     toAgentId:
       typeof rawEvent.to_agent_id === "string"
         ? rawEvent.to_agent_id
@@ -70,6 +78,19 @@ export function normalizeEvent(rawEvent) {
             ? rawEvent.toAgentId
             : (typeof rawEvent.target_id === "string" ? rawEvent.target_id : null)),
     text: typeof rawEvent.text === "string" ? rawEvent.text : "",
+    action:
+      typeof rawEvent.action === "string"
+        ? rawEvent.action
+        : (typeof payload.action === "string"
+            ? payload.action
+            : (typeof payload.animation === "string"
+                ? payload.animation
+                : (typeof payload.name === "string" ? payload.name : null))),
+    durationMs:
+      finiteNumber(rawEvent.duration_ms) ??
+      finiteNumber(rawEvent.durationMs) ??
+      finiteNumber(payload.duration_ms) ??
+      finiteNumber(payload.durationMs),
     participants: Array.isArray(rawEvent.participants)
       ? rawEvent.participants.filter((id) => typeof id === "string")
       : [],

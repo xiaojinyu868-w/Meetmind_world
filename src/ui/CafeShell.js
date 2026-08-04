@@ -265,22 +265,29 @@ function variantControlsMarkup({
   activeCharacterVariant,
   context,
 }) {
-  return `
-    <div class="variant-controls variant-controls--${context}">
-      ${variantSwitcherMarkup({
+  const sceneSwitcher = sceneVariants.length > 1 && activeSceneVariant
+    ? variantSwitcherMarkup({
         variants: sceneVariants,
         activeVariant: activeSceneVariant,
         context,
         kind: "scene",
-        label: "场景风格",
-      })}
-      ${characterVariants.length > 1 ? variantSwitcherMarkup({
+        label: "场景版本",
+      })
+    : "";
+  const characterSwitcher = characterVariants.length > 1 && activeCharacterVariant
+    ? variantSwitcherMarkup({
         variants: characterVariants,
         activeVariant: activeCharacterVariant,
         context,
         kind: "character",
         label: "人物生成方案",
-      }) : ""}
+      })
+    : "";
+  if (!sceneSwitcher && !characterSwitcher) return "";
+  return `
+    <div class="variant-controls variant-controls--${context}">
+      ${sceneSwitcher}
+      ${characterSwitcher}
     </div>`;
 }
 
@@ -493,13 +500,13 @@ export function createCafeShell({
             <span><strong>EchoWorld</strong><small>AGENT RELATIONSHIP CAFE</small></span>
           </div>
           <div class="intro-actions">
-            ${activeSceneVariant && activeCharacterVariant ? variantControlsMarkup({
+            ${variantControlsMarkup({
               sceneVariants,
               activeSceneVariant,
               characterVariants,
               activeCharacterVariant,
               context: "intro",
-            }) : ""}
+            })}
             <div class="intro-live"><span></span>${world === "field" ? "关系场域已生成" : world === "cafe" ? "熟人空间已开门" : "6 个 Agent 已在展位就位"}</div>
           </div>
         </header>
@@ -536,13 +543,13 @@ export function createCafeShell({
           </button>
         </header>
 
-        ${activeSceneVariant && activeCharacterVariant ? variantControlsMarkup({
+        ${variantControlsMarkup({
           sceneVariants,
           activeSceneVariant,
           characterVariants,
           activeCharacterVariant,
           context: "cafe",
-        }) : ""}
+        })}
 
         <div id="world-speech-layer" class="world-speech-layer" aria-live="polite"></div>
 

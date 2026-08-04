@@ -34,8 +34,10 @@
 
 硬性技术契约（管线产物与手工模型都必须满足）：
 
-- 格式：GLB，单个无骨骼刚性模型（**不需要骨骼、不需要动画**，移动/入座由程序做刚体变换）。
-- 规格：身高 **1.65 米**（程序按米制摆放）；原点在**脚底中心**；面朝 **+Z 方向**；根节点命名 `ROOT_Character`（白名单条目有 `root_node` 字段，按条目读取）。
+- 格式：GLB，六块身体网格使用刚性权重绑定到 `rigid-voxel-v1` 骨架；每块网格只能 100% 绑定一个对应骨骼，不做平滑蒙皮。
+- 骨架：对象名 `RIG_Voxel`；骨骼必须且只能为 `Root / Torso / Head / Arm_L / Arm_R / Leg_L / Leg_R`。
+- 动作：24 FPS，GLB 必须内嵌且只使用 `Idle / Walk / Talk / SitDown / Sit / SitTalk / RaiseRightHand / RaiseBothHands` 八个标准 Action；不写人物世界位移，坐姿只允许 Root 骨局部竖直下沉。
+- 规格：身高 **1.65 米**（程序按米制摆放）；原点在**脚底中心**；根节点命名 `ROOT_PhotoCharacter`。运行时按模型本地朝向放置，世界位移与转向由程序控制。
 - **贴图槽位是硬接口**：头部五面（front/left/right/back/top）与身体 atlas 使用**独立命名材质/UV 槽**（槽位命名与已交付 voxel 人物一致，见 `blender/build_photo_character_modes.py`）；贴图替换走 `NearestFilter`（像素感，禁线性模糊）。
 - 面数预算：单个人物 ≤ 3k 三角面；贴图 atlas ≤ 512×512；文件 ≤ 2MB。
 
@@ -68,7 +70,9 @@
   "kind": "character",
   "url": "models/characters/photo-derived/voxel/person_xx.glb",
   "version": 1,
-  "root_node": "ROOT_Character"
+  "root_node": "ROOT_PhotoCharacter",
+  "rig_kind": "rigid-voxel-v1",
+  "animations": ["Idle", "Walk", "Talk", "SitDown", "Sit", "SitTalk", "RaiseRightHand", "RaiseBothHands"]
 }
 ```
 
@@ -78,6 +82,8 @@
 
 - [ ] GLB 在 https://gltf-viewer.donmccurdy.com/ 打开正常，比例、朝向正确
 - [ ] 人物贴图槽位齐全（头五面 + 身体 atlas），NearestFilter 下像素感正确
+- [ ] 人物只有 1 个 `RIG_Voxel`、7 根标准骨骼，六块身体网格均为单骨 100% 刚性权重
+- [ ] GLB 只含八个标准 Action；Idle 静止、Walk 原地摆臂迈腿、SitDown 单次落座、Sit 静止、SitTalk 保持坐姿点头/摇头，举手动作结束后回到基础姿态
 - [ ] 场景含 `COLLIDER_*` 空物体且 manifest 导出碰撞列表
 - [ ] 文件大小：人物 ≤ 2MB，场景 ≤ 10MB（web 加载预算）
 - [ ] 头像 PNG 正方形、风格统一、与体素小人一致
@@ -102,3 +108,5 @@
 - 2026-08-03 | v2：画风终定为低多边形+手办质感 | 人（决策）+ AI（记录）
 - 2026-08-03 | v3：人物方向修正为有脸 per-person 模型（lowpoly 管线） | 人（决策）+ AI（记录）
 - 2026-08-03 | v4：依 P-6/ADR-6 重写——人物定为 **MC 体素 + AI 生成图片贴图**（原 lowpoly 有脸方向废弃）；贴图槽位契约取代材质换色契约；场景补充 COLLIDER_* 碰撞壳约定；保留"只增不改/验收清单/接口边界" | 人（决策）+ AI（重写）
+- 2026-08-04 | v5：voxel 人物增加 7 骨刚性骨架与四个标准 Action，明确单骨权重和原地动画契约 | 人（决策）+ AI（实现与记录）
+- 2026-08-04 | v6：补齐 Idle、SitDown、Sit、SitTalk，坐姿改为骨骼动作并禁止角色根节点缩放 | 人（决策）+ AI（实现与记录）

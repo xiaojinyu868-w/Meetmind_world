@@ -3,7 +3,7 @@
   "world_id": "echo-cafe-prototype",
   "asset_catalog_url": "data/asset-catalog.json",
   "environment": {
-    "asset_id": "environment.cafe.v1"
+    "asset_id": "environment.cafe.painterly.v1"
   },
   "player": {
     "kind": "person-agent",

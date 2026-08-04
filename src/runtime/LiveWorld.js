@@ -3,7 +3,7 @@ import { CAFE_LAYOUT } from "./CafeLayout.js";
 
 export const SNAPSHOT_SCHEMA = "echo-snapshot.v1";
 
-const DEFAULT_SNAPSHOT_URL = `${import.meta.env.BASE_URL}api/v0/world/snapshot`;
+const DEFAULT_SNAPSHOT_URL = `${import.meta.env?.BASE_URL ?? "/"}api/v0/world/snapshot`;
 const DEFAULT_MOCK_URL = "data/mock/snapshot.demo.json";
 const SIM_WALK_SPEED = 1.35;
 const MEETING_SEAT_INDICES = Object.freeze([3, 4, 5, 2]);
@@ -54,6 +54,32 @@ const NPC_SEATS = Object.freeze(
 function finiteOr(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
+}
+
+
+export function eventIdentityKey(event) {
+  const eventId = event?.event_id ?? event?.eventId ?? event?.id;
+  if (eventId !== undefined && eventId !== null && eventId !== "") {
+    return JSON.stringify(["event-id", eventId]);
+  }
+  const sequence = event?.sequence ?? event?.seq;
+  if (sequence !== undefined && sequence !== null && sequence !== "") {
+    return JSON.stringify(["sequence", event?.type, sequence]);
+  }
+  const payload = event?.payload && typeof event.payload === "object"
+    ? event.payload
+    : {};
+  return JSON.stringify([
+    event?.type,
+    event?.agent_id ?? event?.agentId ?? event?.actor_id ?? event?.actorId ??
+      event?.subject_id ?? event?.subjectId,
+    event?.to_agent_id ?? event?.toAgentId ?? event?.target_id ?? event?.targetId,
+    event?.action ?? payload.action ?? payload.animation ?? payload.name,
+    event?.duration_ms ?? event?.durationMs ?? payload.duration_ms ?? payload.durationMs,
+    event?.text ?? payload.text,
+    event?.participants,
+    event?.tick ?? payload.tick,
+  ]);
 }
 
 function round3(value) {
@@ -206,14 +232,7 @@ export class LiveWorld {
     const events = Array.isArray(snapshot?.events) ? snapshot.events : [];
     for (const event of events) {
       if (!event || typeof event !== "object") continue;
-      const key = JSON.stringify([
-        event.type,
-        event.agent_id ?? event.agentId,
-        event.to_agent_id ?? event.toAgentId ?? event.target_id,
-        event.text,
-        event.participants,
-        event.tick,
-      ]);
+      const key = eventIdentityKey(event);
       keys.add(key);
       if (this.previousEventKeys.has(key)) continue;
       for (const callback of this.eventCallbacks) callback(event);
