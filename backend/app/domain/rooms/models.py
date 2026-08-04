@@ -57,5 +57,8 @@ class RoomState:
     active_meeting: dict[str, Any] | None = None
     icebreaker: dict[str, Any] | None = None
     bulletins: list[dict[str, Any]] = field(default_factory=list)
+    conversations: dict[str, dict[str, Any]] = field(default_factory=dict)
+    relationships: dict[str, dict[str, Any]] = field(default_factory=dict)
+    agent_runtime: dict[str, dict[str, Any]] = field(default_factory=dict)
     sequence: int = 0
     command_receipts: dict[str, dict[str, Any]] = field(default_factory=dict)

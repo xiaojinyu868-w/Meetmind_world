@@ -15,10 +15,15 @@
 
 from fastapi import APIRouter, Query, Request
 from fastapi import HTTPException
+from pydantic import BaseModel
 
 from app.packages.store import PackageNotFound
 
 router = APIRouter(prefix="/api/v0/packages", tags=["packages"])
+
+
+class EncounterPrivacyUpdate(BaseModel):
+    privacy: str
 
 
 @router.get("")
@@ -38,4 +43,29 @@ def get_package(request: Request, person_id: str,
     if viewer == "agent" and not package["identity"]["confirmed"]:
         raise HTTPException(status_code=403, detail="身份未确认，不进入 Agent 上下文")
     # 首版不过滤（TBD-P3）：viewer 参数保留兼容，全量返回
+    return package
+
+
+@router.patch("/{person_id}/encounters/{encounter_id}/privacy")
+def update_encounter_privacy(
+    request: Request, person_id: str, encounter_id: str, body: EncounterPrivacyUpdate,
+):
+    """本机资料所有者显式决定一段相遇是否进入 PersonAgent 上下文。"""
+    if body.privacy not in {"self-only", "agent-usable"}:
+        raise HTTPException(status_code=400, detail="这里只允许 L1 或 L2")
+    store = request.app.state.store
+    try:
+        package = store.load_package(person_id)
+    except PackageNotFound:
+        raise HTTPException(status_code=404, detail=f"人物不存在：{person_id}")
+    if not package["identity"].get("confirmed"):
+        raise HTTPException(status_code=409, detail="身份确认后才能授权 Agent 使用")
+    encounter = next((
+        item for item in package.get("encounters", [])
+        if item.get("encounter_id") == encounter_id
+    ), None)
+    if encounter is None:
+        raise HTTPException(status_code=404, detail=f"相遇不存在：{encounter_id}")
+    encounter["privacy"] = body.privacy
+    store.save_package(package)
     return package

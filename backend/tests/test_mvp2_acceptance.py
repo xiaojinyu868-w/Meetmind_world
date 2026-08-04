@@ -59,6 +59,15 @@ def test_roadmap_2i_group_roundtable_bulletin_and_feedback(tmp_path, monkeypatch
         )
         assert joined.status_code == 200
 
+    conversation = _command(
+        client, room_id, "message-1", ids[0], "person.message",
+        {"target_id": ids[1], "text": "你对今天的现场有什么印象？"},
+    )
+    assert [event["type"] for event in conversation["events"]] == [
+        "person.message-requested", "person.message-created",
+    ]
+    assert conversation["events"][1]["payload"]["speaker_id"] == ids[1]
+
     organizer = ids[0]
     hotspot = _command(
         client, room_id, "hotspot-e", organizer, "hotspot.interact",

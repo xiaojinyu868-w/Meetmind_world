@@ -428,6 +428,7 @@ export function createCafeShell({
   onLocatePerson = () => {},
   onMeetingStart = async () => {},
   onMeetingEnd = async () => {},
+  onMeetingMessage = async () => null,
   resolveMediaUrl = (ref) => ref,
   world = "cafe",
   fieldPerson = null,
@@ -844,7 +845,7 @@ export function createCafeShell({
     shell.classList.remove("has-meeting-sheet");
   }
 
-  function submitMeetingMessage(message) {
+  async function submitMeetingMessage(message) {
     const text = String(message).trim();
     if (!text || !meetingActive) return;
     meetingMessages.push({ personId: currentUser.id, text });
@@ -852,22 +853,26 @@ export function createCafeShell({
     const participants = people.filter((person) => invitedIds.has(person.id));
     if (participants.length === 0) return;
     const responder = participants[meetingCursor % participants.length];
-    const reply = responder.conversation.replies[meetingCursor % responder.conversation.replies.length];
     meetingCursor += 1;
     setPersonExpression(responder.id, "thinking", {
       source: "roundtable-listening",
       duration: 1,
     });
-    window.setTimeout(() => {
-      if (!meetingActive) return;
-      meetingMessages.push({ personId: responder.id, text: reply });
-      setPersonExpression(responder.id, expressionForText(reply), {
+    let response = null;
+    try {
+      response = await onMeetingMessage(responder.id, text);
+    } catch (error) {
+      console.error("Roundtable Agent reply failed", error);
+      showToast("对方暂时没有回应");
+    }
+    if (!meetingActive || !response?.text) return;
+    meetingMessages.push({ personId: response.personId ?? responder.id, text: response.text });
+    setPersonExpression(response.personId ?? responder.id, expressionForText(response.text), {
         source: "roundtable-reply",
-        text: reply,
+        text: response.text,
         duration: 4.5,
-      });
-      renderMeetingActive();
-    }, 620);
+    });
+    renderMeetingActive();
   }
 
   root.addEventListener("click", async (event) => {
@@ -1008,7 +1013,7 @@ export function createCafeShell({
       return;
     }
     if (target.dataset.meetingTopic) {
-      submitMeetingMessage(target.dataset.meetingTopic);
+      void submitMeetingMessage(target.dataset.meetingTopic);
     }
   });
 
@@ -1028,7 +1033,7 @@ export function createCafeShell({
     if (!form) return;
     event.preventDefault();
     const input = form.elements.message;
-    submitMeetingMessage(input.value);
+    void submitMeetingMessage(input.value);
     input.value = "";
   });
 

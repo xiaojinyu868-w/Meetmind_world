@@ -4,7 +4,10 @@
 
 本链路把眼镜、麦克风和戒指在一次现实社交中采集的数据，按 `personId` 对齐并沉淀为 `PersonPackage`。后端用它更新人物 Agent、生成 MC 像素角色，并向前端发布一个可展示的 `PersonSignal` 快照。
 
-当前设计组只实现接收与展示占位能力，不在浏览器内做人脸识别、声纹识别、心动值计算、破冰检测或情感推断。演示数据位于 `src/data/demoSignals.js`，后续只要真实接口返回相同 DTO，即可替换占位数据。
+当前 K3 会话结束后，后端已把佩戴者的有界汇总/样本投影为
+`person-signal.v1`，由 `GET /api/v0/people/{personId}/signal` 提供；live 模式不再加载
+占位值，`src/data/demoSignals.js` 只在 `?api=mock` 使用。浏览器不做人脸/声纹识别、
+统计或情感判断。
 
 > 心率变化只代表生理唤起。AI 给出的“投入”“紧张”“放松”等描述均为有置信度的推测，不是对喜欢、厌恶或关系质量的事实判断，也不是医疗结论。
 
@@ -229,9 +232,9 @@ GET /api/people/{personId}/agent-summary
 - 授权撤回后，原始媒体、派生声音、像素贴图、Agent 记忆、信号快照和缓存都要按策略级联失效。
 - 浏览器不接收原始生理序列，只接收最小化聚合 DTO；详细时间线仅在有权限的回放接口中按需获取。
 
-## 联调替换点
+## 联调入口
 
-当前占位层导出：
+离线演示层导出：
 
 ```js
 import { getPersonSignal, personSignalsById } from "./data/demoSignals.js";
@@ -244,7 +247,9 @@ window.__echoWorld.setPersonSignal(personSignalSnapshot);
 window.__echoWorld.ingestPersonSignal(orderedBackendEvent);
 ```
 
-正式环境应由 REST 首次拉取快照，再由 SSE/WebSocket 适配器把白名单事件交给 `PersonSignalStore.ingestEvent()`；不要让业务组件分别维护自己的缓存。
+正式 live 环境已由 REST 首次拉取 `recent` 快照并写入 `PersonSignalStore`；未来 K3
+提供常连实时流后，再由 SSE/WebSocket 适配器把白名单事件交给
+`PersonSignalStore.ingestEvent()`，无需修改业务组件。
 
 正式接入时，UI 只需把 `getPersonSignal(personId)` 替换为查询缓存，并由 `person.signal.updated` 更新该缓存。以下条件成立即可无痛切换：
 

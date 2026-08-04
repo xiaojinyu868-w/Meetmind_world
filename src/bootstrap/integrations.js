@@ -177,6 +177,12 @@ export function createUnifiedApi(base = MockApi) {
     getPackage(personId) {
       return base.getPackage(personId);
     },
+    setEncounterPrivacy(personId, encounterId, privacy) {
+      return base.setEncounterPrivacy(personId, encounterId, privacy);
+    },
+    getPersonSignal(personId) {
+      return base.getPersonSignal(personId);
+    },
     getField(personId) {
       return base.getField(personId);
     },

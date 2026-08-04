@@ -24,7 +24,7 @@ npm run build
 -> 点选人物或摊位查看资料包（每个摊位有专属配色）
 -> 进入“我与 TA”的关系场域，E/F 触发共同记忆与线索
 -> 咖啡厅门口按 E 进入木屋咖啡厅：桌位/吧台情境菜单
--> 邀请熟人进入中央圆桌并对话
+-> v1 PersonAgent 自主靠近/交谈；邀请熟人后由 Agent 自主应邀进入中央圆桌
 -> 篝火边按 E 围炉坐下 -> 现场联机入口（创建/加入房间、第一印象游戏），再按 E 离开
 -> 世界播报即时显示邀请、圆桌和场域事件
 -> 关系 Map / 集市 / 咖啡厅之间返回定位
@@ -69,6 +69,8 @@ npm run build
 原始照片、声音、embedding、内部记忆和安全存储地址不得复制到 `public/`。前端只消费授权过滤后的 DTO、`CharacterAsset` 和实时 `AgentEvent`。
 
 人物生成分工、分支约定和 K3/Agent 跨模块契约见 [`docs/TEAM_WORKSTREAMS.md`](docs/TEAM_WORKSTREAMS.md)。后端服务（FastAPI）见 [`backend/README.md`](backend/README.md)；产品文档集（PRD、ROADMAP、架构、接口契约）见 [`docs/README.md`](docs/README.md)。
+真实传感器输入、K3 接收、事实/推断、v1 Agent Runtime 到 Three.js 的完整现状图见
+[`docs/REAL-DATA-WORLD-ARCHITECTURE.md`](docs/REAL-DATA-WORLD-ARCHITECTURE.md)。
 
 ## 场景风格
 
@@ -91,9 +93,11 @@ V2 几何场景资产仍归档保留，但不再出现在前端选择器中，�
 
 ## 当前限制
 
-- 现有 3D 世界仍纯读轮询 `GET /api/v0/world/snapshot`，后端不可用时降级本地 mock/内置快照；MVP2 房间 WebSocket 已在后端 `/api/v1/rooms/{id}/stream` 启用，但多人控制 UI 尚未接线。
-- 心动值、生理指标和 AI 解释当前是明确标注的演示数据；正式值必须由后端统计与推断服务提供，前端不自行判断喜欢、厌恶或医疗状态。
+- 咖啡厅默认接 `/api/v1/rooms` + WebSocket：RoomService 是 NPC 位置、对话和会议唯一权威；连接失败才回退 `GET /api/v0/world/snapshot`。集市仍使用 v0 兼容快照。`?api=mock` 切离线静态演示。
+- K3 Context Hub 可经 `/v1/physical-ai/*` 上传媒体与会话 package；服务端按人物拆出资料、音频、人脸/声纹证据、深度记忆、关系、体素角色和聚合 `PersonSignal`，已确认人物会进入大厅与 v1 咖啡厅。K3 相遇默认 L1，需在资料包里显式打开“Agent 记忆”才进入 prompt。
+- 当前是可信单机：房间 API 尚无登录身份/room token，不应直接暴露到不可信公网或作为多用户生产服务。
+- `?api=mock` 使用明确标注的 demo 生理信号；live 模式只读取 K3 Ring 聚合接口，没有真实值时显示不可用。后端只做会话时间窗统计，前端不自行判断喜欢、厌恶或医疗状态。
 - 合照入场的照片输入已接真实链路：qwen-vl 定位前景人脸 bbox（OpenCV 兜底），逐脸确认姓名后批量建档；识别质量仍受照片清晰度影响，支持人工跳过/重新认脸。
 - 人物暂时没有骨骼动画；移动和入座采用刚性模型的轻量表现。
 - 咖啡厅使用运行时圆形桌面碰撞，尚未从 Blender 导出完整碰撞壳。
-- 人脸/人物贴图生产与音视频上下文处理由上游团队负责；当前运行时只消费其 DTO/资产引用，详见 [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md)。
+- 上游只负责提供 K3 package 与媒体归属；EchoWorld 负责事实分层、推断记忆、关系、体素资产、信号 DTO、Agent 授权和世界加载。embedding、原始 Ring 序列和内部存储地址不下发浏览器。

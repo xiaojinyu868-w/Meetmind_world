@@ -154,6 +154,29 @@ def test_hotspot_actions_and_meeting_start_are_distance_guarded():
     assert malformed.json()["detail"]["code"] == "invalid_command"
 
 
+def test_person_message_requires_members_to_be_nearby():
+    client = _client()
+    _create_and_join(client)
+
+    nearby = _command(
+        client, "message-near", "person.message",
+        {"target_id": "bob", "text": "你好"},
+    )
+    assert nearby.status_code == 200
+    assert nearby.json()["events"][0]["type"] == "person.message-requested"
+
+    assert _command(
+        client, "move-bob-away", "member.move", {"x": 10, "z": 10},
+        actor_id="bob",
+    ).status_code == 200
+    denied = _command(
+        client, "message-far", "person.message",
+        {"target_id": "bob", "text": "远程绕过"},
+    )
+    assert denied.status_code == 409
+    assert denied.json()["detail"]["code"] == "outside_interaction_range"
+
+
 def test_stale_room_revision_is_rejected_before_state_change():
     client = _client()
     _create_and_join(client)

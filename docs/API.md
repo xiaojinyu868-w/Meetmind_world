@@ -14,18 +14,20 @@
 | IF-2 | `POST /api/v0/pipeline` | MVP1 | 处理：预处理 + 流式产出中间特征 → 相遇草稿 |
 | IF-3 | `POST /api/v0/confirm` | MVP1 | 确认：用户确认人物身份绑定（FR-1.3） |
 | IF-4 | `GET /api/v0/world/snapshot` | MVP1 | 世界：快照 `echo-snapshot.v1`，前端唯一渲染数据源 |
-| IF-5 | `GET /api/v0/packages/...` `POST /api/v0/search` | MVP1 | 资料包查看 + 人脸/姓名/关键词检索（FR-1.8/1.9） |
+| IF-5 | `GET /api/v0/packages/...` `PATCH .../privacy` `GET /api/v0/people/.../signal` `POST /api/v0/search` | MVP1 | 资料包查看、L1/L2 Agent 授权、生理聚合 + 检索（FR-1.8/1.9） |
 | IF-6 | `POST /api/v0/agents/meeting` 等（预留）；`/api/v1/rooms/...` | MVP2 | 互动：圆桌、Agent 事件流；v1 现场房间、热点、破冰、有序事件/WebSocket（目标架构，docs/MVP2-BACKEND.md） |
 | IF-7 | `GET /api/v0/notifications` `POST /api/v0/feedback` `POST /api/v0/refill`（预留）；`/api/v1/group-onboarding` `/impressions` `/fields/generations` | MVP2 | 推送与回填（暂缓）；v1 群体冷启动、数据回流、关系场域生成 |
 | IF-8 | `/api/v0/group/sessions/...` | MVP2 | 现场房间 v0 过渡实现：位置同步、第一印象互写、"谁写的？"破冰游戏（服务当前前端，v1 成熟后迁移） |
 | IF-9 | `/api/v0/fields/...` `/api/v0/world/events` | MVP2 | 关系场域 `echo-field.v1`、空间互动事件与世界晨报 |
 | IF-10 | 授权/组织/网络接口 | MVP3 | 本人确认、权限级别变更、组织空间、网络互联（届时另立详节） |
+| IF-K3 | `PUT /v1/physical-ai/assets/{object_id}` `POST /v1/physical-ai/packages` | MVP1 实机联调 | K3 Context Hub 内容寻址媒体上传、Agent package 幂等接收与世界入库 |
 
 设计要点：
 
 - **IF-1 与 IF-2 分离**：输入可能长时间持续（眼镜常开），处理按需触发；输入只管可靠落盘（事实层，只增不改），处理只管从事实层提取特征。
 - **中间特征是一等公民**：IF-2 不只产出最终结果，还有关键帧、人脸候选、转写片段——前端用它们做实时反馈（"拍到了谁、正在识别什么"），它们也是推断层数据的来源指针。
 - **人物身份与相遇事实写入必须经过 IF-3 用户确认**（P-3：事实层只能由采集管线 + 用户确认写入）；IF-8 的现场文字与游戏结果只进入可重算推断层，并强制记录作者和房间来源。
+- **K3 是已确认身份的上游采集管线**：IF-K3 只把带全局 `person_id`、姓名且身份状态为 `confirmed|resolved` 的人物注册进世界；未确认人物仅保留原始事实。媒体必须先 PUT，package 后 POST，重复提交按幂等键去重。完整部署与验收见 `K3-SERVER-INTEGRATION.md`。
 
 ---
 
@@ -120,12 +122,13 @@ booth module 结构（快照 modules 内，`type: "booth"`）：
   // display.tags/photos 只取 privacy ≥ agent-usable 的内容（L1 不上墙）
 ```
 
-媒体文件服务（v0.3 加性）：`GET /api/v0/media/{ref}` —— 事实层文件（face_ref/photos 等指针）的 HTTP 出口，路径穿越防护 + 扩展名白名单。
+媒体文件服务（v0.3 加性）：`GET /api/v0/media/{ref}` —— 事实层图片/音视频/Markdown与派生 GLB/PNG 的 HTTP 出口，路径穿越防护 + 扩展名白名单；原始 package JSON、embedding 和 Ring 样本不经此路由公开。
 
 ## IF-5 资料包与检索接口
 
-### `GET /api/v0/packages` — 列表（按 `viewer` 权限过滤字段）
-### `GET /api/v0/packages/{person_id}` — 单个资料包（事实指针 + 推断视图）
+- `GET /api/v0/packages`：列表（按 `viewer` 权限过滤字段）。
+- `GET /api/v0/packages/{person_id}`：单个资料包（事实指针 + 推断视图）。
+
 ### `POST /api/v0/search` — 检索（FR-1.9）
 
 ```jsonc
@@ -137,6 +140,16 @@ booth module 结构（快照 modules 内，`type: "booth"`）：
 { "results": [ { "person_id": "person_01JXXX", "name": "陈某", "score": 0.93, "last_encounter": { "time": "...", "place": "..." } } ] }
 ```
 
+### `PATCH /api/v0/packages/{person_id}/encounters/{encounter_id}/privacy`
+
+可信单机下由资料所有者在 `self-only` 与 `agent-usable` 间切换。只有 L2 相遇的推断、
+地点和带事实指针的 `memory.md` 条目能进入 PersonAgent 上下文。
+
+### `GET /api/v0/people/{person_id}/signal`
+
+返回 `person-signal.v1` 聚合 DTO。K3 Ring 原始样本归佩戴者并留在会话事实层；接口只
+返回心率摘要、趋势、非因果解释、置信度与审计 ID，缺数据返回 `404`。
+
 ## IF-6 现场房间与 Agent 互动（MVP2 `/api/v1`）
 
 - `POST /api/v1/rooms`：创建房间和热点。
@@ -146,6 +159,16 @@ booth module 结构（快照 modules 内，`type: "booth"`）：
 - `GET /api/v1/rooms/{room_id}/events?after_sequence=N`：断线补拉。
 - `WS /api/v1/rooms/{room_id}/stream?after_sequence=N`：实时有序事件。
 - `GET /api/v1/rooms/{room_id}/brief`：从已提交语义事件生成晨报。
+
+`meetmind.room-snapshot.v1` 除成员、热点、会议、破冰和播报外，还包含：
+
+- `conversations[]`：参与者、状态、最近消息和最多 40 条有序消息。
+- `relationships[]`：可观察的互动轮数、共同会议次数与最后事件序号，不输出虚构的情感分。
+- `agent_runtime[]`：PersonAgent 当前目标、状态、最近动作与目标人物。
+
+前端可提交 `person.message`，但 `agent.visit`、`agent.talk` 和 Agent 的
+`meeting.respond` 只能由服务端 Intent -> Policy -> Command 链生成。可信单机前端
+固定使用当前玩家 `actor_id`，不再替 NPC 发送命令。
 
 事件统一为 `meetmind.event.v1`，至少包含 `event_id / room_id / sequence / type /
 actor_id / command_id / payload / occurred_at / correlation_id / causation_id`。
@@ -296,11 +319,12 @@ actor_id / command_id / payload / occurred_at / correlation_id / causation_id`�
 
 事件使用 append-only JSONL 保存，服务重启后仍可生成晨报；用户输入文本只通过 `textContent` 渲染到 DOM。
 
-## 前端 mock 约定（先前端阶段）
+## 前端 mock 约定（离线演示）
 
 - mock 数据放 `public/data/mock/`：`ingest.response.json`、`pipeline.stream.jsonl`（按行模拟 SSE 事件，前端定时器逐条播放模拟流式）、`snapshot.demo.json`、`packages.demo.json`、`search.demo.json`、`group-onboarding.detect.demo.json` / `group-onboarding.register.demo.json`（合照入场两段式，face_ref 复用现有 portraits 资产）。
 - 前端 mock 只准消费本契约字段；对齐效果后，后端实现到"前端零改动切 baseURL 即可用"。
 - mock 场景素材两条核心路径：黑客松展位（新人，`match_person_id: null`）+ 老朋友重逢（非空）。
+- 前端默认连接真实后端；只有显式添加 `?api=mock` 才加载上述静态数据。
 
 ## 版本与兼容
 
@@ -319,3 +343,4 @@ actor_id / command_id / payload / occurred_at / correlation_id / causation_id`�
 - 2026-08-04 | v1.1（加性）：IF-7 合照入场拆为两段式 `group-onboarding/detect` + `group-onboarding/confirm`（检测不建档、确认才批量建档+注册展位，支持逐脸 impression 推断）；一次性接口保留；人脸检测器升级为 qwen-vl 优先、OpenCV 兜底 | AI
 - 2026-08-04 | 合并 codex/agent 两线：IF-6/7 同时登记 v0 预留项与 v1 rooms/group-onboarding 目标架构，IF-8 标注为 v0 过渡实现；v0 快照改为纯读（advance 默认 0，tick 由服务端 scheduler 心跳推进，advance=1 仅兼容旧客户端） | AI
 - 2026-08-04 | 行为变更（契约不变）：IF-9 关系场域生成升级为 LLM 艺术化映射（chat provider 把关系材料译为诗意空间参数，model 记为实际模型名）；provider 未配置或输出不合规时回退确定性规则模板（model="relationship-field-rules.v1"），echo-field.v1 schema 与缓存/regenerate 语义不变 | AI
+- 2026-08-04 | 新增 IF-K3：实现 K3 Context Hub 媒体内容寻址上传、Bearer 鉴权、Agent package 校验与幂等接收；已确认人物导入 Package/大厅，前端改为默认真实 API | AI

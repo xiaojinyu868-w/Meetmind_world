@@ -15,6 +15,9 @@ from app.eventing import EventStore
 
 WORLD_BOUND = 20.0
 MAX_REPLAY_EVENTS = 500
+MAX_MESSAGE_DISTANCE = 3.0
+MAX_CONVERSATION_MESSAGES = 40
+AGENT_VISIT_STEP = 1.2
 
 
 class RoomError(Exception):
@@ -32,6 +35,7 @@ class RoomService:
     def __init__(
         self, *, icebreaker_feedback=None, auto_bulletin: bool = True,
         event_store: EventStore | None = None, state_repository=None,
+        interaction_recorder=None,
     ):
         self._rooms: dict[str, RoomState] = {}
         self._lock = threading.RLock()
@@ -39,6 +43,7 @@ class RoomService:
         self._auto_bulletin = auto_bulletin
         self._event_store = event_store or EventStore()
         self._state_repository = state_repository
+        self._interaction_recorder = interaction_recorder
         if self._state_repository is not None:
             self._rooms = {
                 room.room_id: room for room in self._state_repository.load_all()
@@ -94,6 +99,15 @@ class RoomService:
             x, z = self._position(position or {"x": 0.0, "z": 0.0})
             member = Member(member_id, display_name.strip(), x, z)
             room.members[member_id] = member
+            if member_id != "person-self":
+                room.agent_runtime.setdefault(member_id, {
+                    "agent_id": member_id,
+                    "goal": "maintain-relationships",
+                    "status": "idle",
+                    "last_action": None,
+                    "last_target_id": None,
+                    "last_sequence": None,
+                })
             event = self._append_event(
                 room,
                 "member.joined",
@@ -111,6 +125,24 @@ class RoomService:
     def snapshot(self, room_id: str) -> dict[str, Any]:
         with self._lock:
             return self._snapshot(self._room(room_id))
+
+    def room_ids(self) -> tuple[str, ...]:
+        with self._lock:
+            return tuple(sorted(self._rooms))
+
+    def request_agent_turn(self, room_id: str, agent_id: str, *, cycle: int) -> dict[str, Any]:
+        """Commit one server-owned observation that may activate exactly one Agent."""
+        with self._lock:
+            room = self._room(room_id)
+            self._member(room, agent_id)
+            event = self._append_event(
+                room, "agent.autonomy-requested",
+                {"cycle": cycle, "goal": "maintain-relationships"},
+                actor_id="system.scheduler", subject_id=agent_id,
+                command_id=f"autonomy-{room_id}-{cycle}-{agent_id}",
+            )
+            self._persist(room)
+            return event
 
     def events_after(
         self, room_id: str, *, after_sequence: int = 0, limit: int = 100
@@ -189,6 +221,8 @@ class RoomService:
                 )
             handler = {
                 "member.move": self._move_member,
+                "agent.move": self._move_member,
+                "agent.visit": self._agent_visit,
                 "hotspot.interact": self._interact_with_hotspot,
                 "meeting.invite": self._invite_meeting,
                 "meeting.respond": self._respond_meeting,
@@ -200,6 +234,8 @@ class RoomService:
                 "icebreaker.start": self._start_icebreaker,
                 "icebreaker.submit": self._submit_icebreaker,
                 "icebreaker.finish": self._finish_icebreaker,
+                "person.message": self._message_person,
+                "agent.talk": self._agent_talk,
             }.get(command_type)
             if handler is None:
                 raise RoomError("unknown_command", f"Unsupported command '{command_type}'")
@@ -223,21 +259,128 @@ class RoomService:
             self._persist(room)
             return response
 
+    def _message_person(
+        self, room: RoomState, actor_id: str, command_id: str, payload: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        target_id = str(payload.get("target_id") or "").strip()
+        target = self._member(room, target_id)
+        text = str(payload.get("text") or "").strip()
+        if not text or len(text) > 500:
+            raise RoomError("invalid_command", "message text must contain 1-500 characters")
+        if target_id == actor_id:
+            raise RoomError("invalid_command", "A member cannot message themselves")
+        actor = self._member(room, actor_id)
+        if math.hypot(actor.x - target.x, actor.z - target.z) > MAX_MESSAGE_DISTANCE:
+            raise RoomError("outside_interaction_range", "Members must be near each other to start a conversation")
+        conversation_id = str(
+            payload.get("conversation_id")
+            or "conversation-" + "-".join(sorted((actor_id, target_id)))
+        )
+        conversation = room.conversations.setdefault(conversation_id, {
+            "conversation_id": conversation_id,
+            "participant_ids": sorted((actor_id, target_id)),
+            "turn_count": 0,
+            "status": "active",
+            "last_message": None,
+            "messages": [],
+        })
+        if set(conversation["participant_ids"]) != {actor_id, target_id}:
+            raise RoomError("conversation_conflict", "conversation_id belongs to other members")
+        conversation.setdefault("messages", [])
+        conversation["turn_count"] += 1
+        conversation["status"] = "active"
+        conversation["last_message"] = {"speaker_id": actor_id, "text": text}
+        event = self._append_event(
+            room, "person.message-requested",
+            {
+                "conversation_id": conversation_id,
+                "target_id": target.member_id,
+                "prompt": text,
+                "turn": conversation["turn_count"],
+            },
+            actor_id=actor_id, subject_id=target_id, command_id=command_id,
+        )
+        self._append_conversation_message(conversation, actor_id, text, event["sequence"])
+        self._record_relationship_turn(room, actor_id, target_id, event["sequence"])
+        if self._interaction_recorder is not None:
+            self._interaction_recorder(actor_id, target_id)
+        self._set_agent_action(room, actor_id, "talking", "initiate-talk", target_id,
+                               event["sequence"])
+        return [event]
+
+    def _agent_talk(
+        self, room: RoomState, actor_id: str, command_id: str, payload: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        listener_id = str(payload.get("target_id") or "").strip()
+        self._member(room, actor_id)
+        self._member(room, listener_id)
+        text = str(payload.get("text") or "").strip()
+        if not text or len(text) > 500:
+            raise RoomError("invalid_command", "talk text must contain 1-500 characters")
+        conversation_id = str(payload.get("conversation_id") or "").strip()
+        conversation = room.conversations.get(conversation_id)
+        if conversation is None or set(conversation["participant_ids"]) != {actor_id, listener_id}:
+            raise RoomError("conversation_not_found", "Conversation was not found")
+        conversation.setdefault("messages", [])
+        conversation["turn_count"] += 1
+        conversation["last_message"] = {"speaker_id": actor_id, "text": text}
+        event = self._append_event(
+            room, "person.message-created",
+            {
+                "conversation_id": conversation_id,
+                "speaker_id": actor_id,
+                "listener_id": listener_id,
+                "text": text,
+                "turn": conversation["turn_count"],
+            },
+            actor_id=actor_id, subject_id=listener_id, command_id=command_id,
+        )
+        self._append_conversation_message(conversation, actor_id, text, event["sequence"])
+        self._record_relationship_turn(room, actor_id, listener_id, event["sequence"])
+        self._set_agent_action(room, actor_id, "idle", "reply", listener_id,
+                               event["sequence"])
+        return [event]
+
     def _move_member(
         self, room: RoomState, actor_id: str, command_id: str, payload: dict[str, Any]
     ) -> list[dict[str, Any]]:
         member = self._member(room, actor_id)
         x, z = self._position(payload)
         member.x, member.z = x, z
-        return [
-            self._append_event(
+        event = self._append_event(
                 room,
                 "member.moved",
                 {"member_id": actor_id, "position": {"x": x, "z": z}},
                 actor_id=actor_id,
                 command_id=command_id,
             )
-        ]
+        self._set_agent_action(room, actor_id, "moving", "move", None, event["sequence"])
+        return [event]
+
+    def _agent_visit(
+        self, room: RoomState, actor_id: str, command_id: str, payload: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        member = self._member(room, actor_id)
+        target_id = str(payload.get("target_id") or "").strip()
+        target = self._member(room, target_id)
+        if target_id == actor_id:
+            raise RoomError("invalid_command", "An Agent cannot visit itself")
+        dx, dz = target.x - member.x, target.z - member.z
+        distance = math.hypot(dx, dz)
+        if distance <= MAX_MESSAGE_DISTANCE * 0.72:
+            return []
+        step = min(AGENT_VISIT_STEP, max(0.0, distance - MAX_MESSAGE_DISTANCE * 0.68))
+        member.x += dx / distance * step
+        member.z += dz / distance * step
+        event = self._append_event(
+            room, "member.moved",
+            {"member_id": actor_id, "position": {"x": member.x, "z": member.z},
+             "reason": "agent-visit", "target_id": target_id},
+            actor_id=actor_id, subject_id=target_id, command_id=command_id,
+        )
+        self._set_agent_action(room, actor_id, "moving", "visit", target_id,
+                               event["sequence"])
+        return [event]
 
     def _interact_with_hotspot(
         self, room: RoomState, actor_id: str, command_id: str, payload: dict[str, Any]
@@ -321,8 +464,7 @@ class RoomService:
             for member_id in invitation["participant_ids"]
         ):
             invitation["status"] = "accepted"
-        return [
-            self._append_event(
+        response_event = self._append_event(
                 room,
                 "meeting.invitation-responded",
                 {"invitation_id": invitation_id, "member_id": actor_id,
@@ -330,7 +472,26 @@ class RoomService:
                 actor_id=actor_id,
                 command_id=command_id,
             )
-        ]
+        events = [response_event]
+        if response == "accepted" and actor_id != invitation["organizer_id"]:
+            hotspot = room.hotspots[invitation["hotspot_id"]]
+            participant_index = invitation["participant_ids"].index(actor_id)
+            angle = math.tau * participant_index / len(invitation["participant_ids"])
+            radius = min(1.4, hotspot.radius * 0.55)
+            member = self._member(room, actor_id)
+            member.x = hotspot.x + math.sin(angle) * radius
+            member.z = hotspot.z + math.cos(angle) * radius
+            move_event = self._append_event(
+                room, "member.moved",
+                {"member_id": actor_id,
+                 "position": {"x": member.x, "z": member.z},
+                 "reason": "meeting-arrival", "invitation_id": invitation_id},
+                actor_id=actor_id, command_id=command_id,
+            )
+            events.append(move_event)
+            self._set_agent_action(room, actor_id, "meeting", "accept-meeting",
+                                   invitation["organizer_id"], move_event["sequence"])
+        return events
 
     def _start_meeting(
         self, room: RoomState, actor_id: str, command_id: str, payload: dict[str, Any]
@@ -366,15 +527,20 @@ class RoomService:
             "status": "active",
         }
         invitation["status"] = "active"
-        return [
-            self._append_event(
+        event = self._append_event(
                 room,
                 "meeting.started",
                 copy.deepcopy(room.active_meeting),
                 actor_id=actor_id,
                 command_id=command_id,
             )
-        ]
+        participants = room.active_meeting["participant_ids"]
+        for index, person_a in enumerate(participants):
+            self._set_agent_action(room, person_a, "meeting", "join-meeting",
+                                   actor_id, event["sequence"])
+            for person_b in participants[index + 1:]:
+                self._record_shared_meeting(room, person_a, person_b, event["sequence"])
+        return [event]
 
     def _end_meeting(
         self, room: RoomState, actor_id: str, command_id: str, payload: dict[str, Any]
@@ -396,6 +562,9 @@ class RoomService:
             actor_id=actor_id,
             command_id=command_id,
         )
+        for participant_id in meeting["participant_ids"]:
+            self._set_agent_action(room, participant_id, "idle", "leave-meeting",
+                                   None, ended_event["sequence"])
         invitation = room.invitations[meeting["invitation_id"]]
         invitation["status"] = "ended"
         bulletin = {
@@ -615,6 +784,7 @@ class RoomService:
         payload: dict[str, Any],
         *,
         actor_id: str | None = None,
+        subject_id: str | None = None,
         command_id: str | None = None,
     ) -> dict[str, Any]:
         event = self._event_store.append(EventEnvelope(
@@ -622,6 +792,7 @@ class RoomService:
             type=event_type,
             payload=copy.deepcopy(payload),
             actor_id=actor_id,
+            subject_id=subject_id,
             command_id=command_id,
         ))
         room.sequence = event.sequence or room.sequence
@@ -645,7 +816,70 @@ class RoomService:
                 copy.deepcopy(room.invitations[key]) for key in sorted(room.invitations)
             ],
             "bulletins": copy.deepcopy(room.bulletins),
+            "conversations": [
+                copy.deepcopy(room.conversations[key]) for key in sorted(room.conversations)
+            ],
+            "relationships": [
+                copy.deepcopy(room.relationships[key]) for key in sorted(room.relationships)
+            ],
+            "agent_runtime": [
+                copy.deepcopy(room.agent_runtime[key]) for key in sorted(room.agent_runtime)
+            ],
         }
+
+    @staticmethod
+    def _append_conversation_message(
+        conversation: dict[str, Any], speaker_id: str, text: str, sequence: int,
+    ) -> None:
+        messages = conversation.setdefault("messages", [])
+        messages.append({
+            "turn": conversation["turn_count"], "speaker_id": speaker_id,
+            "text": text, "sequence": sequence,
+        })
+        if len(messages) > MAX_CONVERSATION_MESSAGES:
+            del messages[:-MAX_CONVERSATION_MESSAGES]
+
+    @staticmethod
+    def _relationship(room: RoomState, person_a: str, person_b: str) -> dict[str, Any]:
+        participants = sorted((person_a, person_b))
+        relationship_id = "relationship-" + "--".join(participants)
+        return room.relationships.setdefault(relationship_id, {
+            "relationship_id": relationship_id,
+            "participant_ids": participants,
+            "interaction_count": 0,
+            "conversation_turn_count": 0,
+            "shared_meeting_count": 0,
+            "last_interaction_sequence": None,
+        })
+
+    def _record_relationship_turn(
+        self, room: RoomState, person_a: str, person_b: str, sequence: int,
+    ) -> None:
+        relation = self._relationship(room, person_a, person_b)
+        relation["conversation_turn_count"] += 1
+        relation["interaction_count"] += 1
+        relation["last_interaction_sequence"] = sequence
+
+    def _record_shared_meeting(
+        self, room: RoomState, person_a: str, person_b: str, sequence: int,
+    ) -> None:
+        relation = self._relationship(room, person_a, person_b)
+        relation["shared_meeting_count"] += 1
+        relation["interaction_count"] += 1
+        relation["last_interaction_sequence"] = sequence
+
+    @staticmethod
+    def _set_agent_action(
+        room: RoomState, agent_id: str, status: str, action: str,
+        target_id: str | None, sequence: int,
+    ) -> None:
+        runtime = room.agent_runtime.get(agent_id)
+        if runtime is None:
+            return
+        runtime.update({
+            "status": status, "last_action": action,
+            "last_target_id": target_id, "last_sequence": sequence,
+        })
 
     def _room(self, room_id: str) -> RoomState:
         room = self._rooms.get(room_id)

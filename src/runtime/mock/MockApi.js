@@ -4,10 +4,9 @@
  * 覆盖契约：IF-1 ingest / IF-2 pipeline / IF-3 confirm / IF-4 world/snapshot / IF-5 packages+search。
  * （见 docs/API.md；快照 schema 见 docs/ARCHITECTURE.md §4。）
  *
- * mock / live 切换（前后端联调的唯一开关，全部逻辑集中在本文件）：
- * - 默认 mock：从 `public/data/mock/` 读取静态文件（经 publicUrl() 处理 BASE_URL）。
- * - URL 加 `?api=live`：改向真实后端 `baseURL = /api/v0` 发请求，mock 数据完全不加载。
- * - 用法：`http://127.0.0.1:5173/?api=live`；去掉参数即回到 mock。
+ * live / mock 切换（全部逻辑集中在本文件）：
+ * - 默认 live：请求真实后端，确保 K3 → 服务器 → 世界使用同一份数据。
+ * - URL 加 `?api=mock`：显式切换静态演示数据，供离线展示使用。
  *
  * mock 数据约定（docs/API.md「前端 mock 约定」）：
  * - `pipeline.stream.jsonl`：黑客松展位（新人，`match_person_id: null`）。
@@ -33,13 +32,13 @@ const PIPELINE_SCENARIO_FILES = Object.freeze({
 });
 
 /**
- * 当前 API 模式："mock" | "live"。模块加载时由 URL 参数 `?api=live` 决定一次，
+ * 当前 API 模式："mock" | "live"。模块加载时由 URL 参数 `?api=mock` 决定一次，
  * 之后不变（刷新页面才能切换），避免会话中途数据源混用。
  */
 export const API_MODE = (() => {
-  if (typeof window === "undefined" || !window.location) return "mock";
+  if (typeof window === "undefined" || !window.location) return "live";
   const params = new URLSearchParams(window.location.search);
-  return params.get("api") === "live" ? "live" : "mock";
+  return params.get("api") === "mock" ? "mock" : "live";
 })();
 
 /** @returns {boolean} 当前是否连真实后端（`/api/v0`）。 */
@@ -98,6 +97,18 @@ async function postJson(path, body) {
   });
   if (!response.ok) {
     throw new Error(`POST ${path} failed: HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
+async function patchJson(path, body) {
+  const response = await fetch(`${LIVE_BASE_URL}${path}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new Error(`PATCH ${path} failed: HTTP ${response.status}`);
   }
   return response.json();
 }
@@ -363,6 +374,25 @@ export async function getPackage(personId) {
     throw new Error(`IF-5 getPackage: 资料包不存在（404）：${personId}`);
   }
   return pkg;
+}
+
+export async function setEncounterPrivacy(personId, encounterId, privacy) {
+  if (!isLiveMode()) {
+    throw new Error("mock 资料包不支持修改授权");
+  }
+  return patchJson(
+    `/packages/${encodeURIComponent(personId)}/encounters/${encodeURIComponent(encounterId)}/privacy`,
+    { privacy },
+  );
+}
+
+export async function getPersonSignal(personId) {
+  if (!isLiveMode()) return null;
+  const url = `${LIVE_BASE_URL}/people/${encodeURIComponent(personId)}/signal`;
+  const response = await fetch(url);
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`GET ${url} failed: HTTP ${response.status}`);
+  return response.json();
 }
 
 function mockFieldFromPackage(pkg) {

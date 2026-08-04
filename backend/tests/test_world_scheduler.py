@@ -29,3 +29,14 @@ def test_server_scheduler_advances_cafe_and_sparsely_advances_hall(tmp_path, mon
 
     assert app.state.world.tick == cafe_tick + scheduler.hall_every
     assert app.state.hall.tick == hall_tick + 1
+
+
+def test_server_scheduler_stops_legacy_cafe_when_v1_cafe_exists(tmp_path, monkeypatch):
+    monkeypatch.setenv("ECHO_DATA_DIR", str(tmp_path))
+    app = create_app()
+    app.state.room_service.create_room(room_id="echoworld-cafe", name="Echo Cafe")
+    cafe_tick = app.state.world.tick
+
+    app.state.world_scheduler.tick_once()
+
+    assert app.state.world.tick == cafe_tick

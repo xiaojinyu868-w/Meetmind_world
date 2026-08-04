@@ -305,7 +305,9 @@ export class HeartSignalSystem {
     const material = new THREE.SpriteMaterial({
       map: texture,
       transparent: true,
-      depthTest: true,
+      // This is world-anchored UI: follow the person, but do not let awnings,
+      // signs or nearby props hide the status badge.
+      depthTest: false,
       depthWrite: false,
       toneMapped: false,
     });

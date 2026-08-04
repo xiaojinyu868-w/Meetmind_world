@@ -20,8 +20,8 @@ from pathlib import Path
 
 from app.harness.permissions.guard import DEFAULT_GUARD, PermissionGuard
 
-# Agent 互动可携带的信息圈层——首版不执行过滤（2026-08-03 产品决策，TBD-P3），
-# 保留常量供授权机制重议后恢复过滤（见 git 历史）。
+# Agent 互动可携带的信息圈层。L1/self-only 只供资料所有者查看，绝不进入
+# Agent prompt；L2 及以上仍须经 ContextBuilder 再做运行时授权。
 AGENT_VISIBLE_PRIVACY = ("agent-usable", "org-shared", "public-approved")
 
 # memory.md 条目格式：- 内容 (source: facts/<pid>/<enc>/..., conf: 0.7)
@@ -167,13 +167,7 @@ class MemoryStore:
     # ---------- Agent 授权上下文视图（对话/决策的唯一信息来源，P-8） ----------
 
     def authorized_agent_view(self, person_id: str) -> dict | None:
-        """Agent 上下文视图（首版不执行隐私过滤，2026-08-03 产品决策，TBD-P3）。
-
-        返回**全量**信息：所有 encounter 的推断值/地点、memory.md 全部带事实指针
-        的条目（self-only 不再剔除，减少架构负担；授权机制重议后恢复 ≥L2 过滤，
-        见 git 历史）。未确认身份仍返回 None —— 那是 FR-1.3 的数据可靠性闸
-        （防错误绑定进上下文），与隐私过滤无关，保留。
-        """
+        """返回已确认人物的 Agent 授权视图，只包含 L2 及以上相遇。"""
         try:
             package = self._packages.load_package(person_id)
         except Exception:
@@ -183,7 +177,8 @@ class MemoryStore:
         encounter_ids = set()
         tags, places = [], []
         for encounter in package.get("encounters", []):
-            # 首版不过滤：不再按 privacy 跳过 encounter
+            if encounter.get("privacy", "self-only") not in AGENT_VISIBLE_PRIVACY:
+                continue
             encounter_ids.add(encounter.get("encounter_id"))
             if encounter.get("place"):
                 places.append(encounter["place"])

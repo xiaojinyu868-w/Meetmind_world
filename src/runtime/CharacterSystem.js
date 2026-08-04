@@ -79,12 +79,20 @@ function resolveMaterialColor(characterSpec, profile, materialName) {
 
 
 export class CharacterSystem {
-  constructor({ scene, assetStore, assetCatalog, resolveSurfaceY, materialAdapter = null }) {
+  constructor({
+    scene,
+    assetStore,
+    assetCatalog,
+    resolveSurfaceY,
+    materialAdapter = null,
+    textureLoader = new THREE.TextureLoader(),
+  }) {
     this.scene = scene;
     this.assetStore = assetStore;
     this.assetCatalog = assetCatalog;
     this.resolveSurfaceY = resolveSurfaceY;
     this.materialAdapter = materialAdapter;
+    this.textureLoader = textureLoader;
     this.entities = [];
   }
 
@@ -94,8 +102,13 @@ export class CharacterSystem {
     let resolvedAssetId = characterSpec.asset_id;
     let sourceScene;
     try {
-      const asset = this.assetCatalog.resolve(resolvedAssetId, "character");
-      sourceScene = await this.assetStore.loadScene(asset.resolvedUrl);
+      if (characterSpec.asset_url) {
+        sourceScene = await this.assetStore.loadScene(characterSpec.asset_url);
+        resolvedAssetId = characterSpec.asset_url;
+      } else {
+        const asset = this.assetCatalog.resolve(resolvedAssetId, "character");
+        sourceScene = await this.assetStore.loadScene(asset.resolvedUrl);
+      }
     } catch (error) {
       if (!characterSpec.fallback_asset_id) throw error;
       console.warn(
@@ -105,6 +118,23 @@ export class CharacterSystem {
       resolvedAssetId = characterSpec.fallback_asset_id;
       const fallbackAsset = this.assetCatalog.resolve(resolvedAssetId, "character");
       sourceScene = await this.assetStore.loadScene(fallbackAsset.resolvedUrl);
+    }
+
+    let texture = null;
+    if (characterSpec.texture_url) {
+      try {
+        texture = await this.textureLoader.loadAsync(characterSpec.texture_url);
+        this.#configureTexture(texture, characterSpec.texture_filter);
+        texture.flipY = false;
+        texture.wrapS = THREE.ClampToEdgeWrapping;
+        texture.wrapT = THREE.ClampToEdgeWrapping;
+        texture.needsUpdate = true;
+      } catch (error) {
+        console.warn(
+          `Character texture ${characterSpec.texture_url} failed; using embedded texture`,
+          error,
+        );
+      }
     }
 
     if (
@@ -136,6 +166,12 @@ export class CharacterSystem {
       }
 
       const instanceMaterial = sourceMaterial.clone();
+      if (
+        texture &&
+        (sourceMaterial.map || /voxelatlas/i.test(String(sourceMaterial.name ?? "")))
+      ) {
+        instanceMaterial.map = texture;
+      }
       this.#configureTexture(instanceMaterial.map, characterSpec.texture_filter);
       const color = resolveMaterialColor(
         characterSpec,
@@ -184,6 +220,7 @@ export class CharacterSystem {
       resolvedAssetId,
       instanceId: characterSpec.instance_id,
       materials,
+      textures: texture ? new Set([texture]) : new Set(),
       baseY: root.position.y,
       phase: this.entities.length * 1.71,
     };
@@ -224,6 +261,9 @@ export class CharacterSystem {
     entity.root.removeFromParent();
     for (const material of entity.materials ?? []) {
       material.dispose();
+    }
+    for (const texture of entity.textures ?? []) {
+      texture.dispose();
     }
     return true;
   }

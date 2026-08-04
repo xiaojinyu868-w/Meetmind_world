@@ -23,18 +23,27 @@ from app.agents.roles import (
     IcebreakerHostAgent,
     RoundtableFacilitatorAgent,
 )
+from app.agents.roles.person import PersonAgent
 from app.agents.contracts import PrivacyLevel
 from app.agents.runtime_v2 import AgentCoordinator, AgentRouter, ContextBuilder
+from app.agents.room_autonomy import RoomAutonomyService
+from app.agents.dialogue import build_pair_context
+from app.agents.contracts import ContextFact
 from app.agents.tools import EventSummaryTool, MemoryQueryTool, ToolRegistry
 from app.application import CommandValidator
 from app.api import confirm as confirm_api
-from app.api import admin, experience, group, ingest, media, packages, pipeline, search as search_api
+from app.api import admin, experience, group, ingest, media, packages, physical_ai, pipeline, signals, search as search_api
 from app.api import world as world_api
 from app.group.service import GroupSessionService
 from app.api.v1 import rooms as rooms_v1_api
 from app.api.v1 import workflows as workflows_v1_api
 from app.api.v1 import scenes as scenes_v1_api
-from app.config import get_data_dir, get_world_heartbeat_seconds
+from app.config import (
+    get_data_dir,
+    get_physical_ai_package_schema,
+    get_physical_ai_token,
+    get_world_heartbeat_seconds,
+)
 from app.domain.rooms import RoomService
 from app.domain.scenes import SceneModuleRegistry, default_scene_modules
 from app.eventing import EventDispatcher, InMemoryOutbox
@@ -44,6 +53,7 @@ from app.pipelines.field_generation import FieldGenerationService
 from app.pipelines.group_onboarding import GroupOnboardingService
 from app.pipelines.icebreaker_feedback import IcebreakerFeedbackService
 from app.persistence import SQLiteEventStore, SQLiteRoomRepository
+from app.physical_ai import PhysicalAIReceiver
 from app.security import PolicyEngine
 from app.skills import SkillRegistry
 from app.world.hall import HALL_BOUNDS, build_display_from_package
@@ -157,10 +167,27 @@ def create_app() -> FastAPI:
         auto_bulletin=False,
         event_store=app.state.event_store,
         state_repository=app.state.room_repository,
+        interaction_recorder=memory.record_interaction,
     )
     context_builder = ContextBuilder(
         world_provider=lambda _agent, _event: world_service.snapshot(),
         room_provider=lambda _agent, event: app.state.room_service.snapshot(event.room_id),
+        memory_provider=lambda agent_id, event: tuple(
+            ContextFact(
+                source_ref=f"authorized-pair:{agent_id}:{member['member_id']}",
+                privacy_level=PrivacyLevel.ROOM,
+                owner_id=agent_id,
+                payload={
+                    "kind": "authorized-pair",
+                    "counterpart_id": member["member_id"],
+                    "pair_context": build_pair_context(
+                        memory, agent_id, member["member_id"],
+                    ),
+                },
+            )
+            for member in app.state.room_service.snapshot(event.room_id)["members"]
+            if member["member_id"] != agent_id
+        ),
         privacy_resolver=lambda _agent, _event: {
             PrivacyLevel.PUBLIC, PrivacyLevel.ROOM,
         },
@@ -169,7 +196,23 @@ def create_app() -> FastAPI:
             for member in app.state.room_service.snapshot(event.room_id)["members"]
         },
     )
-    app.state.agent_router = AgentRouter(context_builder)
+    def person_agent_factory(event):
+        if event.type in {"person.message-requested", "agent.autonomy-requested"}:
+            person_ids = [event.subject_id] if event.subject_id else []
+        elif event.type == "meeting.invited":
+            person_ids = [
+                person_id for person_id in event.payload.get("participant_ids", [])
+                if person_id != event.actor_id
+            ]
+        else:
+            person_ids = []
+        return tuple(PersonAgent(
+            person_id, chat_provider=get_provider("chat")
+        ) for person_id in person_ids if person_id and person_id != "person-self")
+
+    app.state.agent_router = AgentRouter(
+        context_builder, agent_factory=person_agent_factory
+    )
     app.state.agent_router.register(RoundtableFacilitatorAgent())
     app.state.agent_router.register(IcebreakerHostAgent())
     app.state.agent_router.register(BulletinComposerAgent())
@@ -194,7 +237,11 @@ def create_app() -> FastAPI:
             expected_revision=command.expected_revision,
         ),
     )
+    app.state.room_autonomy = RoomAutonomyService(
+        app.state.room_service, app.state.agent_coordinator,
+    )
     app.state.group_onboarding = GroupOnboardingService(store, hall=hall_world)
+    app.state.physical_ai = PhysicalAIReceiver(store, hall=hall_world, memory=memory)
     app.state.field_generation = FieldGenerationService(store)
     app.state.scene_modules = SceneModuleRegistry(default_scene_modules())
     app.state.world_scheduler = WorldScheduler(
@@ -208,7 +255,17 @@ def create_app() -> FastAPI:
 
     @app.get("/api/health")
     def health():
-        return {"status": "ok", "service": "echoworld-backend", "version": "0.2.0"}
+        schema_path = get_physical_ai_package_schema()
+        return {
+            "status": "ok",
+            "service": "echoworld-backend",
+            "version": "0.2.0",
+            "physical_ai": {
+                "enabled": bool(get_physical_ai_token()),
+                "schema_validation": "json-schema" if schema_path else "compatibility",
+                "schema_available": bool(schema_path and schema_path.is_file()),
+            },
+        }
 
     # 对外契约：全部挂载在 /api/v0/ 前缀下（docs/API.md，/api/health 除外）
     app.include_router(ingest.router)
@@ -218,6 +275,7 @@ def create_app() -> FastAPI:
     app.include_router(packages.router)
     app.include_router(world_api.router)
     app.include_router(media.router)
+    app.include_router(signals.router)
     app.include_router(admin.router)
     # v0 现场房间与场景体验（codex 线，服务当前前端；v1 rooms 成熟后迁移）
     app.include_router(group.router)
@@ -226,6 +284,7 @@ def create_app() -> FastAPI:
     app.include_router(rooms_v1_api.router)
     app.include_router(workflows_v1_api.router)
     app.include_router(scenes_v1_api.router)
+    app.include_router(physical_ai.router)
     return app
 
 

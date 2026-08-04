@@ -11,8 +11,8 @@ logger = logging.getLogger(__name__)
 class WorldScheduler:
     """Advance legacy worlds independently from HTTP snapshot polling.
 
-    MVP2 room commands are event-driven. This heartbeat only keeps the MVP1 cafe and
-    hall simulations alive during the compatibility period.
+    Legacy worlds still advance for compatibility. The same timer also asks the
+    v1 room autonomy service for one bounded PersonAgent activation per room.
     """
 
     def __init__(self, app, *, interval_seconds: float = 15.0, hall_every: int = 4):
@@ -28,9 +28,12 @@ class WorldScheduler:
         self._stopping = asyncio.Event()
 
     def tick_once(self) -> None:
-        cafe = self.app.state.world
-        self.app.state.runtime.tick(cafe.snapshot())
-        cafe.step()
+        rooms = getattr(self.app.state, "room_service", None)
+        v1_cafe_active = rooms is not None and "echoworld-cafe" in rooms.room_ids()
+        if not v1_cafe_active:
+            cafe = self.app.state.world
+            self.app.state.runtime.tick(cafe.snapshot())
+            cafe.step()
         self._cycles += 1
         if self._cycles % self.hall_every == 0:
             hall = self.app.state.hall
@@ -62,5 +65,8 @@ class WorldScheduler:
             except TimeoutError:
                 try:
                     self.tick_once()
+                    autonomy = getattr(self.app.state, "room_autonomy", None)
+                    if autonomy is not None:
+                        await autonomy.tick_once()
                 except Exception:
-                    logger.exception("legacy world heartbeat failed")
+                    logger.exception("world heartbeat failed")

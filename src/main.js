@@ -13,6 +13,7 @@ import { FALLBACK_SNAPSHOT, LiveWorld } from "./runtime/LiveWorld.js";
 import { NpcAgentSystem } from "./runtime/NpcAgentSystem.js";
 import { PersonSignalStore } from "./runtime/PersonSignalStore.js";
 import { RelationshipFieldSystem } from "./runtime/RelationshipFieldSystem.js";
+import { RoomClient } from "./runtime/RoomClient.js";
 import { WorldBroadcastSystem } from "./runtime/WorldBroadcastSystem.js";
 import { WorldModuleRegistry } from "./runtime/WorldModuleRegistry.js";
 import {
@@ -166,6 +167,8 @@ const onPersonSelected =
         if (personId) integrations.panel.openPerson(personId);
       };
 const liveEnabled = runtimeOptions.live !== false && !isFieldWorld;
+const roomEnabled =
+  isCafeWorld && new URLSearchParams(window.location.search).get("api") !== "mock";
 const snapshotPollMs =
   Number.isFinite(runtimeOptions.snapshotPollMs) && runtimeOptions.snapshotPollMs >= 250
     ? runtimeOptions.snapshotPollMs
@@ -239,7 +242,8 @@ let elapsed = 0;
 let diagnosticFrame = 0;
 const expressionSystem = new CharacterExpressionSystem();
 const heartSignalSystem = new HeartSignalSystem();
-const personSignalStore = new PersonSignalStore(personSignals);
+const useDemoSignals = new URLSearchParams(window.location.search).get("api") === "mock";
+const personSignalStore = new PersonSignalStore(useDemoSignals ? personSignals : []);
 heartSignalSystem.setVisible(false);
 
 const packageNames = new Map();
@@ -250,6 +254,9 @@ const liveBubbles = new Map();
 const liveFacing = new THREE.Vector3();
 let liveMeetingSeatIndices = [];
 let liveWorld = null;
+let roomClient = null;
+let lastRoomMoveAt = 0;
+let lastRoomPosition = null;
 let liveWorldTick = null;
 let boothSystem = null;
 let relationshipFieldSystem = null;
@@ -260,6 +267,8 @@ let playerSeatedAt = null;
 let pendingSceneInviteId = people.some((person) => person.id === invitedPersonId)
   ? invitedPersonId
   : null;
+let roomMeetingId = null;
+let roomInvitationId = null;
 let nearbyHotspotId = null;
 let sceneHotspots = [];
 const hallGlances = new Map();
@@ -291,6 +300,7 @@ const appShell = createCafeShell({
   onLocatePerson: (person) => selectWorldPerson(person.id),
   onMeetingStart: startMeeting,
   onMeetingEnd: endMeeting,
+  onMeetingMessage: sendMeetingMessage,
   resolveMediaUrl,
   world: activeWorld.id,
   fieldPerson: isFieldWorld ? fieldTargetPerson : null,
@@ -310,6 +320,19 @@ const unsubscribePersonSignals = personSignalStore.subscribe((snapshot, metadata
   canvas.dataset.lastSignalUpdate = metadata.personId;
   canvas.dataset.signalUpdateSource = metadata.source;
 });
+
+async function hydratePersonSignal(personId) {
+  try {
+    const snapshot = await api.getPersonSignal(personId);
+    if (snapshot) personSignalStore.upsert(snapshot, { source: "k3-rest" });
+  } catch (error) {
+    console.warn(`[EchoWorld] ${personId} 的生理聚合暂不可用`, error);
+  }
+}
+
+if (!useDemoSignals) {
+  for (const person of people) void hydratePersonSignal(person.id);
+}
 
 canvas.dataset.ready = "false";
 canvas.dataset.appView = experienceMode;
@@ -390,11 +413,20 @@ function makeGroundMarker(color, innerRadius, outerRadius, opacity) {
 
 
 function characterSpec(person, instanceId, spawn, idleBob = 0.005) {
+  const avatar = person.avatar && typeof person.avatar === "object" ? person.avatar : {};
   return {
     instance_id: instanceId,
     person_id: person.id,
     asset_id: characterAssetId(activeCharacterVariant, person.id),
     fallback_asset_id: activeCharacterVariant.fallbackAssetId,
+    asset_url: avatar.model_ref ? resolveMediaUrl(avatar.model_ref) : null,
+    texture_url: avatar.texture_ref ? resolveMediaUrl(avatar.texture_ref) : null,
+    expression_refs: Object.fromEntries(
+      Object.entries(avatar.expression_refs ?? {}).map(([state, ref]) => [
+        state,
+        resolveMediaUrl(ref),
+      ]),
+    ),
     texture_filter: activeCharacterVariant.textureFilter,
     lock_texture_colors: true,
     profile: {
@@ -562,6 +594,7 @@ async function configureWorld(root) {
   setProgress(1, `${worldTitle} 已准备好`);
   appShell.setWorldReady(true);
   startLiveWorld();
+  void startRoomWorld();
   requestAnimationFrame(() => loading.classList.add("is-hidden"));
 }
 
@@ -613,6 +646,22 @@ async function startMeeting(personIds) {
   if (!worldReady || meetingMode) return [];
   leavePlayerSeat();
   let accepted = [];
+  if (roomClient) {
+    accepted = [...new Set(personIds)].filter((personId) => roomClient.snapshot?.members?.some((m) => m.member_id === personId)).slice(0, 5);
+    if (!accepted.length) return [];
+    const invitationId = `invite-${Date.now()}`;
+    roomInvitationId = invitationId;
+    const seatPositions = CAFE_LAYOUT.roundtable.seats;
+    await roomClient.move(seatPositions[0].x, seatPositions[0].z);
+    await roomClient.send("meeting.invite", {
+      hotspot_id: "roundtable", invitation_id: invitationId,
+      participant_ids: accepted, topic: "最近有什么新变化？",
+    });
+    roomMeetingId = `meeting-${Date.now()}`;
+    await roomClient.send("meeting.start", {
+      invitation_id: invitationId, meeting_id: roomMeetingId,
+    });
+  }
   if (liveEnabled) {
     // live 模式：不走 NpcAgentSystem 本地调度，改为快照驱动层上的会议覆盖目标
     accepted = [...new Set(personIds)]
@@ -672,6 +721,13 @@ async function endMeeting() {
     ? canvas.dataset.meetingInvited.split(",").filter(Boolean)
     : [];
   meetingMode = false;
+  if (roomClient && roomMeetingId) {
+    await roomClient.send("meeting.end", { meeting_id: roomMeetingId }).catch((error) => {
+      console.warn("[EchoWorld] v1 meeting end failed", error);
+    });
+    roomMeetingId = null;
+    roomInvitationId = null;
+  }
   player.scale.set(1, 1, 1);
   playerMarker.visible = experienceMode === "cafe";
   playerEntity.spec.behavior.idle_bob = 0;
@@ -695,6 +751,23 @@ async function endMeeting() {
     participants,
     { table_id: CAFE_LAYOUT.roundtable.id },
   );
+}
+
+
+async function sendMeetingMessage(personId, text) {
+  if (!roomClient) {
+    const person = people.find((item) => item.id === personId);
+    const replies = person?.conversation?.replies ?? [];
+    if (!replies.length) return null;
+    return { personId, text: replies[hashString(text) % replies.length] };
+  }
+  const response = await roomClient.message(personId, text);
+  const event = [...(response.events ?? [])].reverse().find((item) => item.type === "person.message-created");
+  if (!event) return null;
+  return {
+    personId: event.payload?.speaker_id ?? personId,
+    text: event.payload?.text ?? "",
+  };
 }
 
 
@@ -884,6 +957,30 @@ function rebuildSceneHotspots() {
     },
     ...tableHotspots,
   ];
+  if (roomClient) {
+    for (const person of [...people, ...dynamicPeople.values()]) {
+      const entity = npcSystem?.getEntity(person.id);
+      if (!entity) continue;
+      sceneHotspots.push({
+        id: `person-${person.id}`,
+        kind: "person",
+        personId: person.id,
+        x: entity.root.position.x,
+        z: entity.root.position.z,
+        radius: 1.7,
+        eyebrow: person.relation,
+        title: `和${person.name}聊聊`,
+        detail: person.bio,
+        prompt: `和${person.name}说话`,
+        icon: "message-circle",
+        actions: person.conversation.starters.slice(0, 3).map((text, index) => ({
+          id: `message-person:${person.id}:${index}`,
+          label: text,
+          icon: "message-circle",
+        })),
+      });
+    }
+  }
 }
 
 
@@ -892,6 +989,13 @@ function nearestSceneHotspot() {
   let nearest = null;
   let nearestDistance = Infinity;
   for (const hotspot of sceneHotspots) {
+    if (hotspot.kind === "person" && hotspot.personId) {
+      const entity = npcSystem?.getEntity(hotspot.personId);
+      if (entity) {
+        hotspot.x = entity.root.position.x;
+        hotspot.z = entity.root.position.z;
+      }
+    }
     const distance = Math.hypot(player.position.x - hotspot.x, player.position.z - hotspot.z);
     if (distance <= hotspot.radius && distance < nearestDistance) {
       nearest = hotspot;
@@ -1064,6 +1168,17 @@ async function memoryNarrative(personId = null) {
 async function handleSceneInteraction(hotspot, actionId) {
   if (actionId === "enter-cafe") {
     navigateToWorld("cafe");
+    return { close: true };
+  }
+  if (actionId.startsWith("message-person:")) {
+    const [, personId, rawIndex] = actionId.split(":");
+    const person = personLikeFor(personId);
+    const text = person?.conversation.starters[Number(rawIndex)];
+    if (!roomClient || !person || !text) {
+      return { eyebrow: "暂时无法连接", title: "实时房间尚未就绪", detail: "请稍后再试。", icon: "message-circle", actions: [] };
+    }
+    await roomClient.message(personId, text);
+    showLiveTalk(currentUser.id, text, 4);
     return { close: true };
   }
   if (actionId === "exit-cafe") {
@@ -1248,6 +1363,7 @@ function pushLiveToast(message, { level = "info" } = {}) {
 
 
 const TICK_SOURCE_STYLE = {
+  room: { color: "#7fe0a8", label: "v1 房间事件" },
   live: { color: "#7fe0a8", label: "实时快照" },
   mock: { color: "#f2c55f", label: "本地 mock" },
   fallback: { color: "#d36f59", label: "内置兜底" },
@@ -1361,6 +1477,11 @@ function applyLiveSnapshot(rawSnapshot) {
     canvas.dataset.boothCount = String(boothSystem.sync(booths));
     canvas.dataset.boothReadablePanelCount = String(boothSystem.readablePanelCount);
     rebuildSceneHotspots();
+  }
+
+  if (isCafeWorld && roomClient?.snapshot) {
+    applyRoomSnapshot(roomClient.snapshot);
+    return;
   }
 
   for (const agent of adapted.agents) {
@@ -1556,6 +1677,14 @@ async function ensureAgentEntity(agent) {
   if (pendingAgentSpawns.has(agent.id) || npcSystem.getEntity(agent.id)) return;
   pendingAgentSpawns.add(agent.id);
   try {
+    let pkg = null;
+    try {
+      pkg = await api.getPackage(agent.id);
+      const name = pkg?.identity?.name ?? pkg?.name;
+      if (typeof name === "string" && name.trim()) packageNames.set(agent.id, name.trim());
+    } catch (error) {
+      console.warn(`[EchoWorld] 新人 ${agent.id} 的资料包尚不可用`, error);
+    }
     const palette =
       agent.palette ?? FALLBACK_PALETTES[hashString(agent.id) % FALLBACK_PALETTES.length];
     const name = nameOf(agent.id);
@@ -1565,7 +1694,12 @@ async function ensureAgentEntity(agent) {
       displayName: name,
       relation: "刚搬进世界的新朋友",
       palette,
-      conversation: { replies: ["（TA 还在整理自己的故事。）"] },
+      avatar: pkg?.avatar ?? agent.avatar ?? null,
+      bio: "刚从一次真实相遇进入 EchoWorld。",
+      conversation: {
+        starters: ["最近在做什么？", "我们上次聊到了什么？", "想去圆桌坐坐吗？"],
+        replies: ["（TA 还在整理自己的故事。）"],
+      },
     };
     dynamicPeople.set(agent.id, personLike);
     const spawn = agent.position
@@ -1574,7 +1708,15 @@ async function ensureAgentEntity(agent) {
     const entity = await characterSystem.spawn(
       characterSpec(personLike, `agent-${agent.id}`, spawn, 0.005),
     );
+    expressionSystem.register(entity, agent.id, activeCharacterVariant.id);
+    heartSignalSystem.register(
+      entity,
+      agent.id,
+      personSignalStore.getSnapshot(agent.id),
+    );
+    if (!useDemoSignals) void hydratePersonSignal(agent.id);
     npcSystem.register(personLike, entity);
+    if (roomClient) rebuildSceneHotspots();
     canvas.dataset.npcCount = String(npcSystem.agents.size);
     canvas.dataset.characterCount = String(characterSystem.entities.length);
   } catch (error) {
@@ -1653,8 +1795,9 @@ function applyGroupPresence(participants, viewerId) {
 }
 
 
-function startLiveWorld() {
+function startLiveWorld({ force = false } = {}) {
   if (!liveEnabled || liveWorld) return;
+  if (roomEnabled && isCafeWorld && !force) return;
   liveWorld = new LiveWorld({
     snapshotUrl: isHallWorld ? HALL_LAYOUT.snapshotUrl : CAFE_WORLD.snapshotUrl,
     intervalMs: snapshotPollMs,
@@ -1667,6 +1810,133 @@ function startLiveWorld() {
     // 座位锚点/碰撞按 v1 原始咖啡厅标定（v4 木屋室内完全保留 v1 锚点，无需提示）
     pushLiveToast("活的世界目前基于原始咖啡厅布局");
   }
+}
+
+
+async function startRoomWorld() {
+  if (!roomEnabled || roomClient) return;
+  const fallbackById = new Map(FALLBACK_SNAPSHOT.agents.map((agent) => [agent.id, agent.position]));
+  let packageMembers = [];
+  try {
+    const summaries = await api.getPackages();
+    packageMembers = summaries
+      .filter((item) => item.confirmed && item.person_id !== currentUser.id)
+      .filter((item) => !people.some((person) => person.id === item.person_id))
+      .map((item, index) => ({
+        id: item.person_id,
+        name: item.name ?? item.person_id,
+        displayName: item.name ?? item.person_id,
+        position: NPC_ENTRY_SPAWNS[index % NPC_ENTRY_SPAWNS.length],
+      }));
+  } catch (error) {
+    console.warn("[EchoWorld] 无法读取新增 Package，咖啡厅先载入已有成员", error);
+  }
+  roomClient = new RoomClient({
+    actor: {
+      ...currentUser,
+      position: { x: player.position.x, z: player.position.z },
+    },
+    members: [
+      ...people.map((person) => ({
+        ...person,
+        position: fallbackById.get(person.id) ?? { x: 0, z: 0 },
+      })),
+      ...packageMembers,
+    ],
+  });
+  roomClient.onSnapshot(applyRoomSnapshot);
+  roomClient.onEvent(handleRoomEvent);
+  try {
+    await roomClient.start();
+    canvas.dataset.roomSource = "v1";
+    pushLiveToast("已进入实时 Echo Cafe 房间");
+  } catch (error) {
+    console.warn("[EchoWorld] v1 房间连接失败，保留 v0 世界", error);
+    roomClient.stop();
+    roomClient = null;
+    canvas.dataset.roomSource = "unavailable";
+    startLiveWorld({ force: true });
+  }
+}
+
+
+function applyRoomSnapshot(snapshot) {
+  if (!snapshot || !Array.isArray(snapshot.members)) return;
+  liveWorldTick = Number(snapshot.sequence) || 0;
+  setTickBadge(liveWorldTick, "room");
+  canvas.dataset.liveSource = "room-v1";
+  canvas.dataset.worldTick = String(liveWorldTick);
+  const runtimeById = new Map(
+    (snapshot.agent_runtime ?? []).map((item) => [item.agent_id, item]),
+  );
+  for (const member of snapshot.members) {
+    if (member.member_id === currentUser.id) continue;
+    const entity = npcSystem?.getEntity(member.member_id);
+    if (!entity) {
+      void ensureAgentEntity({
+        id: member.member_id,
+        position: member.position,
+        state: "walking",
+      });
+      continue;
+    }
+    const position = member.position ?? {};
+    const inMeeting = Boolean(snapshot.meeting?.participant_ids?.includes(member.member_id));
+    const runtimeStatus = runtimeById.get(member.member_id)?.status ?? "idle";
+    const renderState = inMeeting
+      ? "in-meeting"
+      : (runtimeStatus === "talking" ? "talking" : "walking");
+    liveTargets.set(member.member_id, {
+      x: Number(position.x) || 0,
+      z: Number(position.z) || 0,
+      yaw: entity.root.rotation.y,
+      state: renderState,
+      seat: null,
+    });
+    appShell.updateAgentState({
+      personId: member.member_id,
+      status: inMeeting ? "in-meeting" : runtimeStatus,
+      tableId: inMeeting ? CAFE_LAYOUT.roundtable.id : null,
+      tableLabel: inMeeting ? CAFE_LAYOUT.roundtable.label : "Echo Cafe",
+      seatIndex: null,
+      meeting: inMeeting,
+    });
+  }
+  canvas.dataset.roomSequence = String(snapshot.sequence ?? 0);
+  rebuildSceneHotspots();
+}
+
+
+function handleRoomEvent(event) {
+  if (event?.type === "person.message-created") {
+    const payload = event.payload ?? {};
+    if (payload.speaker_id && payload.text) {
+      showLiveTalk(payload.speaker_id, payload.text, 7);
+      pushLiveToast(
+        payload.listener_id === currentUser.id
+          ? `${nameOf(payload.speaker_id)}回复了你`
+          : `${nameOf(payload.speaker_id)}与${nameOf(payload.listener_id)}正在交谈`,
+      );
+    }
+    return;
+  }
+  if (event?.type === "meeting.topic-proposed") {
+    pushLiveToast(event.payload?.text ?? "圆桌提出了新话题", { level: "meeting" });
+  }
+}
+
+
+function syncRoomPlayerPosition() {
+  if (!roomClient || !player || performance.now() - lastRoomMoveAt < 800) return;
+  const next = { x: Number(player.position.x.toFixed(3)), z: Number(player.position.z.toFixed(3)) };
+  if (lastRoomPosition && Math.hypot(next.x - lastRoomPosition.x, next.z - lastRoomPosition.z) < 0.08) {
+    return;
+  }
+  lastRoomMoveAt = performance.now();
+  lastRoomPosition = next;
+  void roomClient.move(next.x, next.z).catch((error) => {
+    console.warn("[EchoWorld] 房间位置同步失败", error);
+  });
 }
 
 
@@ -1932,6 +2202,7 @@ function animate(timestamp) {
     heartSignalSystem.update(elapsed);
     if (experienceMode === "cafe") {
       updatePlayer(delta);
+      syncRoomPlayerPosition();
       if (meetingMode) updateMeetingCamera(delta);
       else updateFollowCamera(delta);
       updatePlayerLabel();

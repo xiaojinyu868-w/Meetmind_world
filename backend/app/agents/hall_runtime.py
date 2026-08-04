@@ -3,8 +3,8 @@
 目的：让展位大厅"活而不闹"——每 tick 低概率（默认 1/8）触发一场"串门"，
       否则安静。串门配对必须有理由：双方推断 tags 有交集，或 relations.md
       有关联；找不到交集对则本 tick 不触发（无共同点不演化，P-1）。
-输入：大厅 World Service 快照（agents at-booth + booth modules）；memory 层的
-      上下文视图（authorized_agent_view，首版全量不过滤 TBD-P3）。
+输入：大厅 World Service 快照（agents at-booth + booth modules）；memory 层过滤为
+      L2 及以上的 authorized_agent_view。
 输出：agent-move / agent-state / agent-talk 事件（全部先过 guard 事件白名单）。
 验收：tests/test_hall_runtime.py —— 配对只在有共同点时发生；串门事件序列完整
       （move→talk→return）；无交集长时间安静；对话 prompt 无 self-only。

@@ -135,6 +135,7 @@ export class CharacterExpressionSystem {
       variant,
       slot,
       targets,
+      expressionRefs: entity?.spec?.expression_refs ?? null,
       state: "neutral",
       requestedState: "neutral",
       requestVersion: 0,
@@ -224,6 +225,10 @@ export class CharacterExpressionSystem {
   }
 
   #textureUrl(record, state) {
+    const externalUrl = record.expressionRefs?.[state];
+    if (typeof externalUrl === "string" && externalUrl.trim()) {
+      return externalUrl;
+    }
     const config = VARIANT_CONFIG[record.variant];
     return this.resolveUrl(`${config.directory}/${record.slot}_${state}.png`);
   }
