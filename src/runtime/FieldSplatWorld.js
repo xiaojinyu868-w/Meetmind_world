@@ -3,15 +3,15 @@ import { SparkRenderer, SplatMesh } from "@sparkjsdev/spark";
 
 // Marble SPZ 资产坐标系为 marble_raw_opencv：Marble 官方查看器对生成资产
 // 统一绕 X 轴旋转 180°（见 docs.worldlabs.ai「Rendering Marble SPZ files in
-// third-party engines」）。semantics_metadata 的换算公式：
-//   metric = raw * metric_scale_factor; metric.y -= ground_plane_offset
-// 轴转换在 metric 换算之后应用，因此 three.js 侧（T·R·S 顺序）：
-//   scale = metric_scale_factor * fit，rotation.x = π，position.y = ground_plane_offset * fit
+// third-party engines」）。
 const SPLAT_FLIP_QUATERNION = new THREE.Quaternion(1, 0, 0, 0);
+const FLIP_MATRIX = new THREE.Matrix4().makeRotationX(Math.PI);
 
-// 生成的微缩世界（通常 1~2 米宽）放大到可行走尺度：XZ 跨度目标值（米）
-const FIT_EXTENT_METERS = 22;
-const FIT_CLAMP = { min: 2, max: 60 };
+// 对齐目标：可行走区域（朝上三角面的 XZ 分布）映射到这个尺度，而不是包围盒——
+// Marble 世界的包围盒常含天空/地裙，bbox 定中会把内容甩到远处（2026-08-04 教训）
+const WALK_TARGET_EXTENT_METERS = 18;
+const FIT_CLAMP = { min: 0.05, max: 40 };
+const UP_NORMAL_MIN = 0.85;
 const LOAD_TIMEOUT_MS = 90000;
 
 function withTimeout(promise, label) {
@@ -35,11 +35,79 @@ function pickSplatQuality(world) {
 }
 
 /**
+ * 从 collider 三角形实测可行走面（绕 X 翻转后的坐标系）：
+ * 取法线朝上（normal.y > UP_NORMAL_MIN）的三角面，面积加权求地面高度，
+ * XZ 用 5%~95% 分位数求可行走范围与中心（抗天空/地裙离群面）。
+ * 返回 { groundY, centerX, centerZ, extent, spawn }（均为翻转后、未缩放的坐标）。
+ */
+export function analyzeWalkableSurface(colliderScene) {
+  colliderScene.updateMatrixWorld(true);
+  const va = new THREE.Vector3(); const vb = new THREE.Vector3(); const vc = new THREE.Vector3();
+  const ab = new THREE.Vector3(); const ac = new THREE.Vector3(); const n = new THREE.Vector3();
+  const faces = [];
+  let areaSum = 0;
+  let groundYSum = 0;
+  colliderScene.traverse((object) => {
+    if (!object.isMesh) return;
+    const pos = object.geometry?.attributes?.position;
+    if (!pos) return;
+    const index = object.geometry.index;
+    const triCount = index ? index.count / 3 : pos.count / 3;
+    for (let t = 0; t < triCount; t += 1) {
+      const i0 = index ? index.getX(t * 3) : t * 3;
+      const i1 = index ? index.getX(t * 3 + 1) : t * 3 + 1;
+      const i2 = index ? index.getX(t * 3 + 2) : t * 3 + 2;
+      va.fromBufferAttribute(pos, i0).applyMatrix4(object.matrixWorld).applyMatrix4(FLIP_MATRIX);
+      vb.fromBufferAttribute(pos, i1).applyMatrix4(object.matrixWorld).applyMatrix4(FLIP_MATRIX);
+      vc.fromBufferAttribute(pos, i2).applyMatrix4(object.matrixWorld).applyMatrix4(FLIP_MATRIX);
+      ab.subVectors(vb, va); ac.subVectors(vc, va);
+      n.crossVectors(ab, ac);
+      const doubleArea = n.length();
+      if (doubleArea < 1e-8) continue;
+      n.normalize();
+      if (n.y < UP_NORMAL_MIN) continue;
+      const area = doubleArea / 2;
+      const cx = (va.x + vb.x + vc.x) / 3;
+      const cy = (va.y + vb.y + vc.y) / 3;
+      const cz = (va.z + vb.z + vc.z) / 3;
+      faces.push({ area, x: cx, y: cy, z: cz });
+      areaSum += area;
+      groundYSum += area * cy;
+    }
+  });
+  if (!faces.length || areaSum <= 0) return null;
+  faces.sort((a, b) => a.x - b.x);
+  const pick = (key, q) => {
+    const sorted = [...faces].sort((a, b) => a[key] - b[key]);
+    const target = areaSum * q;
+    let acc = 0;
+    for (const face of sorted) {
+      acc += face.area;
+      if (acc >= target) return face[key];
+    }
+    return sorted[sorted.length - 1][key];
+  };
+  const x05 = pick("x", 0.05); const x95 = pick("x", 0.95);
+  const z05 = pick("z", 0.05); const z95 = pick("z", 0.95);
+  const centerX = pick("x", 0.5); const centerZ = pick("z", 0.5);
+  const groundY = groundYSum / areaSum;
+  const extent = Math.max(x95 - x05, z95 - z05, 1e-3);
+  // 出生点：面积最大且靠近可行走中心的面（站在真实地面上，面向场域中心）
+  let spawn = null;
+  for (const face of [...faces].sort((a, b) => b.area - a.area).slice(0, 200)) {
+    const dist = Math.hypot(face.x - centerX, face.z - centerZ);
+    if (!spawn || dist < spawn.dist) spawn = { x: face.x, z: face.z, dist };
+  }
+  return { groundY, centerX, centerZ, extent, spawn };
+}
+
+/**
  * 尝试用 Spark 渲染场域的 Marble splat 世界（FR-2.11 升级）。
  *
  * field.world.status === "ready" 时加载 .spz（Spark SplatMesh）+ collider GLB
- * （碰撞/地面射线目标，GROUND_ 前缀组供 configureWorld 收集），返回
- * { root, groundGroup, quality, dispose }；world 缺失/未就绪返回 null，
+ * （碰撞/地面射线目标，GROUND_ 前缀组供 configureWorld 收集）。对齐全部几何驱动：
+ * 可行走面定中、地面落 y=0、按可行走范围缩放，返回
+ * { root, groundGroup, quality, spawnHint, dispose }；world 缺失/未就绪返回 null，
  * 加载失败抛错由调用方回退程序化场域。
  */
 export async function tryLoadFieldSplatWorld({
@@ -82,24 +150,34 @@ export async function tryLoadFieldSplatWorld({
     if (object.isMesh) object.visible = false; // 只做射线目标，不参与渲染
   });
 
-  // 以 collider 包围盒为准做定中+缩放：地面落 y=0，XZ 中心对齐场域原点
-  const bounds = new THREE.Box3().setFromObject(colliderScene);
-  const size = bounds.getSize(new THREE.Vector3());
-  const center = bounds.getCenter(new THREE.Vector3());
-  const metricScale = Number(world.metric_scale_factor) > 0
-    ? Number(world.metric_scale_factor) : 1;
-  const groundOffset = Number(world.ground_plane_offset) || 0;
-  const rawExtent = Math.max(size.x, size.z, 1e-3);
-  const fit = THREE.MathUtils.clamp(
-    FIT_EXTENT_METERS / (metricScale * rawExtent), FIT_CLAMP.min, FIT_CLAMP.max);
-  const k = metricScale * fit;
-
+  // 几何驱动对齐（翻转后坐标系）：可行走面中心 → 原点，地面 → y=0，
+  // 可行走范围 → WALK_TARGET_EXTENT_METERS
+  const walk = analyzeWalkableSurface(colliderScene);
   const metricGroup = new THREE.Group();
   metricGroup.name = "WORLD_MarbleSplat";
-  metricGroup.scale.setScalar(k);
   metricGroup.quaternion.copy(SPLAT_FLIP_QUATERNION);
-  // R·S 后中心为 (cx·k, -cy·k, -cz·k)：抵消 XZ；y 方向地面偏移按 fit 缩放
-  metricGroup.position.set(-center.x * k, groundOffset * fit, center.z * k);
+  let spawnHint = null;
+  if (walk) {
+    const scale = THREE.MathUtils.clamp(
+      WALK_TARGET_EXTENT_METERS / walk.extent, FIT_CLAMP.min, FIT_CLAMP.max);
+    metricGroup.scale.setScalar(scale);
+    metricGroup.position.set(
+      -walk.centerX * scale,
+      -walk.groundY * scale,
+      -walk.centerZ * scale,
+    );
+    if (walk.spawn) {
+      // 翻转后坐标系内的偏移直接线性映射；朝向面向可行走中心
+      spawnHint = {
+        x: (walk.spawn.x - walk.centerX) * scale,
+        z: (walk.spawn.z - walk.centerZ) * scale,
+        yaw: Math.atan2(walk.centerX - walk.spawn.x, walk.centerZ - walk.spawn.z),
+      };
+    }
+  } else {
+    // collider 无可用地面（异常资产）：不缩放不定中，仅翻转，交给安全网兜底
+    console.warn("[FieldSplatWorld] collider 无可行走面，使用单位变换");
+  }
   metricGroup.add(splat);
   metricGroup.add(groundGroup);
 
@@ -110,7 +188,7 @@ export async function tryLoadFieldSplatWorld({
   // 安全网：collider 在出生点/边缘可能缺面，补一张隐形平面兜住地面射线，
   // 保证 actorAt/isWalkable 不因空洞抛错（略低于地面，collider 命中优先）
   const safetyNet = new THREE.Mesh(
-    new THREE.PlaneGeometry(FIT_EXTENT_METERS * 1.6, FIT_EXTENT_METERS * 1.6),
+    new THREE.PlaneGeometry(WALK_TARGET_EXTENT_METERS * 2, WALK_TARGET_EXTENT_METERS * 2),
     new THREE.MeshBasicMaterial(),
   );
   safetyNet.name = "GROUND_FieldSafetyNet";
@@ -124,6 +202,7 @@ export async function tryLoadFieldSplatWorld({
     root,
     groundGroup,
     quality,
+    spawnHint,
     worldId: world.world_id ?? null,
     dispose() {
       scene.remove(sparkRenderer);
@@ -131,4 +210,22 @@ export async function tryLoadFieldSplatWorld({
       sparkRenderer.dispose?.();
     },
   };
+}
+
+/**
+ * 把场域内的物件（互动实体/同伴底座等）按射线贴到 splat 地面上：
+ * 从 (x, 高点, z) 向下打射线，命中 collider 则贴地并返回 true；
+ * 未命中（该位置没有地面）返回 false，调用方决定隐藏或保留。
+ */
+export function snapObjectToFieldGround(object, groundGroup, { lift = 0 } = {}) {
+  if (!object || !groundGroup) return false;
+  groundGroup.updateMatrixWorld(true);
+  const raycaster = new THREE.Raycaster(
+    new THREE.Vector3(object.position.x, 60, object.position.z),
+    new THREE.Vector3(0, -1, 0),
+  );
+  const hits = raycaster.intersectObject(groundGroup, true);
+  if (!hits.length) return false;
+  object.position.y = hits[0].point.y + lift;
+  return true;
 }
