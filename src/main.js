@@ -2297,6 +2297,7 @@ function startLiveWorld({ force = false } = {}) {
 async function startRoomWorld() {
   if (!roomEnabled || roomClient) return;
   const fallbackPositions = FALLBACK_SNAPSHOT.agents.map((agent) => agent.position);
+  const fallbackById = new Map(FALLBACK_SNAPSHOT.agents.map((agent) => [agent.id, agent.position]));
   let packageMembers = [];
   try {
     const summaries = await api.getPackages();
