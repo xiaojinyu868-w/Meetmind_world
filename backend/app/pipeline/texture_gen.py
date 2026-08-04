@@ -1,24 +1,26 @@
-"""体素贴图生成：照片 → CharacterSpec → AI 像素瓦片 → 固定 UV atlas → 表情（FR-1.5/P-6）。
+"""体素贴图生成：照片 → CharacterSpec → i2i 像素瓦片 → 固定 UV atlas → 表情（FR-1.5/P-6）。
 
-目的：ARCHITECTURE.md §5a 人物生成线的第一段。可见特征由 vision 角色（qwen-vl）
-      总结为受校验的 CharacterSpec（PHOTO_CHARACTER_PIPELINES.md「所需数据」）；
-      头部正面/背面像素瓦片由 image 角色（commonstack gpt-image）按 spec 生成，
-      PIL BOX 重采样 + 定色量化锁像素风（无抖动、无 AA 涂抹）；确定性合成器把
-      瓦片 + spec 色块拼进 128x128 固定 UV atlas（布局与
-      blender/build_photo_character_modes.py 的 VOXEL_REGIONS 完全一致）；
-      表情 atlas 由程序像素编辑派生（复刻
+目的：ARCHITECTURE.md §5a 人物生成线的第一段。主路径（2026-08-04 决策）为
+      i2i 图生图：真实人脸裁剪直接作参考图，由 image 角色（commonstack
+      gpt-image-2）按"视角 + 像素风锁定 + 纯色背景"提示词直出头部五面
+      16x16 瓦片，面部辨识度来自像素本身；输出经背景检测/内容裁剪/BOX 重采样/
+      定色量化/色度键控/最近邻填充，保证硬边像素、无半透明渗色。
+      CharacterSpec 改由照片像素采样得出（肤色/发色/服装主色），只承担元数据、
+      调色板与程序化兜底，不再承担面部辨识度。确定性合成器把瓦片 + spec 色块
+      拼进 128x128 固定 UV atlas（布局与 blender/build_photo_character_modes.py
+      的 VOXEL_REGIONS 完全一致）；表情 atlas 由程序像素编辑派生（复刻
       blender/build_character_expression_textures.py 的 delta，参数化锚点）。
 输入：generate(photos, person_id) —— 人物照片路径列表 + 槽位 id。
 输出：TextureSet（spec / 128x128 neutral atlas / 4 张表情 atlas / palette /
-      生成溯源）。任何外部模型不可用都降级为全程序化 atlas（model="mock"），
-      绝不抛异常。
-验收：tests/test_voxel_pipeline.py —— spec 校验、atlas 布局不变量（128x128、
-      区域不重叠、无透明渗色）、表情 delta 只触脸部区域、mock 确定性。
+      生成溯源）。降级链：i2i 失败 → 文本 t2i（头正面/背面）→ 全程序化 atlas
+      （model="mock"），绝不抛异常。
+验收：tests/test_voxel_pipeline.py —— i2i 请求构造、背景键控边缘情况、
+      缓存键含参考图哈希、降级链、atlas 布局不变量、表情 delta 只触脸部区域。
 
 坐标约定：VOXEL_REGIONS 沿用 Blender 画布坐标（y 向上）；PNG 落盘为 PIL 坐标
 （y 向下），经 _to_pil_rect 翻转，与既有 public/textures/characters/voxel/*_atlas.png
 逐像素同布局（脸部 = PIL (16,16)-(32,32)）。身体区域纯调色板驱动（可靠性优先），
-AI 生成只负责头部正面/背面两块 16x16 瓦片。
+AI 生成只负责头部五面 16x16 瓦片。
 """
 
 from __future__ import annotations
@@ -298,6 +300,83 @@ def normalize_character_spec(raw: dict | None, person_id: str,
     return validate_character_spec(spec)
 
 
+def _dominant_rgb(image: Image.Image, exclude: list[tuple] | None = None,
+                  exclude_tol: int = 90, predicate=None) -> str | None:
+    """区域主色（量化后最高频）；exclude 丢弃相近色，predicate 过滤像素类别
+    （如肤色过滤 r>g>b 且足够亮）。"""
+    from collections import Counter
+
+    small = image.resize((24, 24), Image.BOX)
+    if predicate is not None:
+        pixels = [p for p in small.convert("RGB").getdata() if predicate(p)]
+        if len(pixels) < 8:  # 符合条件的像素太少，不可信
+            return None
+        # 对过滤后的像素直接聚类取主色
+        quantized_colors = Counter(
+            tuple(c // 24 * 24 for c in p) for p in pixels)
+        return rgb_hex(quantized_colors.most_common(1)[0][0])
+    quantized = small.quantize(colors=6, method=Image.Quantize.MEDIANCUT,
+                               dither=Image.Dither.NONE).convert("RGB")
+    for color, _count in Counter(quantized.getdata()).most_common():
+        if exclude and any(
+                sum(abs(c - e) for c, e in zip(color, ex)) <= exclude_tol
+                for ex in exclude):
+            continue
+        return rgb_hex(color)
+    return None
+
+
+def _is_skin_like(pixel: tuple) -> bool:
+    r, g, b = pixel
+    return r > 120 and r >= g >= b and (r - b) > 15
+
+
+def spec_from_photo(photo_path: str, person_id: str,
+                    source_photos: list[str] | None = None) -> dict:
+    """i2i 主路径的 CharacterSpec：直接像素采样（比 vision 文本描述更准更稳）。
+
+    采样分区（头+上半身裁剪约定）：肤色 = 中区肤色过滤主色；发色 = 顶部区域
+    最暗主色；服装 = 胸部中央条带主色（排除肤色）。发型/眼镜/体型不可靠采样
+    → 设计补全（这些字段不再承担面部辨识度，相似度由 i2i 像素保证）。
+    """
+    image = Image.open(photo_path).convert("RGB")
+    w, h = image.size
+
+    def box(x0, y0, x1, y1):
+        return image.crop((int(x0 * w), int(y0 * h), int(x1 * w), int(y1 * h)))
+
+    skin = _dominant_rgb(box(0.30, 0.15, 0.70, 0.60),
+                         predicate=_is_skin_like) or DEFAULT_SKIN
+    hair_region = box(0.30, 0.0, 0.70, 0.18)
+    hair = _dominant_rgb(hair_region,
+                         predicate=lambda p: sum(p) < 240) \
+        or _dominant_rgb(hair_region) or DEFAULT_HAIR_COLOR
+    # 服装：胸部中央条带主色，丢弃与肤色相近的（露肤），最多取 2 个
+    outfit = []
+    region = box(0.30, 0.62, 0.70, 0.98)
+    first = _dominant_rgb(region, exclude=[hex_rgb(skin)])
+    if first:
+        outfit.append(first)
+        second = _dominant_rgb(region, exclude=[hex_rgb(skin), hex_rgb(first)])
+        if second:
+            outfit.append(second)
+    raw = {
+        "visibleTraits": {
+            "hair": None,            # 设计补全（i2i 像素已携带发型）
+            "hairColor": hair,
+            "glasses": None,         # 设计补全（i2i 像素已携带眼镜）
+            "skinTone": skin,
+            "bodyTemplate": None,    # 设计补全
+            "outfitPalette": outfit,
+            "signatureItem": None,
+        },
+        "confidence": {"hairColor": 0.6, "skinTone": 0.6, "outfitPalette": 0.6},
+    }
+    return normalize_character_spec(
+        raw, person_id, source_photos or [str(photo_path)],
+        provenance={"vision": "photo-sampling", "sourcePhoto": str(photo_path)})
+
+
 def fallback_character_spec(person_id: str,
                             source_photos: list[str] | None = None) -> dict:
     """vision 不可用时的全设计补全 spec（确定可复现）。"""
@@ -467,39 +546,272 @@ def postprocess_tile(png_bytes: bytes) -> Image.Image:
     return tile
 
 
-def generate_tiles(spec: dict, image=None, cache_dir=None) -> tuple[dict, str]:
-    """对头正面/背面调用 image 角色；逐瓦片降级。返回 (tiles, 使用的模型名)。
+# ---------- 步骤 2b：i2i 图生图瓦片（主路径，2026-08-04 决策：放弃两步文本路径） ----------
 
-    cache_dir 提供时按 prompt+model 的 sha256 缓存原始 PNG（生图贵且慢，
-    复跑/调 prompt 时省钱）。
+# i2i 头部五面视角描述（同一张参考人脸 + 视角提示词；相似度来自像素本身）
+_I2I_VIEWS = {
+    "head_front": "the FRONT face of the head, facing the viewer (keep the "
+                  "person's hairstyle, hair color, glasses and face shape)",
+    "head_back": "the BACK of the same person's head, same hairstyle and hair "
+                 "color, hair only, no face features",
+    "head_left": "the LEFT side profile of the same person's head, same "
+                 "hairstyle and hair color, show the ear",
+    "head_right": "the RIGHT side profile of the same person's head, same "
+                  "hairstyle and hair color, show the ear",
+    "head_top": "the TOP of the same person's head viewed from directly above, "
+                "same hair color and texture, hair whorl only, no face",
+}
+
+# 背景键控：提示词指定纯色背景；边框主色占比低于该阈值视为"无纯色背景"不键控
+_KEY_MIN_BORDER_SHARE = 0.6
+# 键控后有效像素低于该比例视为退化输出（如全背景），抛错走降级链
+_KEY_MIN_CONTENT_SHARE = 0.3
+
+
+def build_i2i_prompt(view: str) -> str:
+    """i2i 像素瓦片提示词：参考人脸 + 视角 + 像素风锁定 + 可键控纯色背景。"""
+    if view not in _I2I_VIEWS:
+        raise ValueError(f"未知 i2i 视角：{view!r}（支持 {sorted(_I2I_VIEWS)}）")
+    return (
+        "Take the person in the reference photo and draw "
+        f"{_I2I_VIEWS[view]}, as a single 16x16 retro pixel-art game skin "
+        "texture tile for a Minecraft-style voxel character head. Drawn on an "
+        "exact 16x16 pixel grid: chunky visible pixels, at most 16 flat colors, "
+        "strictly no anti-aliasing, no gradients, no shading, no outline glow, "
+        "no text, no logo, no watermark. The head is centered and fills most of "
+        "the frame, isolated on a solid flat magenta background (#FF00FF) with "
+        "no shadow and no border.")
+
+
+def _border_dominant_color(image: Image.Image) -> tuple[tuple, float]:
+    """四条边框像素的主色及其占比（判断是否存在纯色背景）。
+
+    像素风背景有轻微抖动（品红会在 241/246/250 间跳），精确匹配会碎票，
+    先按 16 级色桶聚类再对桶中心计占比。
+    """
+    from collections import Counter
+
+    width, height = image.size
+    pixels = image.load()
+    border = ([pixels[x, 0] for x in range(width)]
+              + [pixels[x, height - 1] for x in range(width)]
+              + [pixels[0, y] for y in range(height)]
+              + [pixels[width - 1, y] for y in range(height)])
+    bucket = Counter(tuple(c // 16 for c in p) for p in border).most_common(1)[0][0]
+    center = tuple(c * 16 + 8 for c in bucket)
+    share = sum(1 for p in border
+                if sum(abs(p[c] - center[c]) for c in range(3)) <= 96) / len(border)
+    return center, share
+
+
+def _content_bbox(image: Image.Image, bg: tuple, tol: int = 60):
+    """非背景像素的包围盒；没有内容返回 None。"""
+    pixels = image.load()
+    xs, ys = [], []
+    for y in range(0, image.height, 4):  # 大步长扫描足够定位头部轮廓
+        for x in range(0, image.width, 4):
+            if sum(abs(pixels[x, y][c] - bg[c]) for c in range(3)) > tol:
+                xs.append(x)
+                ys.append(y)
+    if not xs:
+        return None
+    pad = 6
+    return (max(0, min(xs) - pad), max(0, min(ys) - pad),
+            min(image.width, max(xs) + pad), min(image.height, max(ys) + pad))
+
+
+def _chroma_key(tile: Image.Image, bg: tuple, hue_tol: float = 0.08,
+                min_saturation: float = 0.22, min_value: float = 0.1) -> int:
+    """色度键控：严格条件全图键 + 宽松条件从边缘洪水填充，返回不透明像素数。
+
+    用 HSV 色相距离而非 RGB 距离：量化会把纯色背景拆出多个明暗变体
+    （品红 (248,8,248) 的边缘暗化变体 (173,11,174)），RGB 容差难以兼顾。
+    边缘洪水填充处理被背景"污染"的轮廓暗像素（紧贴背景的过渡色，hue 偏
+    背景但饱和度/明度偏低）——只有与边框连通的才键，头发内部的紫棕色调
+    （不与边框连通）不会被误伤。
+    """
+    import colorsys
+    from collections import deque
+
+    bg_h, bg_s, _bg_v = colorsys.rgb_to_hsv(*(c / 255 for c in bg))
+    pixels = tile.load()
+    keyed = [[False] * tile.width for _ in range(tile.height)]
+
+    def hsv(x, y):
+        r, g, b = pixels[x, y][:3]
+        return colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+
+    def hue_dist(h):
+        return min(abs(h - bg_h), 1.0 - abs(h - bg_h))
+
+    # 第一遍：严格条件（高饱和、同 hue），全图任意位置
+    for y in range(tile.height):
+        for x in range(tile.width):
+            h, s, v = hsv(x, y)
+            if (bg_s >= min_saturation and hue_dist(h) <= hue_tol
+                    and s >= min_saturation and v >= min_value):
+                keyed[y][x] = True
+    # 第二遍：从边框洪水填充，宽松条件（轮廓污染像素）
+    queue = deque()
+    for x in range(tile.width):
+        queue.extend(((x, 0), (x, tile.height - 1)))
+    for y in range(tile.height):
+        queue.extend(((0, y), (tile.width - 1, y)))
+    while queue:
+        x, y = queue.popleft()
+        if not (0 <= x < tile.width and 0 <= y < tile.height) or keyed[y][x]:
+            continue
+        h, s, v = hsv(x, y)
+        if not (hue_dist(h) <= hue_tol * 1.5 and s >= 0.2):
+            continue
+        keyed[y][x] = True
+        queue.extend(((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)))
+
+    opaque = 0
+    for y in range(tile.height):
+        for x in range(tile.width):
+            if keyed[y][x]:
+                r, g, b, _a = pixels[x, y]
+                pixels[x, y] = (r, g, b, 0)
+            else:
+                opaque += 1
+    return opaque
+    pixels = tile.load()
+    opaque = 0
+    for y in range(tile.height):
+        for x in range(tile.width):
+            r, g, b, a = pixels[x, y]
+            if sum(abs(c - bc) for c, bc in zip((r, g, b), bg)) <= tol:
+                pixels[x, y] = (r, g, b, 0)
+            else:
+                opaque += 1
+    return opaque
+
+
+def _fill_transparent_nearest(tile: Image.Image) -> None:
+    """透明像素最近邻填充：多轮 4 邻域多数表决，最后全局主色兜底。
+
+    保证输出完全不透明（atlas 不允许半透明渗色），且只用已有调色板色，
+    不引入任何混合色。
+    """
+    from collections import Counter
+
+    pixels = tile.load()
+    for _round in range(TILE_SIZE * 2):
+        fill: list[tuple[int, int, tuple]] = []
+        for y in range(tile.height):
+            for x in range(tile.width):
+                if pixels[x, y][3] != 0:
+                    continue
+                neighbors = [pixels[nx, ny] for nx, ny in
+                             ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1))
+                             if 0 <= nx < tile.width and 0 <= ny < tile.height
+                             and pixels[nx, ny][3] != 0]
+                if neighbors:
+                    color = Counter(neighbors).most_common(1)[0][0]
+                    fill.append((x, y, color))
+        if not fill:
+            break
+        for x, y, color in fill:
+            pixels[x, y] = (color[0], color[1], color[2], 255)
+    remaining = [pixels[x, y] for y in range(tile.height)
+                 for x in range(tile.width)]
+    transparent = [(x, y) for y in range(tile.height) for x in range(tile.width)
+                   if pixels[x, y][3] == 0]
+    if transparent:
+        opaque = [p for p in remaining if p[3] != 0]
+        fallback = Counter(opaque).most_common(1)[0][0] if opaque \
+            else (*hex_rgb(DEFAULT_SKIN), 255)
+        for x, y in transparent:
+            pixels[x, y] = (fallback[0], fallback[1], fallback[2], 255)
+
+
+def postprocess_i2i_tile(png_bytes: bytes) -> Image.Image:
+    """i2i 生图结果 → 16x16 像素瓦片：背景检测 → 内容裁剪 → BOX 重采样 →
+    定色量化 → 色度键控 → 最近邻填充（输出完全不透明、无混合色）。
+
+    退化输出（键控后有效像素过少，如整幅背景）抛 ValueError，由调用方走
+    降级链；无纯色背景（模型没听背景指令）时跳过裁剪/键控，整幅量化兜底。
+    """
+    image = Image.open(io.BytesIO(png_bytes)).convert("RGB")
+    bg, share = _border_dominant_color(image)
+    has_background = share >= _KEY_MIN_BORDER_SHARE
+    if has_background:
+        bbox = _content_bbox(image, bg)
+        if bbox is not None:
+            image = image.crop(bbox)
+    # 下采样：BOX 到 32（去 AA 噪点）→ 定色量化（锁平色）→ NEAREST 到 16
+    # （保硬边特征：眼/镜框在 16px 下只有 1-2px，直接 BOX 到 16 会糊掉）
+    image = image.resize((TILE_SIZE * 2, TILE_SIZE * 2), Image.BOX)
+    image = image.quantize(colors=_TILE_COLORS, method=Image.Quantize.MEDIANCUT,
+                           dither=Image.Dither.NONE).convert("RGB")
+    tile = image.resize((TILE_SIZE, TILE_SIZE), Image.NEAREST).convert("RGBA")
+    if has_background:
+        opaque = _chroma_key(tile, bg)
+        if opaque < TILE_SIZE * TILE_SIZE * _KEY_MIN_CONTENT_SHARE:
+            raise ValueError(f"i2i 瓦片内容退化（有效像素 {opaque}），走降级链")
+        _fill_transparent_nearest(tile)
+    else:
+        tile.putalpha(255)
+    return tile
+
+
+def _tile_cache_path(cache_dir, model: str, prompt: str,
+                     reference: bytes | None) -> Path:
+    """瓦片缓存键：模型 + prompt + 参考图内容哈希（i2i 换图即换键）。"""
+    material = f"{model}|{prompt}".encode("utf-8")
+    if reference:
+        material += b"|ref:" + hashlib.sha256(reference).digest()
+    return Path(cache_dir) / f"tile_{hashlib.sha256(material).hexdigest()}.png"
+
+
+def generate_tiles(spec: dict, image=None, cache_dir=None,
+                   reference: bytes | None = None) -> tuple[dict, str]:
+    """按瓦片计划调 image 角色；逐瓦片走降级链。返回 (tiles, 使用的模型名)。
+
+    计划（有参考图时 i2i 优先，面部辨识度来自像素本身）：
+        头部五面 i2i（同一张人脸 + 视角提示词）
+        → head_front/head_back 文本提示词 t2i 兜底
+        → 程序化瓦片（compose_atlas 内）。
+    cache_dir 提供时按 模型+prompt+参考图哈希 缓存原始 PNG（生图贵且慢）。
     """
     try:
         provider = image or llm_base.get_provider("image")
     except KeyError:
         return {}, "mock"
-    prompts = build_tile_prompts(spec)
+    # (瓦片名, prompt, 参考图, 后处理函数)
+    plan: list[tuple[str, str, bytes | None, object]] = []
+    if reference:
+        for view, _desc in _I2I_VIEWS.items():
+            plan.append((view, build_i2i_prompt(view), reference,
+                         postprocess_i2i_tile))
+    for name, prompt in build_tile_prompts(spec).items():
+        plan.append((name, prompt, None, postprocess_tile))
+
     tiles, model_used = {}, "mock"
-    for name, prompt in prompts.items():
+    for name, prompt, ref, postprocess in plan:
+        if name in tiles:
+            continue  # 该面已由更优路径产出
         png_bytes = None
         cache_path = None
         if cache_dir is not None:
-            key = hashlib.sha256(f"{provider.model}|{prompt}".encode()).hexdigest()
-            cache_path = Path(cache_dir) / f"tile_{key}.png"
+            cache_path = _tile_cache_path(cache_dir, provider.model, prompt, ref)
             if cache_path.exists():
                 png_bytes = cache_path.read_bytes()
         if png_bytes is None:
-            png_bytes = provider.generate_image(prompt)
+            png_bytes = provider.generate_image(prompt,
+                                                images=[ref] if ref else None)
+            record = provider.call_log[-1] if provider.call_log else None
+            if record is not None and record.mock:
+                continue  # mock 占位图不进 atlas 也不进缓存，走计划下一条
             if cache_path is not None:
                 cache_path.parent.mkdir(parents=True, exist_ok=True)
                 cache_path.write_bytes(png_bytes)
-        record = provider.call_log[-1] if provider.call_log else None
-        if record is not None and record.mock:
-            continue  # mock 占位图不进 atlas，宁可走程序化瓦片
         try:
-            tiles[name] = postprocess_tile(png_bytes)
+            tiles[name] = postprocess(png_bytes)
             model_used = provider.model
         except Exception:
-            continue  # 单瓦片解析失败不拖垮整人
+            continue  # 单瓦片解析/键控失败走计划下一条，不拖垮整人
     return tiles, model_used
 
 
@@ -625,8 +937,12 @@ def compose_atlas(spec: dict, tiles: dict | None = None) -> Image.Image:
         back_hair = 16 if "long" in hair_style else 8
         draw.rectangle((bx, by, bx + bw - 1, by + back_hair - 1), fill=hair_color)
 
-    # 侧面：肤底 + 发带（高度取正面实测）+ 耳；有正面瓦片时复制边缘列保持鬓角连续
+    # 侧面：i2i 侧脸瓦片优先；否则程序化（肤底 + 发带 + 耳，
+    # 有正面瓦片时复制边缘列保持鬓角连续）
     for side in ("left", "right"):
+        if tiles.get(f"head_{side}") is not None:
+            _paste_tile(atlas, f"head_{side}", tiles[f"head_{side}"])
+            continue
         _fill(atlas, f"head_{side}", skin)
         sx, sy, sw, sh = _to_pil_rect(f"head_{side}")
         draw.rectangle((sx, sy, sx + sw - 1, sy + measured_hair - 1), fill=hair_color)
@@ -642,11 +958,14 @@ def compose_atlas(spec: dict, tiles: dict | None = None) -> Image.Image:
         draw.rectangle((sx + 6, sy + 7, sx + 9, sy + 10), fill=skin_shadow)
         draw.rectangle((sx + 7, sy + 8, sx + 8, sy + 9), fill=skin)
 
-    _fill(atlas, "head_top", hair_color)
-    tx, ty, _, _ = _to_pil_rect("head_top")
-    swirl = shade(hair_color, -0.12)
-    ox = 2 + _stable_seed(person_id, "swirl") % 10  # 发旋，确定性
-    draw.rectangle((tx + ox, ty + 6, tx + ox + 2, ty + 8), fill=swirl)
+    if tiles.get("head_top") is not None:
+        _paste_tile(atlas, "head_top", tiles["head_top"])
+    else:
+        _fill(atlas, "head_top", hair_color)
+        tx, ty, _, _ = _to_pil_rect("head_top")
+        swirl = shade(hair_color, -0.12)
+        ox = 2 + _stable_seed(person_id, "swirl") % 10  # 发旋，确定性
+        draw.rectangle((tx + ox, ty + 6, tx + ox + 2, ty + 8), fill=swirl)
     _fill(atlas, "head_bottom", skin_shadow)
 
     # --- 躯干：外套主色 + 前襟内搭条 + 领口 accent（纯色块，无文字图案） ---
@@ -829,19 +1148,41 @@ class TextureSet:
 
 
 def generate(photo_paths: list, person_id: str, *, vision=None, image=None,
-             cache_dir=None) -> TextureSet:
+             cache_dir=None, i2i: bool = True) -> TextureSet:
     """照片 → CharacterSpec → AI 像素瓦片 → 固定 UV atlas → 四表情。
 
-    全流程降级链：vision 失败 → 设计补全 spec；生图失败 → 程序化瓦片；
+    主路径（2026-08-04 决策）：i2i 图生图 —— 真实人脸裁剪直接作参考图生成
+    头部五面像素瓦片，面部辨识度来自像素本身；CharacterSpec 由照片像素采样
+    得出（肤色/发色/服装主色），只承担元数据/调色板/程序化兜底。
+    降级链：i2i 失败 → 文本提示词 t2i（头正面/背面）→ 程序化瓦片；
     任何分支都产出合法 TextureSet，绝不抛异常。
+    vision 显式注入时仍走 vision 总结路径（测试/调试用）。
     """
     photos = [str(p) for p in photo_paths]
-    spec = summarize_visible_traits(photos, person_id, vision=vision,
-                                    cache_dir=cache_dir)
-    tiles, image_model = generate_tiles(spec, image=image, cache_dir=cache_dir)
+    first_photo = next((p for p in photos if Path(p).is_file()), None)
+    if vision is not None:
+        spec = summarize_visible_traits(photos, person_id, vision=vision,
+                                        cache_dir=cache_dir)
+    elif first_photo:
+        spec = spec_from_photo(first_photo, person_id, source_photos=photos)
+    else:
+        spec = fallback_character_spec(person_id, photos)
+    reference = None
+    if i2i and first_photo:
+        reference = Path(first_photo).read_bytes()
+    tiles, image_model = generate_tiles(spec, image=image, cache_dir=cache_dir,
+                                        reference=reference)
+    if "head_front" in tiles:
+        # 生成瓦片比照片分区采样更贴脸：肤色/发色以瓦片实测为准
+        front = tiles["head_front"]
+        spec["visibleTraits"]["skinTone"] = _dominant_color(front, (4, 12, 12, 16))
+        spec["visibleTraits"]["hairColor"] = _dominant_color(front, (0, 0, 16, 2))
+        spec["provenance"]["colors"] = "tile-measured"
+        validate_character_spec(spec)
     neutral = compose_atlas(spec, tiles)
     expressions = {name: derive_expression(neutral, name) for name in EXPRESSIONS}
     spec["provenance"]["image"] = image_model
+    spec["provenance"]["i2i"] = bool(reference)
     return TextureSet(
         person_id=person_id,
         spec=spec,
