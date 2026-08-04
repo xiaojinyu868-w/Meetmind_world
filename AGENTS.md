@@ -47,7 +47,7 @@ src/runtime/
   CafeLayout.js             咖啡厅边界、5 张桌、18 个 Blender 座位锚点（全部 Object.freeze）
   CharacterSystem.js        人物 GLB 缓存、克隆、按调色板换材质色、实例生命周期
   NpcAgentSystem.js         普通桌随机分配、入座、同桌对话与会议调度（本地 mock；live 模式下由 main.js 注入开关停用）
-  LiveWorld.js              世界快照轮询器（echo-snapshot.v1）：优先 /api/v0/world/snapshot?advance=1，
+  LiveWorld.js              世界快照轮询器（echo-snapshot.v1）：优先 /api/v0/world/snapshot，
                             降级 data/mock/snapshot.demo.json，再兜底内置快照；非 live 源由内置演化器驱动；
                             visibilitychange 时暂停；提供 onSnapshot/onEvent 订阅
   SnapshotAdapter.js        快照 agent → 渲染结构映射（状态归一化 walking|seated|talking|in-meeting|at-booth、
@@ -84,7 +84,7 @@ dist/                       构建产物（已提交 Git）
 
 `world-spec.json`（schema `echo-world.v1`）→ 引用 `asset-catalog.json`（schema `echo-assets.v1`）→ 白名单内的 GLB/JSON 资产经 `AssetStore` 加载。运行时人物数据来自 `src/data/demoPeople.js`，两个 schema 版本字符串是硬校验，改动 JSON 结构时必须同步更新 `WorldSpec.js` / `AssetCatalog.js` 中的版本常量。
 
-人物动态默认由世界快照驱动（ROADMAP 1.C.2）：`LiveWorld` 轮询 `/api/v0/world/snapshot?advance=1`（契约见 docs/API.md IF-4、docs/ARCHITECTURE.md §4，schema `echo-snapshot.v1`），经 `SnapshotAdapter` 映射后由 main.js 插值渲染；后端不可用时自动降级 `data/mock/snapshot.demo.json` → 内置兜底快照（本地演化保持世界运转）。`window.__ECHOWORLD_OPTIONS__ = { api, onPersonSelected, live, snapshotPollMs }` 可注入真实 api、选人回调或关回 NpcAgentSystem 本地调度（`live: false`）。
+人物动态默认由世界快照驱动（ROADMAP 1.C.2）：`LiveWorld` 纯读轮询 `/api/v0/world/snapshot`（契约见 docs/API.md IF-4、docs/ARCHITECTURE.md §4，schema `echo-snapshot.v1`），旧世界由后端服务端 heartbeat 推进；经 `SnapshotAdapter` 映射后由 main.js 插值渲染，后端不可用时自动降级 `data/mock/snapshot.demo.json` → 内置兜底快照（本地演化保持世界运转）。`window.__ECHOWORLD_OPTIONS__ = { api, onPersonSelected, live, snapshotPollMs }` 可注入真实 api、选人回调或关回 NpcAgentSystem 本地调度（`live: false`）。
 
 两级世界（MVP1.5）：`?world=hall`（默认，展位大厅）陈列每个 Package 一个展位、人物 at-booth 站位不走动、气泡/Toast/tick 静默、轮询 10s、展位即点击入口开资料包；`?world=cafe` 为现有活的世界（2s 轮询、对话气泡、圆桌会议）。切换经 `navigateToWorld()` 改 URL 整页刷新；大厅环境资产 `environment.expo-hall.v1`、展位模板 `module.booth-template.v1`，未到货时前端自动降级占位场地/占位展位。
 

@@ -1,0 +1,9 @@
+schema: echo-skill.v1
+name: icebreaker
+version: 1.0.0
+description: 破冰游戏主持
+instructions: 只生成题目和主持语；计时、成员、提交、结束及数据写入由服务端状态机执行。
+subscriptions: [icebreaker.requested]
+allowed_intents: [start_icebreaker]
+tools: []
+max_intents: 1

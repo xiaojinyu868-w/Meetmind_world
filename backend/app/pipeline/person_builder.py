@@ -45,10 +45,10 @@ def build_person_package(photo_paths: list, person_id: str | None = None,
     package["avatar"].update(
         {
             "type": "lowpoly-faceless-v1",
-            "model_ref": str(Path(glb["glb_path"]).relative_to(store.root)),
+            "model_ref": Path(glb["glb_path"]).relative_to(store.root).as_posix(),
             "model_mode": glb["mode"],
             "three_views": {
-                view: str(Path(path).relative_to(store.root))
+                view: Path(path).relative_to(store.root).as_posix()
                 for view, path in three_views.items()
             },
         }

@@ -327,7 +327,7 @@ def _run(store, input_id: str, steps: list):
     partition, bundle = input_dir.parent.name, input_dir.name
     files = [p for p in sorted(input_dir.iterdir()) if p.is_file()]
     media = [p for p in files if p.suffix.lower() in (_VIDEO_EXT | _AUDIO_EXT | _IMAGE_EXT)]
-    media_refs = [str(p.relative_to(store.root)) for p in media]
+    media_refs = [p.relative_to(store.root).as_posix() for p in media]
     meta_path = input_dir / "meta.v1.json"
     meta = json.loads(meta_path.read_text("utf-8")) if meta_path.exists() else {}
 

@@ -58,7 +58,10 @@ class PackageStore:
         self.facts_dir = self.root / "facts"
         self.inferences_dir = self.root / "inferences"
         self.people_dir = self.root / "people"
-        for directory in (self.facts_dir, self.inferences_dir, self.people_dir):
+        self.derived_dir = self.root / "derived"
+        for directory in (
+            self.facts_dir, self.inferences_dir, self.people_dir, self.derived_dir,
+        ):
             directory.mkdir(parents=True, exist_ok=True)
 
     # ---------- 事实层（append-only；刻意没有 update/delete 入口） ----------
@@ -82,7 +85,7 @@ class PackageStore:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
         self._update_manifest(target, data)
-        return str(target.relative_to(self.root))
+        return target.relative_to(self.root).as_posix()
 
     # ---------- 事实层完整性（1.D.3：manifest + sha256 自检） ----------
 
@@ -98,7 +101,7 @@ class PackageStore:
                 files = json.loads(manifest_path.read_text(encoding="utf-8")).get("files", {})
             except json.JSONDecodeError:
                 files = {}
-        files[str(target.relative_to(self.root))] = hashlib.sha256(data).hexdigest()
+        files[target.relative_to(self.root).as_posix()] = hashlib.sha256(data).hexdigest()
         payload = {"schema": "echo-facts-manifest.v1", "files": files}
         manifest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2),
                                  encoding="utf-8")
@@ -118,7 +121,7 @@ class PackageStore:
             try:
                 files = json.loads(manifest_path.read_text(encoding="utf-8")).get("files", {})
             except json.JSONDecodeError:
-                corrupted.append({"ref": str(manifest_path.relative_to(self.root)),
+                corrupted.append({"ref": manifest_path.relative_to(self.root).as_posix(),
                                   "reason": "manifest 无法解析"})
                 continue
             registered = set()
@@ -138,7 +141,7 @@ class PackageStore:
             for path in sorted(manifest_path.parent.iterdir()):
                 if not path.is_file() or path.name == "manifest.v1.json":
                     continue
-                ref = str(path.relative_to(self.root))
+                ref = path.relative_to(self.root).as_posix()
                 if person_id and f"/{person_id}/" not in ref.replace("\\", "/"):
                     continue
                 if ref not in registered:
@@ -169,7 +172,7 @@ class PackageStore:
         target = self.inferences_dir / person_id / f"{name}.json"
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        return str(target.relative_to(self.root))
+        return target.relative_to(self.root).as_posix()
 
     def read_inferences(self, person_id: str) -> dict:
         directory = self.inferences_dir / _safe_part(person_id, "person_id")
@@ -179,6 +182,25 @@ class PackageStore:
             path.stem: json.loads(path.read_text(encoding="utf-8"))
             for path in sorted(directory.glob("*.json"))
         }
+
+    # ---------- 可重算生成物（场域、头像、人脸裁剪等） ----------
+
+    def write_derived_asset(
+        self, namespace: str, generation_id: str, filename: str, data: bytes,
+    ) -> str:
+        """写入带版本目录的生成物并返回相对指针。
+
+        生成物不是事实；调用方必须使用新的 generation_id 触发重算，避免覆盖
+        正被快照引用的版本。相同版本内重复执行保持幂等。
+        """
+        namespace = _safe_part(namespace, "namespace")
+        generation_id = _safe_part(generation_id, "generation_id")
+        filename = _safe_part(filename, "filename")
+        target = self.derived_dir / namespace / generation_id / filename
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if not target.exists():
+            target.write_bytes(data)
+        return target.relative_to(self.root).as_posix()
 
     # ---------- 人物目录与 Package（profile.json） ----------
 

@@ -115,3 +115,13 @@ def get_data_dir() -> Path:
     """运行期数据目录（facts/ inferences/ people/ derived/ 的根）。"""
     raw = os.environ.get("ECHO_DATA_DIR", "").strip()
     return Path(raw) if raw else BACKEND_ROOT / "data"
+
+
+def get_world_heartbeat_seconds() -> float:
+    """Legacy cafe/hall heartbeat; v1 rooms remain event-driven."""
+    raw = os.environ.get("ECHO_WORLD_HEARTBEAT_SECONDS", "15").strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        return 15.0
+    return max(0.25, value)
