@@ -142,49 +142,63 @@
       "kind": "character",
       "url": "models/characters/photo-derived/voxel/host.glb",
       "version": 1,
-      "style": "photo-pixel-voxel"
+      "style": "photo-pixel-voxel",
+      "rig_kind": "rigid-voxel-v1",
+      "animations": ["Idle", "Walk", "Talk", "SitDown", "Sit", "SitTalk", "RaiseRightHand", "RaiseBothHands"]
     },
     {
       "asset_id": "character.photo.person_01.voxel.v1",
       "kind": "character",
       "url": "models/characters/photo-derived/voxel/person_01.glb",
       "version": 1,
-      "style": "photo-pixel-voxel"
+      "style": "photo-pixel-voxel",
+      "rig_kind": "rigid-voxel-v1",
+      "animations": ["Idle", "Walk", "Talk", "SitDown", "Sit", "SitTalk", "RaiseRightHand", "RaiseBothHands"]
     },
     {
       "asset_id": "character.photo.person_02.voxel.v1",
       "kind": "character",
       "url": "models/characters/photo-derived/voxel/person_02.glb",
       "version": 1,
-      "style": "photo-pixel-voxel"
+      "style": "photo-pixel-voxel",
+      "rig_kind": "rigid-voxel-v1",
+      "animations": ["Idle", "Walk", "Talk", "SitDown", "Sit", "SitTalk", "RaiseRightHand", "RaiseBothHands"]
     },
     {
       "asset_id": "character.photo.person_03.voxel.v1",
       "kind": "character",
       "url": "models/characters/photo-derived/voxel/person_03.glb",
       "version": 1,
-      "style": "photo-pixel-voxel"
+      "style": "photo-pixel-voxel",
+      "rig_kind": "rigid-voxel-v1",
+      "animations": ["Idle", "Walk", "Talk", "SitDown", "Sit", "SitTalk", "RaiseRightHand", "RaiseBothHands"]
     },
     {
       "asset_id": "character.photo.person_04.voxel.v1",
       "kind": "character",
       "url": "models/characters/photo-derived/voxel/person_04.glb",
       "version": 1,
-      "style": "photo-pixel-voxel"
+      "style": "photo-pixel-voxel",
+      "rig_kind": "rigid-voxel-v1",
+      "animations": ["Idle", "Walk", "Talk", "SitDown", "Sit", "SitTalk", "RaiseRightHand", "RaiseBothHands"]
     },
     {
       "asset_id": "character.photo.person_05.voxel.v1",
       "kind": "character",
       "url": "models/characters/photo-derived/voxel/person_05.glb",
       "version": 1,
-      "style": "photo-pixel-voxel"
+      "style": "photo-pixel-voxel",
+      "rig_kind": "rigid-voxel-v1",
+      "animations": ["Idle", "Walk", "Talk", "SitDown", "Sit", "SitTalk", "RaiseRightHand", "RaiseBothHands"]
     },
     {
       "asset_id": "character.photo.person_06.voxel.v1",
       "kind": "character",
       "url": "models/characters/photo-derived/voxel/person_06.glb",
       "version": 1,
-      "style": "photo-pixel-voxel"
+      "style": "photo-pixel-voxel",
+      "rig_kind": "rigid-voxel-v1",
+      "animations": ["Idle", "Walk", "Talk", "SitDown", "Sit", "SitTalk", "RaiseRightHand", "RaiseBothHands"]
     },
     {
       "asset_id": "profile.person-demo-01.v1",
@@ -199,6 +213,13 @@
       "version": 1,
       "style": "hub-town",
       "root_node": "ROOT_HubTown"
+    },
+    {
+      "asset_id": "environment.village-market.v1",
+      "kind": "environment",
+      "url": "models/echo_world_village_market.glb",
+      "version": 1,
+      "style": "fantasy-village-lowpoly"
     },
     {
       "asset_id": "environment.cafe.interior.v2",
