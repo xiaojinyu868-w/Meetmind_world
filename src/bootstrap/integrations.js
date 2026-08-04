@@ -156,6 +156,13 @@ export function createUnifiedApi(base = MockApi) {
     getPackage(personId) {
       return base.getPackage(personId);
     },
+    // IF-6：玩家与 Agent 单聊 + 手动沉淀（资料包面板内对话框）
+    chatWithAgent(personId, message, history) {
+      return base.chatWithAgent(personId, message, history);
+    },
+    saveChatNote(personId, text) {
+      return base.saveChatNote(personId, text);
+    },
     getField(personId) {
       return base.getField(personId);
     },

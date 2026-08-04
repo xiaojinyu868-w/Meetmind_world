@@ -28,7 +28,7 @@ from app.agents.runtime_v2 import AgentCoordinator, AgentRouter, ContextBuilder
 from app.agents.tools import EventSummaryTool, MemoryQueryTool, ToolRegistry
 from app.application import CommandValidator
 from app.api import confirm as confirm_api
-from app.api import admin, experience, group, ingest, media, packages, pipeline, search as search_api
+from app.api import admin, agents as agents_api, experience, group, ingest, media, packages, pipeline, search as search_api
 from app.api import world as world_api
 from app.group.service import GroupSessionService
 from app.api.v1 import rooms as rooms_v1_api
@@ -191,6 +191,7 @@ def create_app() -> FastAPI:
     app.include_router(world_api.router)
     app.include_router(media.router)
     app.include_router(admin.router)
+    app.include_router(agents_api.router)
     # v0 现场房间与场景体验（codex 线，服务当前前端；v1 rooms 成熟后迁移）
     app.include_router(group.router)
     app.include_router(experience.router)
