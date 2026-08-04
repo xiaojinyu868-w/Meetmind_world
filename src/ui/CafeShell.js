@@ -883,7 +883,7 @@ export function createCafeShell({
   }
 
   // 结束/离开会议的统一出口：setup 阶段直接关 sheet；会议进行中走 onMeetingEnd
-  // （live 模式下后端会议继续在世界里跑完，玩家只是提前离席）
+  // （live 模式下由后端立即散场，meeting-ended 进今日播报）
   async function requestCloseMeeting() {
     if (!meetingSheetOpen) return false;
     if (meetingEndedState) {
@@ -899,7 +899,7 @@ export function createCafeShell({
     meetingActive = false;
     invitedIds.clear();
     closeMeetingSheet();
-    showToast(meetingLive ? "你已离开圆桌，讨论会在世界里继续" : "圆桌会议已结束");
+    showToast("圆桌会议已结束");
     return true;
   }
 

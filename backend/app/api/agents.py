@@ -11,6 +11,8 @@
     已有会议进行中或参与者在会上 → 409。
   - POST /api/v0/agents/meeting/current/message：玩家对进行中的会议发言，
     下一轮 Agent 发言必须回应；玩家发言 ephemeral，不进任何 Package。
+  - POST /api/v0/agents/meeting/current/end：发起人提前结束当前会议，
+    立即发 meeting-end（不等倒数）；无会议进行中 409。
 输入：person_id 路径参数 / JSON body（pydantic 校验）。
 输出：见 docs/API.md IF-6；人物不存在 404，身份未确认 403（FR-1.3 可靠性闸）。
 验收：tests/test_player_chat.py、tests/test_user_meeting.py。
@@ -130,6 +132,17 @@ def post_meeting_message(request: Request, body: MeetingMessageRequest):
     """玩家对进行中的用户会议发言：存为当前讨论点，下一轮 Agent 发言必须回应。
     玩家发言只活在会议记账里，不写入任何 Package。无用户会议进行中 → 409。"""
     result = request.app.state.runtime.post_player_message(body.text)
+    if result is None:
+        raise HTTPException(status_code=409, detail="当前没有进行中的圆桌会议")
+    return result
+
+
+@router.post("/meeting/current/end")
+def end_meeting(request: Request):
+    """玩家（发起人）提前结束当前圆桌会议：runtime 立即发 meeting-end（世界侧
+    同步散场，meeting-ended 进事件流/晨报），不等倒数。无会议进行中 → 409。"""
+    world = request.app.state.world
+    result = request.app.state.runtime.end_current_meeting(tick=world.tick)
     if result is None:
         raise HTTPException(status_code=409, detail="当前没有进行中的圆桌会议")
     return result

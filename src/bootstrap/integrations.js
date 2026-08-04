@@ -191,6 +191,12 @@ export function createUnifiedApi(base = MockApi) {
     postMeetingMessage(text) {
       return base.postMeetingMessage(text);
     },
+    // IF-6：发起人提前结束会议（live 即时散场；mock 仅保持契约形状）
+    endMeeting() {
+      return typeof base.endMeeting === "function"
+        ? base.endMeeting()
+        : Promise.resolve({ meeting_id: null, ended: true });
+    },
     getField(personId) {
       return base.getField(personId);
     },

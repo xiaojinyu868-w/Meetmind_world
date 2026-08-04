@@ -734,8 +734,15 @@ async function endMeeting() {
     : [];
   teardownMeetingLocalState();
   if (meetingBackendLive) {
-    // 真实会议按自己的节奏在世界里散场（runtime 倒数 + meeting-ended 事件）；
-    // 玩家提前离席不额外写"会议结束"事件，避免晨报出现假象
+    // 真实会议（IF-6）：发起人提前散场——后端立即发 meeting-end，
+    // meeting-ended 事件随快照回流并进今日播报；本地先离席
+    if (typeof api.endMeeting === "function") {
+      try {
+        await api.endMeeting();
+      } catch (error) {
+        console.warn("[EchoWorld] 结束会议未送达（会议可能已散场）", error);
+      }
+    }
     return;
   }
   if (!liveEnabled) {
@@ -778,24 +785,24 @@ function fillPackageNames(packages) {
 }
 
 
+// 交互收敛（INTERACTION-DESIGN §6）：热点只带 primaryAction（E）/ secondaryAction（F），
+// 按下即发生并留痕；不再下发三键并列的 actions 菜单
 function rebuildSceneHotspots() {
   if (isFieldWorld) {
-    sceneHotspots = (relationshipFieldSystem?.hotspots ?? []).map((hotspot) => ({
-      ...hotspot,
-      icon: hotspot.kind === "memory"
+    sceneHotspots = (relationshipFieldSystem?.hotspots ?? []).map((hotspot) => {
+      const icon = hotspot.kind === "memory"
         ? "book-open"
         : hotspot.kind === "thread"
           ? "message-circle"
           : hotspot.kind === "echo"
             ? "landmark"
-            : "sparkles",
-      actions: [{
-        id: "touch-field",
-        label: hotspot.prompt,
-        description: "这次触发会成为一条新的世界事件",
-        icon: hotspot.kind === "memory" ? "book-open" : "sparkles",
-      }],
-    }));
+            : "sparkles";
+      return {
+        ...hotspot,
+        icon,
+        primaryAction: { id: "touch-field", label: hotspot.prompt, icon },
+      };
+    });
     return;
   }
 
@@ -809,10 +816,9 @@ function rebuildSceneHotspots() {
       radius: cafeModule?.interaction?.radius ?? 1.9,
       eyebrow: "市集街上的室内空间",
       title: cafeModule?.label ?? "Echo Cafe",
-      detail: "咖啡厅适合熟人之间的一对一交流。进去坐下、邀请某个人，或在圆桌开启一次讨论。",
       prompt: cafeModule?.interaction?.verb ?? "进入咖啡厅",
       icon: "door-open",
-      actions: [{ id: "enter-cafe", label: "推门进入", description: "前往熟人交流空间", icon: "door-open" }],
+      primaryAction: { id: "enter-cafe", label: "进入", icon: "door-open" },
     }];
     for (const record of boothSystem?.booths.values() ?? []) {
       sceneHotspots.push({
@@ -824,39 +830,36 @@ function rebuildSceneHotspots() {
         personId: record.personId,
         eyebrow: "人 ↔ 共同课题 ↔ 人",
         title: `${record.displayName ?? nameOf(record.personId)}的摊位`,
-        detail: record.displayHeadline || "从这个摊位的照片、作品和共同经历出发，看看你们之间还有什么值得继续。",
-        prompt: `看看${record.displayName ?? nameOf(record.personId)}的摊位`,
+        prompt: `${record.displayName ?? nameOf(record.personId)}的摊位`,
         icon: "store",
-        actions: [
-          { id: "open-package", label: "翻开资料包", description: "回到相遇事实与现场记录", icon: "eye" },
-          { id: "enter-field", label: "进入关系场域", description: "看看这段关系被转译成怎样的空间", icon: "sparkles" },
-          { id: "invite-cafe", label: "约到咖啡厅继续聊", description: "把邀请带到熟人交流空间", icon: "coffee" },
-        ],
+        primaryAction: { id: "chat-person", label: "聊聊", icon: "message-circle" },
+        secondaryAction: { id: "enter-field", label: "场域", icon: "sparkles" },
       });
     }
     return;
   }
 
-  const tableHotspots = CAFE_LAYOUT.npcTables.map((table) => ({
-    id: `cafe-table-${table.id}`,
-    kind: "table",
-    tableId: table.id,
-    x: table.center.x,
-    z: table.center.z,
-    radius: table.capacity === 2 ? 1.9 : 2.05,
-    eyebrow: "两个人之间的直接交流",
-    title: table.label,
-    detail: "坐下来后，可以邀请一位熟人、点一杯饮品，或从桌边调取一段共同记忆。",
-    prompt: playerSeatedAt === table.id ? "看看桌边还能做什么" : `在${table.label}坐下`,
-    icon: "coffee",
-    actions: playerSeatedAt === table.id
-      ? [
-          { id: "invite-table", label: "邀请一位熟人", description: "选择这次想一起坐下的人", icon: "users" },
-          { id: "recall-memory", label: "调取共同记忆", description: "从资料包中找回第一次相遇", icon: "book-open" },
-          { id: "leave-seat", label: "起身离开", icon: "door-open" },
-        ]
-      : [{ id: "sit-at-table", label: "坐到桌边", description: "进入这张桌子的情境菜单", icon: "coffee" }],
-  }));
+  const tableHotspots = CAFE_LAYOUT.npcTables.map((table) => {
+    const seatedHere = playerSeatedAt === table.id;
+    return {
+      id: `cafe-table-${table.id}`,
+      kind: "table",
+      tableId: table.id,
+      x: table.center.x,
+      z: table.center.z,
+      radius: table.capacity === 2 ? 1.9 : 2.05,
+      eyebrow: "两个人之间的直接交流",
+      title: table.label,
+      prompt: seatedHere ? `你在${table.label}` : `在${table.label}坐下`,
+      icon: "coffee",
+      primaryAction: seatedHere
+        ? { id: "leave-seat", label: "起身", icon: "door-open" }
+        : { id: "sit-at-table", label: "坐下", icon: "coffee" },
+      secondaryAction: seatedHere
+        ? { id: "invite-table", label: "邀请熟人", icon: "users" }
+        : null,
+    };
+  });
   sceneHotspots = [
     {
       id: "cafe-roundtable",
@@ -865,13 +868,10 @@ function rebuildSceneHotspots() {
       z: CAFE_LAYOUT.roundtable.center.z,
       radius: CAFE_LAYOUT.roundtable.interactionRadius,
       eyebrow: "中央六人圆桌",
-      title: pendingSceneInviteId ? `邀请${nameOf(pendingSceneInviteId)}入座` : "发起一次圆桌会议",
-      detail: pendingSceneInviteId
-        ? `你从集市带来了给${nameOf(pendingSceneInviteId)}的邀请。还可以继续邀请其他人。`
-        : "围绕最近的变化、下一步或共同记忆，邀请最多五个人一起坐下。",
+      title: pendingSceneInviteId ? `带${nameOf(pendingSceneInviteId)}入座` : "发起一次圆桌会议",
       prompt: pendingSceneInviteId ? `带${nameOf(pendingSceneInviteId)}加入圆桌` : "发起圆桌会议",
       icon: "users",
-      actions: [{ id: "open-meeting", label: "选择入座的人", description: "邀请后会议会写入今日播报", icon: "users" }],
+      primaryAction: { id: "open-meeting", label: "发起会议", icon: "users" },
     },
     {
       id: "cafe-bar",
@@ -880,15 +880,11 @@ function rebuildSceneHotspots() {
       z: 3.15,
       radius: 1.8,
       eyebrow: "Echo Cafe 吧台",
-      title: "今天想和谁喝一杯？",
-      detail: "吧台不是装饰：点饮品、发出邀请，都会成为世界里可恢复的事件。",
-      prompt: "在吧台点单或邀请熟人",
+      title: "吧台",
+      prompt: "在吧台喝一杯",
       icon: "coffee",
-      actions: [
-        { id: "order-coffee", label: "点一杯今日手冲", description: "给今天的世界留一个安静节点", icon: "coffee" },
-        { id: "invite-coffee", label: "邀请一位熟人", description: "选择想一起喝咖啡的人", icon: "users" },
-        { id: "recall-memory", label: "翻开一段共同记忆", icon: "book-open" },
-      ],
+      primaryAction: { id: "order-coffee", label: "喝一杯", icon: "coffee" },
+      secondaryAction: { id: "invite-coffee", label: "邀请熟人", icon: "users" },
     },
     {
       id: "cafe-broadcast",
@@ -898,10 +894,9 @@ function rebuildSceneHotspots() {
       radius: 1.65,
       eyebrow: "世界事件不是背景动画",
       title: "今日播报屏",
-      detail: "这里滚动显示最近发生的邀请、圆桌、场域访问和共同记忆触发。",
       prompt: "查看今日世界事件",
       icon: "message-circle",
-      actions: [{ id: "read-brief", label: "展开今日播报", icon: "message-circle" }],
+      primaryAction: { id: "read-brief", label: "看播报", icon: "message-circle" },
     },
     ...tableHotspots,
   ];
@@ -954,7 +949,7 @@ async function recordWorldEvent(type, summary, personIds = [], payload = {}) {
 
 function inviteActions() {
   return people.map((person) => ({
-    id: `invite-person:${person.id}`,
+    actionId: `invite-person:${person.id}`,
     label: person.name,
     description: `${person.relation} · ${person.tags.slice(0, 2).join(" · ")}`,
     icon: "users",
@@ -1004,54 +999,14 @@ function leavePlayerSeat() {
 }
 
 
-function navigateToCafeWithInvite(personId) {
-  const nextUrl = new URL(window.location.href);
-  nextUrl.searchParams.set("world", "cafe");
-  nextUrl.searchParams.set("invite", personId);
-  window.location.assign(nextUrl.href);
-}
-
-
-async function memoryNarrative(personId = null) {
-  // 没有上下文人物时不猜第一位：返回人物选择清单，由用户点选后再调取
-  if (!personId) {
-    return {
-      eyebrow: "共同记忆",
-      title: "想调取与谁的共同记忆？",
-      detail: "选择一位熟人，从资料包里找回你们的第一次相遇。",
-      icon: "book-open",
-      actions: people.map((person) => ({
-        id: `recall-person:${person.id}`,
-        label: person.name,
-        description: `${person.relation} · ${person.tags.slice(0, 2).join(" · ")}`,
-        icon: "book-open",
-      })),
-    };
-  }
-  const targetId = personId;
-  const pkg = await api.getPackage(targetId);
-  const encounter = pkg.encounters?.[0] ?? {};
-  const highlight = (encounter.inferences ?? []).find((item) => item.type.includes("memory"))
-    ?? encounter.inferences?.[0];
-  return {
-    eyebrow: `你与${pkg.identity?.name ?? nameOf(targetId)}的共同记忆`,
-    title: encounter.place ?? "第一次相遇",
-    detail: highlight?.value ?? `这段记录发生在 ${encounter.time ?? "一个被留下的时刻"}。`,
-    icon: "book-open",
-    actions: [{ id: `open-package:${targetId}`, label: "查看完整资料包", icon: "eye" }],
-  };
-}
-
-
 async function handleSceneInteraction(hotspot, actionId) {
   if (actionId === "enter-cafe") {
     navigateToWorld("cafe");
     return { close: true };
   }
-  if (actionId === "open-package" || actionId.startsWith("open-package:")) {
-    const personId = actionId.split(":")[1] ?? hotspot.personId;
-    integrations.panel.openPerson(personId);
-    void recordWorldEvent("booth-viewed", `你翻开了${nameOf(personId)}的资料包`, [personId]);
+  if (actionId === "chat-person") {
+    // 点按看资料、E 直接开聊：资料包面板定位到「和 TA 聊聊」
+    void integrations.panel.openPerson(hotspot.personId, { focusChat: true });
     return { close: true };
   }
   if (actionId === "enter-field") {
@@ -1059,29 +1014,25 @@ async function handleSceneInteraction(hotspot, actionId) {
     navigateToField(hotspot.personId);
     return { close: true };
   }
-  if (actionId === "invite-cafe") {
-    pendingSceneInviteId = hotspot.personId;
-    await recordWorldEvent("invitation-sent", `你邀请${nameOf(hotspot.personId)}去咖啡厅继续聊`, [hotspot.personId]);
-    navigateToCafeWithInvite(hotspot.personId);
-    return { close: true };
-  }
   if (actionId === "order-coffee") {
+    void setCharacterExpression(currentUser.id, "happy", { source: "scene-interaction" });
     await recordWorldEvent("coffee-shared", "你在吧台点了一杯今日手冲", []);
     return {
-      eyebrow: "吧台已经记住",
-      title: "一杯咖啡留在了今日播报里",
-      detail: "这个安静的停顿现在是世界的一部分。邀请某个人后，它也会成为你们的共同事件。",
-      icon: "coffee",
-      actions: [{ id: "invite-coffee", label: "邀请一位熟人", icon: "users" }],
+      toast: {
+        eyebrow: "吧台",
+        title: "一杯今日手冲",
+        detail: "这个安静的停顿已留在今日播报里。",
+        icon: "coffee",
+      },
     };
   }
   if (actionId === "invite-coffee" || actionId === "invite-table") {
     return {
-      eyebrow: hotspot.title,
-      title: "这次想邀请谁？",
-      detail: "邀请会先写入今日行程；走到中央圆桌后，可以继续加入其他人。",
-      icon: "users",
-      actions: inviteActions(),
+      picker: {
+        eyebrow: hotspot.title,
+        title: "邀请谁过来？",
+        people: inviteActions(),
+      },
     };
   }
   if (actionId.startsWith("invite-person:")) {
@@ -1090,64 +1041,57 @@ async function handleSceneInteraction(hotspot, actionId) {
     await recordWorldEvent("invitation-sent", `你邀请${nameOf(personId)}在咖啡厅坐下`, [personId]);
     rebuildSceneHotspots();
     return {
-      eyebrow: "邀请已送达",
-      title: `${nameOf(personId)}会在圆桌等你`,
-      detail: "走到中央圆桌，按 E 就能把这次邀请变成一场会议。",
-      icon: "users",
-      actions: [],
+      toast: {
+        eyebrow: "邀请已送达",
+        title: `${nameOf(personId)}会在圆桌等你`,
+        detail: "走到中央圆桌，按 E 就能把这次邀请变成一场会议。",
+        icon: "users",
+      },
     };
   }
   if (actionId === "sit-at-table") {
     if (!sitPlayerAt(hotspot.tableId)) {
       return {
-        eyebrow: hotspot.title,
-        title: "这张桌子已经坐满了",
-        detail: "每个座位都有了主人。换一张还有空位的桌子，或者去中央圆桌发起一场会议。",
-        icon: "coffee",
-        actions: [],
+        toast: {
+          eyebrow: hotspot.title,
+          title: "这张桌子已经坐满了",
+          detail: "换一张还有空位的桌子，或去中央圆桌发起会议。",
+          icon: "coffee",
+        },
       };
     }
+    // 氛围动作去按钮化：坐下即点单（表情 + 事件 + toast，无菜单项）
+    void setCharacterExpression(currentUser.id, "happy", { source: "scene-interaction" });
+    void recordWorldEvent("coffee-shared", `你在${hotspot.title}坐下，点了一杯饮品`, []);
     return {
-      eyebrow: hotspot.title,
-      title: "你在桌边坐下了",
-      detail: "此刻移动暂停。再次靠近桌边的互动菜单，可以邀请熟人或调取共同记忆。",
-      icon: "coffee",
-      actions: [{ id: "leave-seat", label: "起身离开", icon: "door-open" }],
+      toast: {
+        eyebrow: hotspot.title,
+        title: "你在桌边坐下了",
+        detail: "E 起身 · F 邀请熟人过来坐。",
+        icon: "coffee",
+      },
     };
   }
   if (actionId === "leave-seat") {
     leavePlayerSeat();
     return { close: true };
   }
-  if (actionId === "recall-memory") {
-    // 人物解析顺序：热点自带人物 → 当前选中人物 → 待赴约的邀请对象；都没有则让人选
-    const targetId = hotspot.personId ?? selectedPersonId ?? pendingSceneInviteId;
-    const narrative = await memoryNarrative(targetId);
-    if (targetId) {
-      void recordWorldEvent("memory-recalled", `你在咖啡厅调取了与${nameOf(targetId)}的共同记忆`, [targetId]);
-    }
-    return narrative;
-  }
-  if (actionId.startsWith("recall-person:")) {
-    const personId = actionId.slice("recall-person:".length);
-    const narrative = await memoryNarrative(personId);
-    void recordWorldEvent("memory-recalled", `你在咖啡厅调取了与${nameOf(personId)}的共同记忆`, [personId]);
-    return narrative;
-  }
   if (actionId === "open-meeting") {
     leavePlayerSeat();
-    sceneInteraction.close();  // UI 仲裁：会议 sheet 打开前先收掉场景 sheet
+    sceneInteraction.close();  // UI 仲裁：会议 sheet 打开前先收掉场景层
     appShell.openMeeting(pendingSceneInviteId ? [pendingSceneInviteId] : []);
     return { close: true };
   }
   if (actionId === "read-brief") {
     const brief = await api.getWorldBrief();
     return {
-      eyebrow: `${brief.event_count} 条近期世界事件`,
-      title: brief.headline,
-      detail: brief.summary,
-      icon: "message-circle",
-      actions: [],
+      toast: {
+        eyebrow: `${brief.event_count} 条近期世界事件`,
+        title: brief.headline,
+        detail: brief.summary,
+        icon: "message-circle",
+        duration: 8,
+      },
     };
   }
   if (actionId === "touch-field") {
@@ -1158,15 +1102,14 @@ async function handleSceneInteraction(hotspot, actionId) {
       [personId],
       { field_entity: hotspot.id },
     );
-    const actions = hotspot.kind === "memory" || hotspot.kind === "thread"
-      ? [{ id: `open-package:${personId}`, label: "回到资料包查看来源", icon: "eye" }]
-      : [];
     return {
-      eyebrow: relationshipField?.scene?.title ?? "关系场域",
-      title: hotspot.title,
-      detail: hotspot.detail,
-      icon: hotspot.icon,
-      actions,
+      toast: {
+        eyebrow: relationshipField?.scene?.title ?? "关系场域",
+        title: hotspot.title,
+        detail: hotspot.detail,
+        icon: hotspot.icon,
+        duration: 6,
+      },
     };
   }
   return null;
@@ -2010,7 +1953,7 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (event.code === "Escape" && !event.repeat && !event.target.closest?.("input, textarea")) {
-    // UI 仲裁：ESC 一次只关最顶层一层（场景 sheet → 会议 sheet → 起身）；
+    // UI 仲裁：ESC 一次只关最顶层一层（场景选人条 → 会议 sheet → 起身）；
     // 资料包面板有自己的 ESC 处理（PackagePanel 内），这里不重复关
     if (integrations.panel?.isOpen) return;
     if (sceneInteraction.isOpen) {
