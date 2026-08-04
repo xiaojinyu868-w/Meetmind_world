@@ -20,7 +20,16 @@ export const BOOTH_BLOCKER_RADIUS = 0.9;
 export const BOOTH_TEMPLATE_ASSET_ID = "module.market-stall.v2";
 
 const ENTRANCE_DURATION = 0.3;
-const PLACEHOLDER_PORTRAIT = "portraits/person-self.png";
+const PLACEHOLDER_PORTRAIT = "portraits/photo-derived/voxel/host.png";
+const VOXEL_PORTRAITS = Object.freeze({
+  "person-self": "portraits/photo-derived/voxel/host.png",
+  "lin-che": "portraits/photo-derived/voxel/person_01.png",
+  "zhou-ning": "portraits/photo-derived/voxel/person_02.png",
+  "chen-mo": "portraits/photo-derived/voxel/person_03.png",
+  "xu-an": "portraits/photo-derived/voxel/person_04.png",
+  "su-he": "portraits/photo-derived/voxel/person_05.png",
+  "tang-ke": "portraits/photo-derived/voxel/person_06.png",
+});
 const DISPLAY_MESH_NAMES = Object.freeze(
   new Set(["MESH_NamePlate", "MESH_Portrait", "MESH_PhotoFrame_01", "MESH_PhotoFrame_02", "MESH_Backdrop"]),
 );
@@ -116,13 +125,14 @@ function normalizeBoothModule(raw) {
 
 
 function normalizeDisplay(display, personId) {
+  // Hall displays are an avatar surface, not a raw-media viewer. Resolve from
+  // the current voxel family so stale package refs cannot restore old renders.
+  const portraitRef = VOXEL_PORTRAITS[personId] ?? PLACEHOLDER_PORTRAIT;
   return {
     name: typeof display.name === "string" && display.name.trim() ? display.name : personId,
     headline: typeof display.headline === "string" ? display.headline : "",
-    faceRef: typeof display.face_ref === "string" ? display.face_ref : null,
-    photos: (Array.isArray(display.photos) ? display.photos : [])
-      .filter((ref) => typeof ref === "string" && ref.trim())
-      .slice(0, 2),
+    faceRef: portraitRef,
+    photos: [portraitRef, portraitRef],
     tags: (Array.isArray(display.tags) ? display.tags : [])
       .filter((tag) => typeof tag === "string" && tag.trim())
       .slice(0, 6),
@@ -213,24 +223,12 @@ function makeCanvasForMesh(mesh) {
 }
 
 
-// GLB 展示材质是 doubleSided；直接从背面观看会把文字/照片镜像。
-// 改为两张方向相反的 FrontSide 平面，让摊位内外两侧都保持自然阅读方向。
-function addReadableBackFace(mesh) {
+// Render one visitor-facing plane. Duplicate coplanar back faces caused
+// mirrored text, upside-down UVs and z-fighting.
+function orientDisplayTowardVisitor(mesh) {
   mesh.material.side = THREE.FrontSide;
   mesh.material.needsUpdate = true;
-  const back = new THREE.Mesh(mesh.geometry, mesh.material.clone());
-  back.name = `${mesh.name}_ReadableBack`;
-  back.position.copy(mesh.position);
-  back.quaternion.copy(mesh.quaternion);
-  back.scale.copy(mesh.scale);
-  back.rotateY(Math.PI);
-  back.material.side = THREE.FrontSide;
-  back.material.needsUpdate = true;
-  back.castShadow = false;
-  back.receiveShadow = false;
-  back.userData.displaySource = mesh.name;
-  mesh.parent.add(back);
-  return back;
+  mesh.rotateY(Math.PI);
 }
 
 
@@ -336,7 +334,7 @@ export class BoothSystem {
 
   get readablePanelCount() {
     let count = 0;
-    for (const record of this.booths.values()) count += record.displayBacks.size;
+    for (const record of this.booths.values()) count += record.displayMaterials.length;
     return count;
   }
 
@@ -386,11 +384,8 @@ export class BoothSystem {
         displayMeshes.push(object);
       }
     });
-    const displayBacks = new Map();
     for (const mesh of displayMeshes) {
-      const back = addReadableBackFace(mesh);
-      displayBacks.set(mesh.name, back);
-      displayMaterials.push(back.material);
+      orientDisplayTowardVisitor(mesh);
     }
     // hover 提示地环（初始隐藏，setHighlighted 控制）
     const hoverRing = new THREE.Mesh(
@@ -415,7 +410,6 @@ export class BoothSystem {
       position: booth.position,
       root,
       displayMaterials,
-      displayBacks,
       ownedTextures: new Map(),
       displaySignature: null,
       displayName: null,
@@ -458,7 +452,6 @@ export class BoothSystem {
     if (record.namePlate) {
       const scale = highlighted ? 1.15 : 1;
       record.namePlate.scale.setScalar(scale);
-      record.displayBacks.get("MESH_NamePlate")?.scale.setScalar(scale);
     }
   }
 
@@ -482,16 +475,8 @@ export class BoothSystem {
 
   #retexture(record, meshName, ref) {
     const mesh = record.root.getObjectByName(meshName);
-    if (!mesh || !ref) return;
-    this.#loadTexture(ref, (texture) => {
-      mesh.material.map = texture;
-      mesh.material.needsUpdate = true;
-      const back = record.displayBacks.get(meshName);
-      if (back) {
-        back.material.map = texture;
-        back.material.needsUpdate = true;
-      }
-    });
+    if (!mesh) return;
+    this.#loadTexture(ref || this.placeholderRef, (texture) => this.#setDisplayTexture(mesh, texture));
   }
 
   #loadTexture(ref, onReady, isFallback = false) {
@@ -530,12 +515,11 @@ export class BoothSystem {
     const previous = record.ownedTextures.get(meshName);
     if (previous) previous.dispose();
     record.ownedTextures.set(meshName, texture);
+    this.#setDisplayTexture(mesh, texture);
+  }
+
+  #setDisplayTexture(mesh, texture) {
     mesh.material.map = texture;
     mesh.material.needsUpdate = true;
-    const back = record.displayBacks.get(meshName);
-    if (back) {
-      back.material.map = texture;
-      back.material.needsUpdate = true;
-    }
   }
 }

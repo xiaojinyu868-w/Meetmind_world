@@ -305,7 +305,8 @@ export class HeartSignalSystem {
     const material = new THREE.SpriteMaterial({
       map: texture,
       transparent: true,
-      depthTest: true,
+      // World-anchored UI must not be hidden by awnings or booth signs.
+      depthTest: false,
       depthWrite: false,
       toneMapped: false,
     });

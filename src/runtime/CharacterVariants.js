@@ -26,7 +26,7 @@ export const CHARACTER_VARIANTS = Object.freeze([
     label: "绘本角色",
     title: "照片特征驱动的绘本 Low-poly 角色",
     assetByPersonId: PHOTO_CHARACTER_ASSETS.storybook,
-    fallbackAssetId: "character.faceless-painterly-adventure.v1",
+    fallbackAssetId: "character.photo.host.voxel.v1",
     textureFilter: "linear",
   }),
   Object.freeze({
@@ -34,7 +34,7 @@ export const CHARACTER_VARIANTS = Object.freeze([
     label: "像素角色",
     title: "固定方块身体与五面像素头像",
     assetByPersonId: PHOTO_CHARACTER_ASSETS.voxel,
-    fallbackAssetId: "character.faceless-painterly-adventure.v1",
+    fallbackAssetId: "character.photo.host.voxel.v1",
     textureFilter: "nearest",
   }),
 ]);
