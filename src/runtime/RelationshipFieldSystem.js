@@ -205,9 +205,10 @@ function buildLandscape(parent, field, materials, random) {
 }
 
 export class RelationshipFieldSystem {
-  constructor({ scene, field }) {
+  constructor({ scene, field, decorations = true }) {
     this.scene = scene;
     this.field = field;
+    this.decorations = decorations;
     this.root = new THREE.Group();
     this.root.name = "ROOT_RelationshipField";
     this.animations = [];
@@ -234,7 +235,9 @@ export class RelationshipFieldSystem {
       stem: standardMaterial("#526c55", { roughness: 1 }),
       leaf: standardMaterial("#76905f", { roughness: 1 }),
     };
-    buildLandscape(this.root, this.field, materials, random);
+    // decorations=false（splat 世界模式）：Marble 世界提供地貌，这里只搭建
+    // 可交互实体（热点/射线点选），不铺程序化地面/山丘/植物/同伴底座
+    if (this.decorations) buildLandscape(this.root, this.field, materials, random);
 
     for (const entity of this.field.scene?.entities ?? []) {
       let object = null;
@@ -267,10 +270,11 @@ export class RelationshipFieldSystem {
     });
   }
 
-  applyAtmosphere(scene) {
+  applyAtmosphere(scene, { fog = true } = {}) {
     const parameters = this.field.scene?.parameters ?? {};
     scene.background = color(parameters.sky, "#91bbb4");
-    scene.fog = new THREE.Fog(color(parameters.fog, "#d6dfd2"), 8.5, 26);
+    // splat 世界自带天空与纵深，雾会把 22m 尺度的 splat 整体罩灰，只在程序化模式启用
+    if (fog) scene.fog = new THREE.Fog(color(parameters.fog, "#d6dfd2"), 8.5, 26);
   }
 
   update(elapsed) {

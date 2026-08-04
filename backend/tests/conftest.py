@@ -28,6 +28,8 @@ LLM_ENV_KEYS = (
     "DASHSCOPE_API_KEY", "DASHSCOPE_BASE_URL",
     "COMMONSTACK_ECHO_API_KEY", "COMMONSTACK_ECHO_BASE_URL",
     "COMMONSTACK_ECHO_IMAGE_MODEL",
+    "WORLDLABS_API_KEY", "WORLDLABS_BASE_URL", "WORLDLABS_MODEL",
+    "WORLDLABS_POLL_INTERVAL_SECONDS", "WORLDLABS_POLL_TIMEOUT_SECONDS",
     "LLM_API_BASE", "LLM_API_KEY",
 )
 
@@ -36,6 +38,7 @@ LLM_ENV_KEYS = (
 def _isolate_llm_env(request, monkeypatch):
     """非 live 用例：清空 LLM 环境变量并重置 provider 单例（测试间隔离）。"""
     from app.agents.llm import base as llm_base
+    from app.fields import world_gen
 
     if request.node.get_closest_marker("live"):
         llm_base.reset_providers()
@@ -45,5 +48,7 @@ def _isolate_llm_env(request, monkeypatch):
     for key in LLM_ENV_KEYS:
         monkeypatch.setenv(key, "")
     llm_base.reset_providers()
+    world_gen.reset_worldgen_provider()
     yield
     llm_base.reset_providers()
+    world_gen.reset_worldgen_provider()

@@ -3,10 +3,12 @@
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.agents.llm import get_provider
 from app.fields import ensure_field
+from app.fields.world_gen import FieldWorldBusyError, request_field_world
 from app.packages.store import PackageNotFound
 from app.world.event_store import runtime_event_entry
 
@@ -39,6 +41,24 @@ def regenerate_field(request: Request, person_id: str):
         return ensure_field(request.app.state.store, person_id, regenerate=True)
     except PackageNotFound:
         raise HTTPException(status_code=404, detail=f"人物不存在：{person_id}")
+
+
+@router.post("/fields/{person_id}/world")
+def generate_field_world(request: Request, person_id: str,
+                         regenerate: bool = Query(False)):
+    """触发 Marble 世界生成（FR-2.11 升级）：202 受理后台生成，200 返回现状，
+    409 已有进行中的生成；world 块随 GET /fields/{person_id} 反映最新状态。"""
+    try:
+        world, status_code = request_field_world(
+            request.app.state.store, person_id, regenerate=regenerate)
+    except PackageNotFound:
+        raise HTTPException(status_code=404, detail=f"人物不存在：{person_id}")
+    except FieldWorldBusyError:
+        raise HTTPException(status_code=409, detail="场域世界正在生成中，请稍后查询")
+    except ValueError as exc:  # prompt 禁名校验命中（P-8），拒绝外发
+        raise HTTPException(status_code=422, detail=str(exc))
+    return JSONResponse(
+        {"person_id": person_id, "world": world}, status_code=status_code)
 
 
 @router.get("/world/events")
