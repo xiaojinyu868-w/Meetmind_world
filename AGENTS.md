@@ -2,6 +2,14 @@
 
 面向 AI 编码代理的项目说明。阅读本文件即可了解 EchoWorld 前端的结构、命令与约定。
 
+## 并行协作分工（2026-08-04，先读再动手）
+
+本仓库有两条并行代理工作流，为避免互相覆盖：
+
+- **场景组（另一协作者）**：`blender/`、`renders/`、`exports/`、`public/models/`（环境 GLB）、`public/textures/`（环境贴图）、`src/runtime/SceneVariants.js`、`src/runtime/VisualProfiles.js`、以及各环境场景的视觉效果。**其他代理不要改这些路径。**
+- **主线组（本仓其余一切）**：`backend/`、`src/`（除上述两个场景文件）、`docs/`、人物管线与 `public/models/characters/`、`public/portraits/`。
+- 公共区域（`src/main.js`、`src/bootstrap/integrations.js`、`docs/ROADMAP.md`、根 `AGENTS.md`）：改动保持最小、只增量不重构，提交信息写清所属组。
+
 ## 项目概述
 
 EchoWorld Three.js 关系世界原型（包名 `echoworld-lowpoly-walk`）：包含关系集市、熟人咖啡厅与“我和 TA”的关系场域。玩家用 `W/A/S/D`（桌面）或虚拟摇杆（触屏）走动，使用 E/F 或点击提示进入情境菜单；可查看资料包、邀请熟人、发起圆桌并让事件进入世界播报。
