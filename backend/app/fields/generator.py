@@ -1,14 +1,19 @@
 """关系场域生成器（FR-2.11 / ROADMAP 2.G.1）。
 
-场域是推断层的视觉化产物，不改写事实层。当前实现消费已建好的 Package、
-第一印象推断与关系记录，用确定性艺术模板产出可运行的 ``echo-field.v1``；
-后续视觉/音频工作流可以替换生成器，但前端消费契约保持不变。
+场域是推断层的视觉化产物，不改写事实层。生成路径为 LLM 优先、规则兜底：
+chat provider 可用时由 ``app.fields.llm`` 把关系材料做诗意空间映射并叠加到
+本模块的确定性骨架上；provider 未配置或输出不可用时，退回本模块的确定性
+艺术模板（model="relationship-field-rules.v1"）。两条路径消费的都是已授权
+Package、第一印象推断与关系记录，前端消费的 echo-field.v1 契约保持不变。
 """
 
 from __future__ import annotations
 
 import hashlib
+import logging
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 FIELD_SCHEMA = "echo-field.v1"
 FIELD_INFERENCE_NAME = "relationship-field.v1"
@@ -221,10 +226,37 @@ def ensure_field(store, person_id: str, *, regenerate: bool = False) -> dict:
         store.write_inference(person_id, FIELD_INFERENCE_NAME, normalized)
         return normalized
     relations_path = store.ensure_person_dir(person_id) / "relations.md"
-    field = generate_field(
-        package,
-        inferences=store.read_inferences(person_id),
-        relations_md=relations_path.read_text(encoding="utf-8"),
-    )
+    relations_md = relations_path.read_text(encoding="utf-8")
+    inferences = store.read_inferences(person_id)
+    field = generate_field(package, inferences=inferences, relations_md=relations_md)
+    field = _try_llm_overlay(
+        store, field, package, inferences, relations_md, regenerate=regenerate)
     store.write_inference(person_id, FIELD_INFERENCE_NAME, field)
     return field
+
+
+def _try_llm_overlay(store, field: dict, package: dict, inferences: dict,
+                     relations_md: str, *, regenerate: bool) -> dict:
+    """LLM 优先：可用时把确定性骨架升级为诗意映射；任何失败都原样返回骨架。"""
+    from app.fields.llm import new_variation, try_llm_field
+
+    try:
+        # 其他 Package 的姓名是"材料外人物"：出现在文案里即幻觉（relations.md
+        # 里被本人记录过的名字除外，那是合法材料）。
+        forbidden = [
+            summary["name"] for summary in store.list_packages()
+            if summary.get("name") and summary["person_id"] != package["person_id"]
+            and summary["name"] not in relations_md
+        ]
+        llm_field = try_llm_field(
+            field,
+            package,
+            inferences=inferences,
+            relations_md=relations_md,
+            variation=new_variation() if regenerate else "",
+            forbidden_names=forbidden,
+        )
+    except Exception:  # LLM 路径绝不允许拖垮场域接口
+        logger.exception("关系场域 LLM 生成异常，回退规则模板：%s", package.get("person_id"))
+        return field
+    return llm_field if llm_field is not None else field
