@@ -449,6 +449,8 @@ export function createCafeShell({
   let selectedWorldPerson = null;
   let selectedMapPerson = null;
   let meetingSheetOpen = false;
+  // live 会议模式由 boot() 后端探测后回填（setMeetingLive），决定会议台词走真实后端
+  let meetingLive = false;
   let meetingActive = false;
   let meetingEndedState = false;
   let meetingTopic = null;
