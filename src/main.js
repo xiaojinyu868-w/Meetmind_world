@@ -13,6 +13,7 @@ import { FALLBACK_SNAPSHOT, LiveWorld } from "./runtime/LiveWorld.js";
 import { NpcAgentSystem } from "./runtime/NpcAgentSystem.js";
 import { PersonSignalStore } from "./runtime/PersonSignalStore.js";
 import { RelationshipFieldSystem } from "./runtime/RelationshipFieldSystem.js";
+import { tryLoadFieldSplatWorld } from "./runtime/FieldSplatWorld.js";
 import { WorldBroadcastSystem } from "./runtime/WorldBroadcastSystem.js";
 import { WorldModuleRegistry } from "./runtime/WorldModuleRegistry.js";
 import {
@@ -280,6 +281,7 @@ let liveWorldTick = null;
 let boothSystem = null;
 let relationshipFieldSystem = null;
 let relationshipField = null;
+let fieldSplatWorld = null;
 let worldBroadcastSystem = null;
 let worldModuleRegistry = null;
 let playerSeatedAt = null;
@@ -538,6 +540,7 @@ async function configureWorld(root) {
 
   root.traverse((object) => {
     if (!object.isMesh) return;
+    if (object.name.startsWith("SPLAT_")) return; // Spark splat 自着色，不参与阴影/envMap
     const isFloor = object.name.startsWith("GROUND");
     object.castShadow = !isFloor;
     object.receiveShadow = true;
@@ -2187,6 +2190,7 @@ window.addEventListener("beforeunload", () => {
   appShell.destroy();
   sceneInteraction.destroy();
   relationshipFieldSystem?.dispose();
+  fieldSplatWorld?.dispose();
   worldBroadcastSystem?.dispose();
   unsubscribePersonSignals();
   heartSignalSystem.dispose();
@@ -2255,12 +2259,37 @@ async function boot() {
   if (isFieldWorld) {
     setProgress(0.12, `正在生成你与${fieldTargetPerson.name}的关系场域`);
     relationshipField = await api.getField(fieldTargetPerson.id);
-    relationshipFieldSystem = new RelationshipFieldSystem({ scene, field: relationshipField });
-    relationshipFieldSystem.applyAtmosphere(scene);
-    environment = relationshipFieldSystem.root;
+    // world.status === "ready" 时用 Spark 渲染 Marble splat 世界（collider GLB
+    // 作地面/碰撞射线目标）；未就绪或加载失败一律回退程序化场域（含 mock 模式）
+    fieldSplatWorld = await tryLoadFieldSplatWorld({
+      scene,
+      renderer,
+      field: relationshipField,
+      assetStore,
+      resolveMediaUrl,
+      onProgress: setProgress,
+    }).catch((error) => {
+      console.warn("[EchoWorld] 场域 splat 世界加载失败，回退程序化场域", error);
+      return null;
+    });
+    relationshipFieldSystem = new RelationshipFieldSystem({
+      scene,
+      field: relationshipField,
+      decorations: !fieldSplatWorld,
+    });
+    relationshipFieldSystem.applyAtmosphere(scene, { fog: !fieldSplatWorld });
+    if (fieldSplatWorld) {
+      environment = new THREE.Group();
+      environment.name = "ROOT_FieldWorld";
+      environment.add(fieldSplatWorld.root);
+      environment.add(relationshipFieldSystem.root);
+    } else {
+      environment = relationshipFieldSystem.root;
+    }
     canvas.dataset.fieldPerson = fieldTargetPerson.id;
     canvas.dataset.fieldSchema = relationshipField.schema;
     canvas.dataset.fieldGenerated = String(relationshipField.generated);
+    canvas.dataset.fieldWorld = fieldSplatWorld ? `splat:${fieldSplatWorld.quality}` : "procedural";
   } else {
     try {
       const environmentAsset = assetCatalog.resolve(environmentAssetId, "environment");

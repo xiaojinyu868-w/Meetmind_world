@@ -68,7 +68,10 @@ src/runtime/
   BoothSystem.js            展位系统：模板 GLB（module.market-stall.v2 商人推车，未到货降级简易占位展位）→
                             按快照 modules 克隆、MESH_* 展示面贴图/CanvasTexture 名牌与标签、增量同步、
                             每摊位按 personId 稳定配色变体（雨篷/车台布）、展位圆形阻挡与射线点选、0.3s 缩放入场
-  RelationshipFieldSystem.js  `echo-field.v1` 关系场域程序化地形、实体、热点与动画
+  RelationshipFieldSystem.js  `echo-field.v1` 关系场域程序化地形、实体、热点与动画（splat 模式下 decorations=false 只搭实体）
+  FieldSplatWorld.js          场域 Marble splat 世界（FR-2.11 升级）：field.world.status=ready 时 Spark 渲染 .spz
+                              （metric_scale_factor/ground_plane_offset 换算 + X 轴 180° 轴系转换），collider GLB 作地面
+                              射线目标；world 缺失/加载失败返回 null，由 main.js 回退程序化场域
   WorldModuleRegistry.js    `echo-world-modules.v1` 挂载契约加载和严格校验
   WorldBroadcastSystem.js   咖啡厅 3D 播报屏与 DOM 晨报摘要
   RoomClient.js             v1 现场房间客户端（docs/MVP2-BACKEND.md）：REST join/commands/snapshot +

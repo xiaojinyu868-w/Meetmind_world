@@ -381,8 +381,32 @@ actor_id / command_id / payload / occurred_at / correlation_id / causation_id`�
 
 本组接口只消费已确认 Package、关系记录、第一印象等授权 DTO。照片、人脸、贴图与音视频上下文的提取由上游工作流负责。
 
-- `GET /api/v0/fields/{person_id}`：读取或生成 `echo-field.v1`。产物位于推断层，包含 `generated_from / model / regenerable`、艺术参数与 4 类互动实体。
+- `GET /api/v0/fields/{person_id}`：读取或生成 `echo-field.v1`。产物位于推断层，包含 `generated_from / model / regenerable`、艺术参数与 4 类互动实体。v0.9 起响应可加性携带可选 `world` 块（见下）。
 - `POST /api/v0/fields/{person_id}/regenerate`：从现有来源重算场域，不修改 facts。
+- `POST /api/v0/fields/{person_id}/world[?regenerate=true]`（v0.9 加性）：触发 Marble 世界生成（World Labs，`marble-1.1`）。scene prompt 由场域艺术层输出（metaphor/weather/调色板/氛围数值）组装，**只含视觉描述，人名与关系事实不出服务器**（P-8，禁名命中即 422 拒发）。语义：
+  - `202 {"person_id", "world": {status:"queued", ...}}`：已受理，后台线程轮询 Marble 操作（生成约 5 分钟），完成后把 100k/500k spz、collider GLB、pano 下载进 `derived/field-world-{person_id}/{world_id}/` 派生存储并把 world 块翻转为 `ready`；
+  - `200`：world 已 `ready` 且 prompt 指纹未变（`source_prompt_hash` 匹配），直接返回现状，不重复计费；`?regenerate=true` 强制重算；
+  - `409`：该人物已有进行中的生成（一人一次）；进程重启后遗留的 queued 块会复用原 operation 重新挂轮询而非重新生成；
+  - 未配置 `WORLDLABS_API_KEY` 时 provider 走 mock：确定性地 queued→none（同步完成，绝不悬挂），前端继续用程序化场域。
+- `world` 块（`echo-field.v1` 可选加性字段，缺省视为 `{"status":"none"}`，旧缓存完全兼容）：
+
+```jsonc
+{
+  "status": "none | queued | ready | failed",
+  "world_id": "9125b71f-...",            // Marble 世界 id
+  "model": "marble-1.1",
+  "spz": {"100k": "derived/.../world_100k.spz", "500k": "derived/.../world_500k.spz"},
+  "collider_ref": "derived/.../collider.glb",   // 行走碰撞/地面射线目标
+  "pano_ref": "derived/.../pano.png",
+  "metric_scale_factor": 0.4207,         // splat 原始单位 → 米（× 此值）
+  "ground_plane_offset": 0.4591,         // metric 换算后 y 减此值，地面落 y=0
+  "caption": "The scene is a cozy...",   // Marble 生成的世界描述
+  "generated_at": "2026-08-04T09:03:57+00:00",
+  "source_prompt_hash": "f287e49daa9114f3"  // 艺术层 prompt 指纹，判断世界是否过期
+}
+```
+
+  媒体路由白名单同步扩展 `.spz`（application/octet-stream）与 `.glb`（model/gltf-binary），前端经 `GET /api/v0/media/{ref}` 取 splat/碰撞网格字节。世界资产是推断层可重算生成物（P-3）：标记 generated、记录来源 prompt 指纹、可用 regenerate 重算。
 - `GET /api/v0/world/events?limit=20`：读取最近的 `echo-world-event.v1` 持久化事件。
 - `GET /api/v0/world/brief`：返回 `echo-world-brief.v1` 晨报摘要。chat provider 可用时
   `headline`（≤20 字）/`summary`（≤80 字）经 LLM 润色（只引用真实事件、不编造；按
@@ -429,3 +453,4 @@ actor_id / command_id / payload / occurred_at / correlation_id / causation_id`�
 - 2026-08-04 | v0.6（加性）：IF-6 首个 v0 落地——玩家与 Agent 单聊 `POST /api/v0/agents/{id}/chat`（reply + cited_facts 来源指针 + suggestions 开场建议，generated_by 标记 mock/模型）与手动沉淀 `POST /api/v0/agents/{id}/chat/save-note`（player-note 推断，标注"来自玩家转述"）；对话不自动入库 | AI
 - 2026-08-04 | v0.7（加性）：IF-6 用户发起的圆桌会议落地——`POST /api/v0/agents/meeting`（2..5 人 + 可选议题，409/404/422 语义）与 `POST /api/v0/agents/meeting/current/message`（玩家发言注入下一轮会议 prompt）；会议 `agent-talk`/`meeting-started` 事件带 `meeting_id`（+`topic`），快照 `meeting` 字段带 `topic`；`GET /api/v0/world/brief` 增加 `generated_by`，headline/summary 可经 LLM 润色（按分钟缓存，失败回退模板） | AI
 - 2026-08-04 | v0.8（加性）：IF-6 新增 `POST /api/v0/agents/meeting/current/end`——发起人提前结束当前圆桌会议（runtime 立即发 meeting-end，不等倒数；无会议 409）；配套交互收敛（INTERACTION-DESIGN §6），会议 sheet「结束会议」在 live 模式走该端点 | AI
+- 2026-08-04 | v0.9（加性）：IF-9 场域接入 Marble 世界生成（FR-2.11 升级）——新增 `POST /api/v0/fields/{person_id}/world`（202 受理/409 一人一次/422 禁名拒发）与 `echo-field.v1` 可选 `world` 块（none/queued/ready/failed + spz/collider/pano 派生指针 + metric_scale_factor/ground_plane_offset + source_prompt_hash）；媒体白名单加 `.spz`/`.glb`；未配置 WORLDLABS_API_KEY 时 mock 确定性 pending→none | AI

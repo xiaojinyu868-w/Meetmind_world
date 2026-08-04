@@ -27,6 +27,8 @@ DEFAULT_VISION_MODEL = "qwen-vl-plus"
 DEFAULT_VISION_API_BASE = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 DEFAULT_IMAGE_MODEL = "openai/gpt-image-2"
 DEFAULT_IMAGE_API_BASE = "https://api.commonstack.ai/v1"
+DEFAULT_WORLDGEN_BASE_URL = "https://api.worldlabs.ai/marble/v1"
+DEFAULT_WORLDGEN_MODEL = "marble-1.1"
 
 # 角色 → 环境变量映射：第一个非空的生效。CHAT_*/VISION_* 为本后端约定名，
 # DEEPSEEK_*/DASHSCOPE_* 为根 .env 的实际命名（以其为准做映射）。
@@ -115,6 +117,34 @@ def get_llm_config() -> dict:
         "api_key": api_key,
         "model": os.environ.get("LLM_MODEL", DEFAULT_LLM_MODEL).strip() or DEFAULT_LLM_MODEL,
         "configured": bool(api_base and api_key),
+    }
+
+
+def _float_env(name: str, default: float) -> float:
+    raw = os.environ.get(name, "").strip()
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
+def get_worldgen_config() -> dict:
+    """World Labs Marble 世界生成配置（WORLDLABS_*，ARCHITECTURE.md §5a）。
+
+    未配置 WORLDLABS_API_KEY 时 configured=False，world_gen provider 走 mock
+    降级（场域世界保持 status="none"，前端继续用程序化场域），不抛异常。
+    key 只被程序读取进请求头，绝不进日志/审计留痕。
+    """
+    return {
+        "api_base": os.environ.get("WORLDLABS_BASE_URL", "").strip()
+        or DEFAULT_WORLDGEN_BASE_URL,
+        "api_key": os.environ.get("WORLDLABS_API_KEY", "").strip(),
+        "model": os.environ.get("WORLDLABS_MODEL", "").strip() or DEFAULT_WORLDGEN_MODEL,
+        "configured": bool(os.environ.get("WORLDLABS_API_KEY", "").strip()),
+        "poll_interval_seconds": max(
+            0.1, _float_env("WORLDLABS_POLL_INTERVAL_SECONDS", 15.0)),
+        "poll_timeout_seconds": max(
+            1.0, _float_env("WORLDLABS_POLL_TIMEOUT_SECONDS", 1200.0)),
     }
 
 
