@@ -47,6 +47,8 @@ DEFAULT_RULES: tuple[PolicyRule, ...] = (
     _rule("visit", "agent.visit", target_required=True),
     _rule("sit", "agent.sit"),
     _rule("talk", "agent.talk", target_required=True),
+    _rule("initiate_talk", "person.message", target_required=True),
+    _rule("respond_meeting", "meeting.respond"),
     _rule("invite", "room.invite", target_required=True),
     _rule("join_roundtable", "roundtable.join"),
     _rule("leave_roundtable", "roundtable.leave"),

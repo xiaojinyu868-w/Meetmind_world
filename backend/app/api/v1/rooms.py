@@ -125,6 +125,7 @@ async def execute_command(room_id: str, body: CommandInput, request: Request):
                 generated.extend(await coordinator.process(EventEnvelope(
                     event_id=raw["event_id"], type=raw["type"],
                     room_id=raw["room_id"], actor_id=raw.get("actor_id"),
+                    subject_id=raw.get("subject_id"),
                     payload=raw.get("payload") or {}, sequence=raw["sequence"],
                     correlation_id=raw["event_id"],
                 )))

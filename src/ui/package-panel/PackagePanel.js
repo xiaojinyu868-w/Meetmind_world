@@ -1,6 +1,5 @@
 import {
   Clock3,
-  Film,
   Info,
   Lightbulb,
   MapPin,
@@ -8,6 +7,7 @@ import {
   ShieldCheck,
   Sparkles,
   Tag,
+  UserRoundCheck,
   Users,
   X,
   createIcons,
@@ -19,7 +19,6 @@ import "./panel.css";
 
 const ICONS = {
   Clock3,
-  Film,
   Info,
   Lightbulb,
   MapPin,
@@ -27,6 +26,7 @@ const ICONS = {
   ShieldCheck,
   Sparkles,
   Tag,
+  UserRoundCheck,
   Users,
   X,
 };
@@ -85,20 +85,6 @@ function inferenceGroupKey(type) {
   if (text.includes("relation")) return "relation";
   return "other";
 }
-
-function mediaIconName(ref) {
-  return /\.(m4a|wav|mp3|aac|ogg|flac)(\?|#|$)/i.test(String(ref)) ? "mic" : "film";
-}
-
-function mediaFileName(ref) {
-  const segment = String(ref).split("/").pop() ?? "";
-  try {
-    return decodeURIComponent(segment) || "原始音视频";
-  } catch {
-    return segment || "原始音视频";
-  }
-}
-
 
 /**
  * 挂载人物资料包面板（FR-1.8「上下文恢复」，核心价值时刻）。
@@ -216,10 +202,26 @@ export function mountPackagePanel(container, api) {
     const facts = encounter.facts ?? {};
     const photos = Array.isArray(facts.photos) ? facts.photos : [];
     const media = Array.isArray(facts.media) ? facts.media : [];
+    const speakerAudio = Array.isArray(facts.speaker_audio) ? facts.speaker_audio : [];
+    const conversationRecordings = Array.isArray(facts.conversation_recordings)
+      ? facts.conversation_recordings
+      : [];
+    const audioRefs = [...new Set([
+      ...speakerAudio,
+      ...conversationRecordings,
+      ...media.filter((ref) => /\.(m4a|wav|mp3|aac|ogg|flac)(\?|#|$)/i.test(String(ref))),
+    ])];
+    const videoRefs = [...new Set(media.filter(
+      (ref) => /\.(mp4|mov|webm)(\?|#|$)/i.test(String(ref)),
+    ))];
+    const faceSummary = facts.face_summary ?? {};
+    const voiceSummary = facts.voice_summary ?? {};
     const points = []
       .concat(encounter.highlights ?? encounter.key_points ?? encounter.talking_points ?? [])
       .filter(Boolean);
     const privacy = PRIVACY_LEVELS[encounter.privacy];
+    const agentUsable = encounter.privacy === "agent-usable";
+    const canAuthorize = String(encounter.encounter_id ?? "").startsWith("enc_k3_");
     return `
       <article class="pp-encounter">
         <header class="pp-encounter-head">
@@ -230,6 +232,15 @@ export function mountPackagePanel(container, api) {
           </div>
           ${privacy ? `<span class="pp-encounter-privacy" title="${privacy.level} · ${privacy.label}">${privacy.level}</span>` : ""}
         </header>
+        ${
+          canAuthorize
+            ? `<label class="pp-agent-toggle">
+                <span>${icon("user-round-check")}Agent 记忆</span>
+                <input type="checkbox" data-pp-agent-memory="${escapeHtml(encounter.encounter_id)}"${agentUsable ? " checked" : ""} />
+                <i aria-hidden="true"></i>
+              </label>`
+            : ""
+        }
         ${
           photos.length
             ? `<div class="pp-photos">${photos
@@ -243,15 +254,22 @@ export function mountPackagePanel(container, api) {
             : ""
         }
         ${
-          media.length || facts.transcript
+          faceSummary.observation_count || voiceSummary.turn_count
+            ? `<dl class="pp-evidence-summary">
+                ${faceSummary.observation_count ? `<div><dt>人脸观测</dt><dd>${escapeHtml(faceSummary.observation_count)} 条${Number.isFinite(faceSummary.confidence) ? ` · ${Math.round(faceSummary.confidence * 100)}%` : ""}</dd></div>` : ""}
+                ${voiceSummary.turn_count ? `<div><dt>声纹归属</dt><dd>${escapeHtml(voiceSummary.identity_state ?? "已归属")} · ${Number.isFinite(voiceSummary.confidence) ? `${Math.round(voiceSummary.confidence * 100)}%` : "待评估"}</dd></div>` : ""}
+              </dl>`
+            : ""
+        }
+        ${
+          audioRefs.length || videoRefs.length || facts.transcript
             ? `<div class="pp-media">
-                ${media
-                  .map(
-                    (ref) =>
-                      `<button type="button" class="pp-media-button" data-pp-media>${icon(mediaIconName(ref))}<span>${escapeHtml(mediaFileName(ref))}</span></button>`,
-                  )
-                  .join("")}
-                ${facts.transcript ? `<button type="button" class="pp-media-button" data-pp-media>${icon("info")}<span>转写全文</span></button>` : ""}
+                ${audioRefs.map((ref) => {
+                  const full = conversationRecordings.includes(ref);
+                  return `<figure class="pp-audio"><figcaption>${icon("mic")}${full ? "整段会话录音" : "说话人分段音频"}</figcaption><audio controls preload="metadata" src="${escapeHtml(resolveMedia(ref))}"></audio></figure>`;
+                }).join("")}
+                ${videoRefs.map((ref) => `<video class="pp-video" controls preload="metadata" src="${escapeHtml(resolveMedia(ref))}"></video>`).join("")}
+                ${facts.transcript ? `<button type="button" class="pp-media-button" data-pp-open-media="${escapeHtml(resolveMedia(facts.transcript))}">${icon("info")}<span>转写全文</span></button>` : ""}
               </div>`
             : ""
         }
@@ -442,14 +460,36 @@ export function mountPackagePanel(container, api) {
       close();
       return;
     }
-    if (event.target.closest("[data-pp-media]")) {
-      // 原始音视频回放占位入口：事实层指针已就位，播放器随正式版开放
-      showToast("原始音视频回放将在正式版本开放");
+    const mediaLink = event.target.closest("[data-pp-open-media]");
+    if (mediaLink) {
+      window.open(mediaLink.dataset.ppOpenMedia, "_blank", "noopener,noreferrer");
       return;
     }
     if (event.target.closest("[data-pp-retry]") && activePersonId) {
       cache.delete(activePersonId);
       openPerson(activePersonId);
+    }
+  });
+
+  layer.addEventListener("change", async (event) => {
+    const input = event.target.closest("[data-pp-agent-memory]");
+    if (!input || !activePersonId) return;
+    const encounterId = input.dataset.ppAgentMemory;
+    input.disabled = true;
+    try {
+      const pkg = await api.setEncounterPrivacy(
+        activePersonId,
+        encounterId,
+        input.checked ? "agent-usable" : "self-only",
+      );
+      cache.set(activePersonId, pkg);
+      render(pkg);
+      showToast(input.checked ? "这次相遇已加入 Agent 记忆" : "这次相遇已退出 Agent 记忆");
+    } catch (error) {
+      console.error("[package-panel] 更新 Agent 记忆授权失败", error);
+      input.checked = !input.checked;
+      input.disabled = false;
+      showToast("授权更新失败，请稍后重试");
     }
   });
 

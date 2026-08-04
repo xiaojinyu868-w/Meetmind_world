@@ -1,6 +1,8 @@
 # EchoWorld 技术架构
 
-对应 PRD.md 的 MVP 1.0–3.0。本文只描述**目标架构**；现有仓库是 three.js 前端原型（见根目录 AGENTS.md），将逐步演进进 `frontend/`。
+对应 PRD.md 的 MVP 1.0–3.0。本文描述分层原则与目标架构；当前可信单机的真实
+组件、K3 输入和数据接通状态以
+[`REAL-DATA-WORLD-ARCHITECTURE.md`](./REAL-DATA-WORLD-ARCHITECTURE.md) 为准。
 
 ## 1. 分层职责（不可逾越的边界）
 
@@ -146,12 +148,14 @@ MVP2（2026-08-03 重设后）增加三条线：场景语言（点位交互/播�
 
 | 模块 | 接口 | MVP 实现 |
 |---|---|---|
-| `texture_gen.py` | `generate(photos: list[Path]) -> TextureSet`（头部五面 + 身体 atlas） | mock：占位贴图 |
-| `voxel_gen.py` | `generate(textures: TextureSet, style: StyleSpec) -> Path(glb)`（体素组装） | 固定体素身体 + 贴图；产物必须过 ART-BRIEF 契约（贴图槽位/根节点/朝向/身高） |
-| `person_builder.py` | `build(encounter_facts) -> avatar + asset_entry` | 编排上述两步并登记白名单（全流程 mock 可跑通） |
+| `pipelines/physical_ai_enrichment/avatar.py` | `generate(person_id, image_bytes, source_ref) -> CharacterAsset` | 已实现：安全可见特征/规则配色 → 128 atlas + 四表情 + 固定身体 GLB，版本化写入 `derived/` |
+| `physical_ai/service.py` | `agent-package -> session facts + PersonPackage[]` | 已实现：共享事实只存一次，专属媒体按 `person_id` 分区，未确认与 unassigned 不误归人 |
+| `pipelines/physical_ai_enrichment/service.py` | `person evidence -> summary/memory/relations` | 已实现：结构化 LLM + 规则降级，推断全部带事实指针 |
+| `signals/service.py` | `wearer physiology -> person-signal.v1` | 已实现会话后聚合；原始 Ring 样本不进入浏览器 |
 | `app/fields/generator.py` | `generate_field(package, inferences, relations_md) -> echo-field.v1`（关系场域，FR-2.11） | 确定性艺术参数 + 4 类互动实体；产物标注生成物、来源素材指针、可重算（P-3） |
 
-注：现有 `three_view.py` / `blender_gen.py` 将随代码同步改语义/重命名为上表形态（文档为准，同步前视为遗留实现）。风格规范（体素分辨率、贴图生成 prompt 模板、调色板提取）由美术在 ART-BRIEF.md 定义，管线读取，不硬编码。
+注：旧 `pipeline/person_builder.py` 的三视图/lowpoly 路径仅供历史 IF-1 流程兼容；K3
+真实入口使用 `physical_ai_enrichment`，不再等待 per-person Blender 作业。
 
 Agent 行为按场景半规则驱动（走动/访问/圆桌），由 Agent Runtime 发事件改变世界状态，前端只渲染快照（ADR-1）；世界的动态演化只允许 Agent 通过事件完成（见 §5 权限矩阵）。
 
@@ -180,7 +184,7 @@ Agent 行为按场景半规则驱动（走动/访问/圆桌），由 Agent Runti
 - TBD-ARCH-1：前端是否/何时迁移 TypeScript。
 - TBD-ARCH-2：人物数据何时从文件迁移到数据库（触发条件：单人 Package 数 > 500 或多人协作写入冲突出现）。
 - TBD-ARCH-3 已决（2026-08-04）：v0 世界快照维持纯读轮询；v1 现场房间使用 WebSocket + sequence cursor replay。
-- TBD-ARCH-4（2026-08-04 现场档双线落地）：**现场联机**（FR-2.14）现有两条实现——v0 `echo-group-room.v1`（内存权威状态 + 约 700ms 轮询 + 单调 `seq`，服务当前前端 GroupPlay，同场试点）与 v1 `rooms`（SQLite 持久化 + WebSocket 有序事件 + Intent/Command 架构，目标形态，前端接线中）；硬件形态与大屏只读视角仍见 TBD-H1。**云端联机**（FR-3.6，远期）仍须重新评审：PostgreSQL 事务/outbox、Redis presence/pub-sub/分片锁、登录与 room token 鉴权，禁止直接扩展进程内或单节点实现。
+- TBD-ARCH-4（2026-08-04 现场档双线落地）：**现场联机**（FR-2.14）现有两条实现——v0 `echo-group-room.v1`（内存权威状态 + 约 700ms 轮询 + 单调 `seq`，服务 GroupPlay 同场试点）与 v1 `rooms`（SQLite 持久化 + WebSocket 有序事件 + Intent/Command 架构，已接 Three.js 咖啡厅）；硬件形态与大屏只读视角仍见 TBD-H1。**云端联机**（FR-3.6，远期）仍须重新评审：PostgreSQL 事务/outbox、Redis presence/pub-sub/分片锁、登录与 room token 鉴权，禁止直接扩展进程内或单节点实现。
 
 ## 变更记录
 
@@ -193,3 +197,5 @@ Agent 行为按场景半规则驱动（走动/访问/圆桌），由 Agent Runti
 - 2026-08-04 | ADR-8 落档：版本化世界模块挂载清单、关系场域推断管线与 append-only 世界事件/晨报接入；视觉和音视频语义继续由上游提供 | AI
 - 2026-08-03 | MVP2 后端框架落地：Intent-only Agent、Policy/Command、SQLite EventStore、房间 WebSocket、圆桌/破冰、群体入场与 Field 工作流；现场单节点可验收 | AI
 - 2026-08-04 | 合并 codex/agent 两线：ADR-9 落档（Intent-only Agent 架构）；TBD-ARCH-3 已决、TBD-ARCH-4 现场档双线记录（v0 轮询试点 + v1 WS 目标形态）；v0 快照改纯读、tick 由服务端 scheduler 心跳推进 | AI
+- 2026-08-04 | v1 Room 接入 Three.js 咖啡厅；新增可信单机真实数据现状图索引 | AI
+- 2026-08-04 | K3 package 下游生成线落地：会话/人物事实扇出、深度记忆/关系、动态体素资产、PersonSignal 与显式 Agent 授权 | AI
