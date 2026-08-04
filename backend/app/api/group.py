@@ -89,6 +89,12 @@ def join_session(request: Request, body: JoinSessionRequest):
     )
 
 
+@router.get("/sessions/by-code/{code}")
+def get_session_by_code(request: Request, code: str):
+    """加入前的公开名册预览：person_id / display_name / online（供身份选择）。"""
+    return _call(lambda: request.app.state.group_sessions.get_session_by_code(code))
+
+
 @router.get("/sessions/{session_id}")
 def get_session(request: Request, session_id: str, viewer_id: str | None = None):
     return _call(

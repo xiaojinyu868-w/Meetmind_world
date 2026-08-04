@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from app.fields import ensure_field
 from app.packages.store import PackageNotFound
+from app.world.event_store import runtime_event_entry
 
 router = APIRouter(prefix="/api/v0", tags=["experience"])
 
@@ -46,7 +47,18 @@ def world_events(request: Request, limit: int = Query(20, ge=1, le=100)):
 
 @router.get("/world/brief")
 def world_brief(request: Request):
-    return request.app.state.world_events.morning_brief()
+    # 晨报 = 持久化用户互动事件 + 各世界 runtime 滚动缓冲里的 agent 自主事件
+    runtime_events = []
+    for world_name in ("world", "hall"):
+        service = getattr(request.app.state, world_name, None)
+        recent_events = getattr(service, "recent_events", None)
+        if not callable(recent_events):
+            continue
+        for event in recent_events():
+            entry = runtime_event_entry(event, world_name)
+            if entry is not None:
+                runtime_events.append(entry)
+    return request.app.state.world_events.morning_brief(runtime_events)
 
 
 @router.post("/world/interactions")

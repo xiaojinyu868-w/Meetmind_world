@@ -191,7 +191,9 @@ actor_id / command_id / payload / occurred_at / correlation_id / causation_id`�
 ```
 
 - `GET /api/v0/group/sessions/{session_id}?viewer_id=p1` 返回观察者视角房间快照。
-- 位置限制在现场空间 `x ∈ [-7, 7] / z ∈ [-5, 5]`；旧 `seq` 返回 `409`，避免乱序包把玩家拉回旧位置。
+- `GET /api/v0/group/sessions/by-code/{code}` 返回加入前的公开名册预览（同一快照结构，`participants[].online` 标记占用状态，不刷新任何 `last_seen`）。
+- 身份认领：加入时 `person_id` 对应参与者在线（presence TTL 内）返回 `409 该身份已被占用`；离线则允许回收（设备重连/换机）。新参与者加入仍受"第一印象开始后锁名单"约束。
+- 位置限制与大厅世界边界同源（`world/hall.py` HALL_BOUNDS：`x ∈ [-5.5, 5.5] / z ∈ [-10.5, 10.5]`）；旧 `seq` 返回 `409`，避免乱序包把玩家拉回旧位置。
 - 返回 `participants[].avatar_ref` 仅是上游授权资源引用，服务不读取或加工其内容。
 
 ### 第一印象

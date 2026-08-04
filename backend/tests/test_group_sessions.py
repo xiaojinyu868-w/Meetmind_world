@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import create_app
+from app.world.hall import HALL_BOUNDS
 
 
 @pytest.fixture()
@@ -102,8 +103,9 @@ def test_presence_rejects_stale_sequence_and_clamps_venue_bounds(client):
     )
     assert response.status_code == 200
     alice = next(item for item in response.json()["participants"] if item["person_id"] == "alice")
-    assert alice["presence"]["x"] == 7.0
-    assert alice["presence"]["z"] == -5.0
+    # 钳制与大厅世界边界同源（world/hall.py HALL_BOUNDS）
+    assert alice["presence"]["x"] == HALL_BOUNDS["max_x"]
+    assert alice["presence"]["z"] == HALL_BOUNDS["min_z"]
     assert -3.1416 <= alice["presence"]["yaw"] <= 3.1416
 
     stale = client.put(
@@ -283,3 +285,55 @@ def test_who_wrote_it_hides_answer_then_returns_results_to_inferences(client, tm
         assert payload["schema"] == "echo-group-game-result.v1"
         assert payload["score"] == 1
         assert payload["source"]["session_id"] == room["session_id"]
+
+
+def test_session_preview_by_code_returns_public_roster(client):
+    room = _create_room(client)
+    preview = client.get(f"/api/v0/group/sessions/by-code/{room['code']}")
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert body["schema"] == "echo-group-room.v1"
+    roster = {item["person_id"]: item for item in body["participants"]}
+    assert set(roster) == {"host", "alice", "bob"}
+    for item in roster.values():
+        assert isinstance(item["display_name"], str)
+        assert isinstance(item["online"], bool)
+
+    # 房间码大小写不敏感；未知房间码 404
+    assert client.get(f"/api/v0/group/sessions/by-code/{room['code'].lower()}").status_code == 200
+    missing = client.get("/api/v0/group/sessions/by-code/ZZZZZZ")
+    assert missing.status_code == 404
+
+
+def test_join_rejects_online_identity_but_allows_reclaim(client, monkeypatch):
+    room = _create_room(client)
+
+    # 在线身份（刚创建房间，last_seen 新鲜）不能被第二台设备占用
+    taken = client.post(
+        "/api/v0/group/sessions/join",
+        json={
+            "code": room["code"],
+            "participant": {"person_id": "alice", "display_name": "抢身份的人"},
+        },
+    )
+    assert taken.status_code == 409
+    assert "已被占用" in taken.json()["detail"]
+    roster = client.get(f"/api/v0/group/sessions/by-code/{room['code']}").json()["participants"]
+    alice = next(item for item in roster if item["person_id"] == "alice")
+    assert alice["display_name"] == "阿澄"
+
+    # 身份离线（presence TTL 过期）后允许回收：设备重连/换机接管自己的角色
+    monkeypatch.setattr("app.group.service.PRESENCE_TTL_SECONDS", -1)
+    reclaim = client.post(
+        "/api/v0/group/sessions/join",
+        json={
+            "code": room["code"],
+            "participant": {"person_id": "alice", "display_name": "阿澄回来了"},
+        },
+    )
+    assert reclaim.status_code == 200, reclaim.text
+    reclaimed = next(
+        item for item in reclaim.json()["participants"] if item["person_id"] == "alice"
+    )
+    assert reclaimed["display_name"] == "阿澄回来了"
+    assert len(reclaim.json()["participants"]) == 3  # 回收不新增名册人数

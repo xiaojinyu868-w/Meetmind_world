@@ -15,6 +15,7 @@ import uuid
 from datetime import UTC, datetime
 
 from app.packages.store import PackageStore
+from app.world.hall import HALL_BOUNDS
 
 ROOM_SCHEMA = "echo-group-room.v1"
 IMPRESSION_SCHEMA = "echo-group-impression.v1"
@@ -22,8 +23,6 @@ GAME_RESULT_SCHEMA = "echo-group-game-result.v1"
 ROOM_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
 MAX_PARTICIPANTS = 8
 MAX_IMPRESSION_LENGTH = 80
-POSITION_LIMIT_X = 7.0
-POSITION_LIMIT_Z = 5.0
 PRESENCE_TTL_SECONDS = 5.0
 _SAFE_PERSON_ID = re.compile(r"^[\w.\-]+$", re.UNICODE)
 
@@ -38,6 +37,12 @@ class GroupSessionError(RuntimeError):
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _is_online(participant: dict) -> bool:
+    """参与者是否在线（last_seen 在 presence TTL 内）；快照与身份认领共用同一判定。"""
+    last_seen = datetime.fromisoformat(participant["last_seen_at"])
+    return (datetime.now(UTC) - last_seen).total_seconds() <= PRESENCE_TTL_SECONDS
 
 
 def _clean_text(value: str, field: str, maximum: int) -> str:
@@ -129,6 +134,11 @@ class GroupSessionService:
             )
             existing = room["participants"].get(person_id)
             if existing:
+                if _is_online(existing):
+                    raise GroupSessionError(
+                        "该身份已被占用：请选择尚未连接的现场身份", 409
+                    )
+                # 离线身份允许回收：设备重连/换机后重新接管自己的角色
                 existing["display_name"] = display_name
                 existing["avatar_ref"] = participant.get("avatar_ref") or existing["avatar_ref"]
                 existing["joined"] = True
@@ -165,6 +175,15 @@ class GroupSessionService:
                 room["participants"][viewer_id]["last_seen_at"] = _now()
             return self._snapshot(room, viewer_id)
 
+    def get_session_by_code(self, code: str) -> dict:
+        """按房间码读取公开名册预览（加入前的身份选择；不刷新任何 last_seen）。
+
+        返回与 get_session 相同的快照结构（schema echo-group-room.v1），
+        参与者名单里带 online 标记，供加入设备挑选未被占用的身份。
+        """
+        with self._lock:
+            return self._snapshot(self._room_by_code(code), None)
+
     def update_presence(
         self,
         session_id: str,
@@ -183,9 +202,10 @@ class GroupSessionService:
             x = self._finite_number(position.get("x"), "position.x")
             z = self._finite_number(position.get("z"), "position.z")
             yaw = self._finite_number(position.get("yaw", 0), "position.yaw")
+            # 联机位置钳制与大厅世界同源（单一事实来源，避免与 world/hall.py 漂移）
             participant["presence"] = {
-                "x": max(-POSITION_LIMIT_X, min(POSITION_LIMIT_X, x)),
-                "z": max(-POSITION_LIMIT_Z, min(POSITION_LIMIT_Z, z)),
+                "x": max(HALL_BOUNDS["min_x"], min(HALL_BOUNDS["max_x"], x)),
+                "z": max(HALL_BOUNDS["min_z"], min(HALL_BOUNDS["max_z"], z)),
                 "yaw": math.atan2(math.sin(yaw), math.cos(yaw)),
                 "seq": seq,
             }
@@ -425,11 +445,9 @@ class GroupSessionService:
 
     def _snapshot(self, room: dict, viewer_id: str | None) -> dict:
         participants = []
-        now = datetime.now(UTC)
         for item in room["participants"].values():
             participant = copy.deepcopy(item)
-            last_seen = datetime.fromisoformat(participant["last_seen_at"])
-            participant["online"] = (now - last_seen).total_seconds() <= PRESENCE_TTL_SECONDS
+            participant["online"] = _is_online(participant)
             participants.append(participant)
         result = {
             "schema": room["schema"],

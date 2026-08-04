@@ -58,7 +58,7 @@ npm run build
 - `src/runtime/HeartSignalSystem.js`：角色头顶的心动值 Sprite 与随分值变化的双脉冲动画。
 - `src/runtime/RelationshipFieldSystem.js`：消费 `echo-field.v1` 生成可进入的关系场域与 4 类热点。
 - `src/runtime/WorldModuleRegistry.js`：严格校验 `echo-world-modules.v1` 小屋/场域挂载契约。
-- `src/runtime/WorldBroadcastSystem.js`：咖啡厅 3D 播报屏与晨报摘要。
+- `src/runtime/WorldBroadcastSystem.js`：咖啡厅/集市大厅 3D 播报屏（位置按世界配置）与晨报摘要。
 - `src/ui/SceneInteraction.js`：统一 E/F、触屏提示与情境菜单。
 - `src/data/demoSignals.js`：6 个 NPC 的 `person-signal.v1` 占位快照，正式接口可直接替换。
 - `src/main.js`：Three.js 场景、第三人称相机、移动、碰撞、射线选择和会议编排。

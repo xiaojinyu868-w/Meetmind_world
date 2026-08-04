@@ -46,11 +46,14 @@ function hydrate(root) {
 }
 
 export function mountSceneInteraction({ root = document.body, onAction = async () => null } = {}) {
+  // 触屏设备没有 E/F 键盘：改用「点按」徽标（整个 prompt 按钮本身可点）
+  const coarsePointer =
+    typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
   const mount = document.createElement("div");
   mount.className = "scene-interaction";
   mount.innerHTML = `
     <button class="scene-interaction-prompt" type="button" aria-hidden="true">
-      <kbd>E / F</kbd>
+      ${coarsePointer ? `<span class="scene-interaction-touch-badge">点按</span>` : `<kbd>E / F</kbd>`}
       <span><small>附近可互动</small><strong></strong></span>
     </button>
     <aside class="scene-interaction-sheet" aria-hidden="true" aria-label="场景互动"></aside>`;
