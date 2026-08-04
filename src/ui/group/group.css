@@ -268,12 +268,14 @@
 }
 
 .gp-person:nth-child(3n + 2) .gp-avatar,
-.gp-companion:nth-child(3n + 2) .gp-avatar {
+.gp-companion:nth-child(3n + 2) .gp-avatar,
+.gp-identity:nth-child(3n + 2) .gp-avatar {
   background: var(--gp-coral);
 }
 
 .gp-person:nth-child(3n) .gp-avatar,
-.gp-companion:nth-child(3n) .gp-avatar {
+.gp-companion:nth-child(3n) .gp-avatar,
+.gp-identity:nth-child(3n) .gp-avatar {
   color: #453816;
   background: var(--gp-yellow);
 }
@@ -513,6 +515,90 @@
   padding-bottom: 12px;
   color: var(--gp-muted);
   font-size: 9px;
+}
+
+.gp-join-hint {
+  max-width: 640px;
+  margin: 14px 0 0;
+  color: var(--gp-muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.gp-identity-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 22px;
+  border-top: 1px solid var(--gp-line);
+  border-left: 1px solid var(--gp-line);
+}
+
+.gp-identity {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 66px;
+  padding: 12px 14px;
+  border: 0;
+  border-right: 1px solid var(--gp-line);
+  border-bottom: 1px solid var(--gp-line);
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.gp-identity:hover:not(:disabled) {
+  background: #edf5f1;
+}
+
+.gp-identity:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.gp-identity > span:not(.gp-avatar):not(.gp-identity-status) {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.gp-identity strong,
+.gp-identity small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gp-identity strong {
+  font-size: 12px;
+}
+
+.gp-identity small {
+  color: var(--gp-muted);
+  font-size: 9px;
+}
+
+.gp-identity-status {
+  padding: 4px 9px;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--gp-green);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.gp-identity:disabled .gp-identity-status {
+  color: var(--gp-muted);
+  background: #e7ebe8;
+}
+
+.gp-join-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 22px;
 }
 
 .gp-stage-heading {
@@ -926,11 +1012,13 @@ body.gp-open {
     margin-top: 26px;
   }
 
-  .gp-companion-grid {
+  .gp-companion-grid,
+  .gp-identity-grid {
     grid-template-columns: 1fr;
   }
 
-  .gp-companion {
+  .gp-companion,
+  .gp-identity {
     min-height: 58px;
     padding: 9px 11px;
   }

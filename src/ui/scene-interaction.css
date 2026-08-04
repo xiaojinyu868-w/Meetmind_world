@@ -44,6 +44,21 @@
   font: 800 13px/1 ui-monospace, monospace;
 }
 
+.scene-interaction-prompt .scene-interaction-touch-badge {
+  display: grid;
+  width: 48px;
+  height: 36px;
+  flex: 0 0 48px;
+  place-items: center;
+  border: 1px solid rgb(230 193 105 / 78%);
+  border-radius: 5px;
+  color: #193d36;
+  background: #e6c169;
+  box-shadow: inset 0 -3px 0 rgb(101 78 30 / 24%);
+  font: 800 13px/1 "PingFang SC", "Microsoft YaHei", sans-serif;
+  letter-spacing: 0;
+}
+
 .scene-interaction-prompt span {
   display: flex;
   min-width: 0;

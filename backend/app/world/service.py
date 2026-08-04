@@ -19,6 +19,7 @@
 
 import math
 from collections import deque
+from datetime import UTC, datetime
 
 from app.schemas.snapshot_schema import build_snapshot
 from app.world.colliders import (
@@ -115,6 +116,15 @@ class WorldService:
             }
         return booth
 
+    def _record_event(self, event: dict) -> None:
+        """写入滚动事件缓冲；统一盖上 created_at，供晨报按时间合并多来源事件。"""
+        event["created_at"] = datetime.now(UTC).isoformat()
+        self._events.append(event)
+
+    def recent_events(self) -> list[dict]:
+        """滚动事件缓冲的拷贝（晨报合并等只读场景消费）。"""
+        return [dict(event) for event in self._events]
+
     # ---------- 事件消费（Agent 改变世界的唯一方式） ----------
 
     def apply_event(self, event: dict) -> None:
@@ -144,7 +154,7 @@ class WorldService:
             agent["position"] = resolved
         if event.get("state"):
             self._apply_state(event["agent_id"], agent, event["state"])
-        self._events.append(
+        self._record_event(
             {"type": "agent-move", "agent_id": event["agent_id"],
              "position": dict(agent["position"]), "tick": self.tick}
         )
@@ -155,7 +165,7 @@ class WorldService:
             return
         if not self._apply_state(event["agent_id"], agent, event["state"]):
             return  # 状态被拒绝（如无座位强行 seated）：不入缓冲
-        self._events.append(
+        self._record_event(
             {"type": "agent-state", "agent_id": event["agent_id"],
              "state": event["state"], "tick": self.tick}
         )
@@ -241,7 +251,7 @@ class WorldService:
         text = event.get("text")
         if speaker is None or listener is None or not isinstance(text, str) or not text.strip():
             return
-        self._events.append(
+        self._record_event(
             {"type": "agent-talk", "agent_id": event["agent_id"],
              "to_agent_id": event["to_agent_id"], "text": text.strip()[:200],
              "tick": self.tick}
@@ -278,7 +288,7 @@ class WorldService:
         self.current_meeting = {
             "id": meeting_id, "participants": participants, "started_tick": self.tick,
         }
-        self._events.append(
+        self._record_event(
             {"type": "meeting-started", "meeting_id": meeting_id,
              "participants": participants, "tick": self.tick}
         )
@@ -293,7 +303,7 @@ class WorldService:
         for pid in meeting["participants"]:
             if pid in self._agents:
                 self._agents[pid]["state"] = "seated"
-        self._events.append(
+        self._record_event(
             {"type": "meeting-ended", "meeting_id": meeting["id"],
              "participants": meeting["participants"], "tick": self.tick}
         )

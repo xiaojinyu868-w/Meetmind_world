@@ -55,6 +55,22 @@ function drawBoard(canvas, brief) {
   context.fillText(`${brief?.event_count ?? 0} 条近期世界事件`, 174, 446);
 }
 
+// 各世界的播报屏摆放（位置随世界不同，结构不变）：
+// cafe 挂在吧台侧墙面朝座位区；hall 是街道入口旁的告示牌，
+// 立在左侧墙边（x≈-5）、出生区（z>8.5 无摊位）边缘，面朝街道中心（+x）。
+const BROADCAST_PLACEMENTS = Object.freeze({
+  cafe: Object.freeze({
+    frame: Object.freeze({ x: 1.2, y: 2.44, z: -4.7 }),
+    screen: Object.freeze({ x: 1.2, y: 2.44, z: -4.65 }),
+    yaw: 0,
+  }),
+  hall: Object.freeze({
+    frame: Object.freeze({ x: -5.06, y: 2.2, z: 8.9 }),
+    screen: Object.freeze({ x: -4.99, y: 2.2, z: 8.9 }),
+    yaw: Math.PI / 2,
+  }),
+});
+
 export class WorldBroadcastSystem {
   constructor({ scene, api, world }) {
     this.scene = scene;
@@ -74,13 +90,15 @@ export class WorldBroadcastSystem {
   }
 
   mount() {
-    if (this.world !== "cafe") return;
+    const placement = BROADCAST_PLACEMENTS[this.world];
+    if (!placement) return;
     const frame = new THREE.Mesh(
       new THREE.BoxGeometry(2.64, 1.54, 0.08),
       new THREE.MeshStandardMaterial({ color: "#4d3f34", roughness: 0.92, flatShading: true }),
     );
     frame.name = "WORLD_BroadcastFrame";
-    frame.position.set(1.2, 2.44, -4.7);
+    frame.position.set(placement.frame.x, placement.frame.y, placement.frame.z);
+    frame.rotation.y = placement.yaw;
     frame.castShadow = true;
     this.scene.add(frame);
 
@@ -89,7 +107,8 @@ export class WorldBroadcastSystem {
       new THREE.MeshBasicMaterial({ map: this.texture, toneMapped: false, side: THREE.FrontSide }),
     );
     this.mesh.name = "WORLD_BroadcastScreen";
-    this.mesh.position.set(1.2, 2.44, -4.65);
+    this.mesh.position.set(placement.screen.x, placement.screen.y, placement.screen.z);
+    this.mesh.rotation.y = placement.yaw;
     this.scene.add(this.mesh);
 
     this.element = document.createElement("section");
@@ -111,7 +130,7 @@ export class WorldBroadcastSystem {
   }
 
   async refresh() {
-    if (this.world !== "cafe") return null;
+    if (!BROADCAST_PLACEMENTS[this.world]) return null;
     try {
       this.brief = await this.api.getWorldBrief();
       drawBoard(this.canvas, this.brief);

@@ -12,6 +12,64 @@ from app.config import get_data_dir
 
 EVENT_SCHEMA = "echo-world-event.v1"
 
+# 晨报会合并的 agent 自主事件类型（agent-move/agent-state 太密，不进播报）
+BRIEF_RUNTIME_TYPES = ("agent-talk", "meeting-started", "meeting-ended")
+
+
+def runtime_event_entry(event: dict, source: str) -> dict | None:
+    """把 WorldService 滚动缓冲里的 agent 自主事件归一成晨报条目（纯函数）。
+
+    只转换 agent-talk / meeting-started / meeting-ended；其余类型返回 None。
+    条目形状与 echo-world-event.v1 对齐，event_id 带 source 前缀供跨世界去重。
+    """
+    event_type = str(event.get("type") or "")
+    if event_type not in BRIEF_RUNTIME_TYPES:
+        return None
+    if event_type == "agent-talk":
+        summary = str(event.get("text") or "").strip()
+        person_ids = [event.get("agent_id"), event.get("to_agent_id")]
+    elif event_type == "meeting-started":
+        person_ids = [str(pid) for pid in (event.get("participants") or [])]
+        summary = f"{len(person_ids)} 人的会议开始"
+    else:
+        person_ids = [str(pid) for pid in (event.get("participants") or [])]
+        summary = "一场会议结束，大家回到各自的位置"
+    if not summary:
+        return None
+    dedupe_key = event.get("meeting_id") or event.get("agent_id") or ""
+    return {
+        "schema": EVENT_SCHEMA,
+        "event_id": f"runtime-{source}-{event_type}-{event.get('tick', 0)}-{dedupe_key}",
+        "type": event_type,
+        "summary": summary,
+        "person_ids": [str(pid) for pid in person_ids if pid],
+        "source": str(source),
+        "created_at": str(event.get("created_at") or ""),
+        "payload": {},
+    }
+
+
+def merge_brief_events(*groups: list[dict], limit: int = 6) -> list[dict]:
+    """合并多来源晨报事件（纯函数）：event_id 去重 → created_at 倒序
+    （缺时间戳的排后并保持原相对顺序）→ 截断到 limit。"""
+    merged: dict[str, dict] = {}
+    anonymous = []
+    for group in groups:
+        for event in group:
+            key = str(event.get("event_id") or "")
+            if not key:
+                anonymous.append(event)
+            elif key not in merged:
+                merged[key] = event
+    entries = [*merged.values(), *anonymous]
+
+    # sorted 稳定：ISO 时间戳可直接比较，空串最小——缺时间戳的排在最后，
+    # 时间戳相同（或都缺失）时保持合并前的先后
+    ordered = sorted(
+        entries, key=lambda item: str(item.get("created_at") or ""), reverse=True
+    )
+    return ordered[: max(1, int(limit))]
+
 
 class WorldEventStore:
     """追加式 JSONL 世界事件存储；损坏单行不会阻断其余历史读取。"""
@@ -58,8 +116,11 @@ class WorldEventStore:
                 break
         return events
 
-    def morning_brief(self) -> dict:
-        events = self.list_recent(6)
+    def morning_brief(self, extra_events: list[dict] | None = None) -> dict:
+        """今日播报：持久化世界事件（用户互动）合并 agent 自主事件
+        （runtime 滚动缓冲，经 runtime_event_entry 归一后传入），
+        按 created_at 倒序、event_id 去重、封顶 6 条。"""
+        events = merge_brief_events(self.list_recent(6), list(extra_events or ()), limit=6)
         if events:
             headline = events[0]["summary"]
             summary = "；".join(event["summary"] for event in events[:3])

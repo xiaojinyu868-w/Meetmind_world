@@ -151,3 +151,73 @@ def test_confirm_generates_relationship_field(tmp_path, monkeypatch):
     field = client.get(f"/api/v0/fields/{body['person_id']}").json()
     assert field["person_id"] == body["person_id"]
     assert field["generated_from"]
+
+
+def test_brief_merges_agent_runtime_events_from_cafe_and_hall(tmp_path, monkeypatch):
+    """晨报合并 agent 自主事件（runtime 滚动缓冲）与持久化用户互动事件。"""
+    client = _client(tmp_path, monkeypatch)
+    client.post("/api/v0/world/interactions", json={
+        "type": "coffee-shared",
+        "summary": "你在吧台点了一杯今日手冲",
+    })
+
+    cafe_agents = client.app.state.world.snapshot()["agents"]
+    client.app.state.world.apply_event({
+        "type": "agent-talk",
+        "agent_id": cafe_agents[0]["id"],
+        "to_agent_id": cafe_agents[1]["id"],
+        "text": "今晚的集市比平时热闹",
+    })
+    hall_agents = client.app.state.hall.snapshot()["agents"]
+    client.app.state.hall.apply_event({
+        "type": "agent-talk",
+        "agent_id": hall_agents[0]["id"],
+        "to_agent_id": hall_agents[1]["id"],
+        "text": "摊位前来了一位老朋友",
+    })
+
+    brief = client.get("/api/v0/world/brief").json()
+    assert brief["schema"] == "echo-world-brief.v1"
+    summaries = [event["summary"] for event in brief["events"]]
+    assert "你在吧台点了一杯今日手冲" in summaries
+    assert "今晚的集市比平时热闹" in summaries  # 咖啡厅 agent 自主交谈
+    assert "摊位前来了一位老朋友" in summaries  # 大厅串门 agent 自主交谈
+    assert brief["event_count"] == len(brief["events"])
+
+
+def test_merge_brief_events_dedupes_sorts_and_caps(tmp_path):
+    from app.world.event_store import (
+        WorldEventStore,
+        merge_brief_events,
+        runtime_event_entry,
+    )
+
+    store = WorldEventStore(tmp_path / "world-events.jsonl")
+    persisted = [store.append("coffee-shared", f"互动{index}") for index in range(5)]
+    runtime = [
+        runtime_event_entry(
+            {
+                "type": "agent-talk",
+                "agent_id": "agent-a",
+                "to_agent_id": "agent-b",
+                "text": f"闲聊{index}",
+                "tick": index,
+                "created_at": persisted[index]["created_at"],
+            },
+            "world",
+        )
+        for index in range(5)
+    ]
+
+    merged = merge_brief_events(persisted, runtime, limit=6)
+    assert len(merged) == 6  # 10 条来源事件封顶 6 条
+
+    # event_id 去重：同一批事件重复合并不膨胀、顺序稳定
+    assert merge_brief_events(merged, persisted, runtime, limit=6) == merged
+
+    # 非播报类型（agent-move）被过滤；缺 created_at 的条目排在最后
+    assert runtime_event_entry({"type": "agent-move", "agent_id": "agent-a"}, "world") is None
+    tail = merge_brief_events(
+        persisted[:1], [{"type": "mystery", "summary": "无时间戳"}], limit=6
+    )
+    assert tail[-1]["summary"] == "无时间戳"

@@ -83,6 +83,7 @@ export function mountGroupPlay(root, {
   const initialUrl = new URL(window.location.href);
   const sharedRoomCode = initialUrl.searchParams.get("groupCode") ?? "";
   let room = null;
+  let joinPreview = null;
   let viewerId = initialUrl.searchParams.get("groupPlayer") ?? profiles[0]?.id ?? null;
   let facilitatorMode = initialUrl.searchParams.get("groupFacilitator") === "1";
   let renderKey = "";
@@ -160,6 +161,7 @@ export function mountGroupPlay(root, {
 
   function setRoom(snapshot, forceRender = false) {
     room = snapshot;
+    joinPreview = null;
     root.classList.add("has-group-room");
     networkErrorShown = false;
     hud.hidden = false;
@@ -272,7 +274,6 @@ export function mountGroupPlay(root, {
   }
 
   function renderLobby() {
-    const host = profiles[0];
     const companions = profiles.slice(1, 6);
     main.innerHTML = `
       <div class="gp-lobby">
@@ -302,7 +303,40 @@ export function mountGroupPlay(root, {
             <label class="gp-field"><span>房间码</span><input name="code" maxlength="6" inputmode="text" autocomplete="off" placeholder="6 位房间码" value="${escapeHtml(sharedRoomCode.toUpperCase())}" /></label>
             <button class="gp-secondary" type="submit"><i data-lucide="log-in"></i><span>加入</span></button>
           </form>
-          <span class="gp-identity-note">以 ${escapeHtml(host?.displayName ?? host?.name ?? "我")} 的身份</span>
+          <span class="gp-identity-note">输入房间码后，从名册里选择一个未被占用的身份</span>
+        </div>
+      </div>`;
+  }
+
+  function renderJoinPicker() {
+    const preview = joinPreview;
+    const unclaimed = preview.participants.filter((item) => !item.online);
+    // currentUser 在名册中且未被占用时作为本机推荐身份，否则取第一个空闲身份
+    const suggestedId =
+      (profiles[0] && unclaimed.find((item) => item.person_id === profiles[0].id)?.person_id)
+      ?? unclaimed[0]?.person_id
+      ?? null;
+    main.innerHTML = `
+      <div class="gp-lobby">
+        <div class="gp-kicker">JOIN ROOM · ${escapeHtml(preview.code)}</div>
+        <h1>选择这台设备要扮演的身份</h1>
+        <p class="gp-join-hint">「${escapeHtml(preview.title)}」已有 ${preview.participants.length} 人在名册里。在线身份正被其他设备使用；离线身份可以由这台设备接管。</p>
+        ${unclaimed.length ? `
+          <div class="gp-identity-grid" role="group" aria-label="选择本机身份">
+            ${preview.participants.map((item) => `
+              <button class="gp-identity" type="button" data-action="join-identity" data-person-id="${escapeHtml(item.person_id)}" ${item.online ? "disabled" : ""}>
+                <span class="gp-avatar">${escapeHtml(initials(item.display_name))}</span>
+                <span><strong>${escapeHtml(item.display_name)}</strong><small>${item.online ? "在线 · 已被占用" : (item.person_id === suggestedId ? "离线 · 本机推荐" : "离线 · 可以接管")}</small></span>
+                <span class="gp-identity-status">${item.online ? "已占用" : "可选择"}</span>
+              </button>`).join("")}
+          </div>` : `
+          <div class="gp-waiting">
+            <h2>所有身份都在线</h2>
+            <p>名册里的身份都被其他设备占用了。等有人离线后再刷新，或让房主开一个新房间。</p>
+          </div>`}
+        <div class="gp-join-actions">
+          <button class="gp-secondary" type="button" data-action="join-refresh"><i data-lucide="rotate-ccw"></i><span>刷新名册</span></button>
+          <button class="gp-secondary" type="button" data-action="join-back"><i data-lucide="x"></i><span>返回</span></button>
         </div>
       </div>`;
   }
@@ -433,6 +467,14 @@ export function mountGroupPlay(root, {
     });
     overlay.querySelector('[data-form="create"]')?.addEventListener("submit", handleCreate);
     overlay.querySelector('[data-form="join"]')?.addEventListener("submit", handleJoin);
+    for (const button of overlay.querySelectorAll('[data-action="join-identity"]')) {
+      button.addEventListener("click", () => handleJoinIdentity(button.dataset.personId));
+    }
+    overlay.querySelector('[data-action="join-refresh"]')?.addEventListener("click", refreshJoinPreview);
+    overlay.querySelector('[data-action="join-back"]')?.addEventListener("click", () => {
+      joinPreview = null;
+      render(true);
+    });
     overlay.querySelector('[data-form="impressions"]')?.addEventListener("submit", handleImpressions);
     for (const input of overlay.querySelectorAll(".gp-impression-row input[data-subject-id]")) {
       input.addEventListener("input", () => {
@@ -483,7 +525,7 @@ export function mountGroupPlay(root, {
 
   async function handleJoin(event) {
     event.preventDefault();
-    if (busy || !profiles[0]) return;
+    if (busy) return;
     const form = new FormData(event.currentTarget);
     const code = String(form.get("code") ?? "").trim().toUpperCase();
     if (code.length !== 6) {
@@ -492,14 +534,59 @@ export function mountGroupPlay(root, {
     }
     setBusy(true);
     try {
-      const snapshot = await client.joinSession(code, participantDto(profiles[0]));
-      viewerId = profiles[0].id;
+      // 先按房间码拉名册预览，再由本机选择未占用的身份加入
+      joinPreview = await client.getSessionByCode(code);
+      render(true);
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleJoinIdentity(personId) {
+    if (busy || !joinPreview) return;
+    const entry = joinPreview.participants.find((item) => item.person_id === personId);
+    if (!entry) return;
+    // 本地资料里有的人物带上头像引用；名册里的陌生人沿用服务器名册信息
+    const profile = profileById.get(personId);
+    const participant = profile
+      ? participantDto(profile)
+      : {
+          person_id: entry.person_id,
+          display_name: entry.display_name,
+          avatar_ref: entry.avatar_ref ?? null,
+        };
+    setBusy(true);
+    try {
+      const snapshot = await client.joinSession(joinPreview.code, participant);
+      viewerId = personId;
       facilitatorMode = false;
       setRoom(snapshot, true);
       updateUrl();
       startSync();
     } catch (error) {
       notify(error.message);
+      if (error.status === 409 || error.status === 404) {
+        // 身份被抢占或房间已结束：刷新名册再选
+        joinPreview = await client.getSessionByCode(joinPreview.code).catch(() => null);
+        render(true);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function refreshJoinPreview() {
+    if (busy || !joinPreview) return;
+    setBusy(true);
+    try {
+      joinPreview = await client.getSessionByCode(joinPreview.code);
+      render(true);
+    } catch (error) {
+      joinPreview = null;
+      notify(error.message);
+      render(true);
     } finally {
       setBusy(false);
     }
@@ -552,7 +639,10 @@ export function mountGroupPlay(root, {
     if (!force && !overlay.classList.contains("is-open")) return;
     renderHeader();
     renderRail();
-    if (!room) renderLobby();
+    if (!room) {
+      if (joinPreview) renderJoinPicker();
+      else renderLobby();
+    }
     else if (room.phase === "impressions") renderImpressions();
     else if (room.phase === "game") renderGame();
     else renderResults();

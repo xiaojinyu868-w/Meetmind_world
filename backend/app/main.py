@@ -81,7 +81,7 @@ def create_app() -> FastAPI:
         "agents": [],
         "modules": [{"id": "expo-hall", "type": "hall",
                      "position": {"x": 0.0, "z": 0.0, "yaw": 0.0}}],
-    }, blockers=(), bounds=HALL_BOUNDS)  # 展位不是阻挡体；大厅边界 x∈[-7,7] z∈[-5,5]
+    }, blockers=(), bounds=HALL_BOUNDS)  # 展位不是阻挡体；大厅边界 x∈[-5.5,5.5] z∈[-10.5,10.5]
     registered_people = set()
     for agent_seed in SEED_AGENTS:
         person_id = agent_seed["id"]

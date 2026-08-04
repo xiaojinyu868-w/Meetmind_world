@@ -914,7 +914,8 @@ function sitPlayerAt(tableId) {
       .map((state) => state.seatIndex),
   );
   const seatIndex = table.seats.findIndex((_, index) => !occupied.has(index));
-  const seat = table.seats[Math.max(0, seatIndex)];
+  if (seatIndex < 0) return false; // 桌子坐满：保持站立，由调用方给出提示
+  const seat = table.seats[seatIndex];
   actorAt(playerEntity, seat.x, seat.z, seat.yaw, SEATED_ROOT_Y);
   player.scale.set(1, SEATED_SCALE_Y, 1);
   playerEntity.spec.behavior.idle_bob = 0.003;
@@ -954,7 +955,22 @@ function navigateToCafeWithInvite(personId) {
 
 
 async function memoryNarrative(personId = null) {
-  const targetId = personId ?? pendingSceneInviteId ?? selectedPersonId ?? people[0].id;
+  // 没有上下文人物时不猜第一位：返回人物选择清单，由用户点选后再调取
+  if (!personId) {
+    return {
+      eyebrow: "共同记忆",
+      title: "想调取与谁的共同记忆？",
+      detail: "选择一位熟人，从资料包里找回你们的第一次相遇。",
+      icon: "book-open",
+      actions: people.map((person) => ({
+        id: `recall-person:${person.id}`,
+        label: person.name,
+        description: `${person.relation} · ${person.tags.slice(0, 2).join(" · ")}`,
+        icon: "book-open",
+      })),
+    };
+  }
+  const targetId = personId;
   const pkg = await api.getPackage(targetId);
   const encounter = pkg.encounters?.[0] ?? {};
   const highlight = (encounter.inferences ?? []).find((item) => item.type.includes("memory"))
@@ -1024,7 +1040,15 @@ async function handleSceneInteraction(hotspot, actionId) {
     };
   }
   if (actionId === "sit-at-table") {
-    sitPlayerAt(hotspot.tableId);
+    if (!sitPlayerAt(hotspot.tableId)) {
+      return {
+        eyebrow: hotspot.title,
+        title: "这张桌子已经坐满了",
+        detail: "每个座位都有了主人。换一张还有空位的桌子，或者去中央圆桌发起一场会议。",
+        icon: "coffee",
+        actions: [],
+      };
+    }
     return {
       eyebrow: hotspot.title,
       title: "你在桌边坐下了",
@@ -1038,8 +1062,18 @@ async function handleSceneInteraction(hotspot, actionId) {
     return { close: true };
   }
   if (actionId === "recall-memory") {
-    const narrative = await memoryNarrative();
-    void recordWorldEvent("memory-recalled", `你在咖啡厅调取了与${nameOf(pendingSceneInviteId ?? people[0].id)}的共同记忆`, pendingSceneInviteId ? [pendingSceneInviteId] : []);
+    // 人物解析顺序：热点自带人物 → 当前选中人物 → 待赴约的邀请对象；都没有则让人选
+    const targetId = hotspot.personId ?? selectedPersonId ?? pendingSceneInviteId;
+    const narrative = await memoryNarrative(targetId);
+    if (targetId) {
+      void recordWorldEvent("memory-recalled", `你在咖啡厅调取了与${nameOf(targetId)}的共同记忆`, [targetId]);
+    }
+    return narrative;
+  }
+  if (actionId.startsWith("recall-person:")) {
+    const personId = actionId.slice("recall-person:".length);
+    const narrative = await memoryNarrative(personId);
+    void recordWorldEvent("memory-recalled", `你在咖啡厅调取了与${nameOf(personId)}的共同记忆`, [personId]);
     return narrative;
   }
   if (actionId === "open-meeting") {

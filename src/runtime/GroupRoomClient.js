@@ -61,6 +61,10 @@ export class GroupRoomClient {
     return requestJson(`/sessions/${encodeURIComponent(sessionId)}?${params}`);
   }
 
+  getSessionByCode(code) {
+    return requestJson(`/sessions/by-code/${encodeURIComponent(code)}`);
+  }
+
   updatePresence(sessionId, personId, position) {
     this.presenceSeq = Math.max(this.presenceSeq + 1, Date.now());
     return requestJson(`/sessions/${encodeURIComponent(sessionId)}/presence`, {
