@@ -2,12 +2,13 @@
 
 目的：体素人物贴图生成（FR-1.5/P-6，ARCHITECTURE.md §5a）走 CommonStack 网关
       （https://api.commonstack.ai/v1，OpenAI chat 兼容）。该网关没有
-      /images/generations 端点，生图经 /chat/completions：
-      messages=[{"role":"user","content":"Generate an image: <prompt>"}]，
-      图片在 choices[0].message.images[0]（data-URL / b64 / http-url 三种形态
-      都做防御性解析）。配置按角色读取（IMAGE_* 或根 .env 的 COMMONSTACK_ECHO_*，
-      注意 COMMONSTACK_ECHO_MODEL 是聊天模型，生图模型用 COMMONSTACK_ECHO_IMAGE_MODEL）。
-输入：generate_image(prompt) / image_gen(prompt, out_path)（基类占位接口的落地）。
+      /images/generations 端点，生图经 /chat/completions；支持图生图（i2i）：
+      content 数组 [text, image_url(data-URL), ...] 注入参考图，纯文本则 content
+      为字符串（t2i 兜底路径）。图片在 choices[0].message.images[0]
+      （data-URL / b64 / http-url 三种形态都做防御性解析）。配置按角色读取
+      （IMAGE_* 或根 .env 的 COMMONSTACK_ECHO_*，注意 COMMONSTACK_ECHO_MODEL
+      是聊天模型，生图模型用 COMMONSTACK_ECHO_IMAGE_MODEL）。
+输入：generate_image(prompt, images=None) / image_gen(prompt, out_path)。
 输出：generate_image -> PNG 字节；未配置或调用失败返回 deterministic mock PNG
       （PIL 色块，按 prompt 哈希定色），绝不抛异常 —— 与 chat/vision 降级链一致。
 验收：tests/test_voxel_pipeline.py —— data-URL/b64/url/错误分支解析与 mock 确定性。
@@ -78,11 +79,14 @@ def _extract_image_bytes(message: dict, client: httpx.Client) -> bytes:
     raise ValueError(f"响应中找不到图片载荷（message keys: {sorted(message)}）")
 
 
-def _mock_png(prompt: str) -> bytes:
-    """确定性占位 PNG：按 prompt 哈希铺 8x8 大色块（128x128），离线/测试用。"""
+def _mock_png(prompt: str, images: list[bytes] | None = None) -> bytes:
+    """确定性占位 PNG：按 prompt + 参考图内容哈希铺 8x8 大色块（128x128），
+    离线/测试用。参考图参与种子，保证 i2i/t2i 的 mock 输出可区分且可复现。"""
     from PIL import Image
 
-    digest = hashlib.sha256(prompt.encode("utf-8")).digest()
+    seed_material = prompt.encode("utf-8") + b"".join(
+        hashlib.sha256(img).digest() for img in (images or []))
+    digest = hashlib.sha256(seed_material).digest()
     image = Image.new("RGB", (128, 128))
     pixels = image.load()
     block = 16
@@ -111,29 +115,41 @@ class CommonStackProvider(LLMProvider):
 
     # ---------- 生图接口 ----------
 
-    def generate_image(self, prompt: str) -> bytes:
-        """生成一张图，返回 PNG 字节。未配置/失败返回 deterministic mock PNG。"""
+    def generate_image(self, prompt: str,
+                       images: list[bytes] | None = None,
+                       image_mime: str = "image/jpeg") -> bytes:
+        """生成一张图，返回 PNG 字节。未配置/失败返回 deterministic mock PNG。
+
+        images：可选参考图列表（图生图 i2i，FR-1.5 体素贴图主路径）——以
+        image_url data-URL 注入 content 数组（网关已实测支持图片输入）；
+        为空时 content 退化为纯文本字符串（t2i）。
+        """
         started_at = time.monotonic()
         mock = False
         detail = ""
         if not self.config.get("configured"):
-            image_bytes = _mock_png(prompt)
+            image_bytes = _mock_png(prompt, images)
             mock = True
             detail = "未配置 image API（COMMONSTACK_ECHO_API_KEY），返回占位 PNG"
         else:
             try:
-                image_bytes = self._generate_http(prompt)
+                image_bytes = self._generate_http(prompt, images, image_mime)
             except Exception as exc:  # 网络/协议任何异常都降级 mock，绝不上抛
-                image_bytes = _mock_png(prompt)
+                image_bytes = _mock_png(prompt, images)
                 mock = True
                 detail = f"生图调用失败已降级：{type(exc).__name__}"
         latency_ms = (time.monotonic() - started_at) * 1000
-        # 复用审计结构：output_summary 只记字节数与形态，不落图片内容
+        # 复用审计结构：只记字节数与参考图哈希，不落图片内容
+        ref_note = ""
+        if images:
+            refs = ",".join(hashlib.sha256(img).hexdigest()[:8] for img in images)
+            ref_note = f" refs=[{refs}]"
         self.call_log.append(
             ModelCallRecord(
                 provider=self.name,
                 model=self.model,
-                input_summary=str([{"role": "user", "content": prompt}])[:200],
+                input_summary=(str([{"role": "user", "content": prompt}])[:200]
+                               + ref_note),
                 output_summary=f"image_png bytes={len(image_bytes)} {detail}".strip(),
                 latency_ms=latency_ms,
                 cost=0.0,
@@ -143,10 +159,11 @@ class CommonStackProvider(LLMProvider):
         )
         return image_bytes
 
-    def generate_image_result(self, prompt: str) -> LLMResponse:
+    def generate_image_result(self, prompt: str,
+                              images: list[bytes] | None = None) -> LLMResponse:
         """带 mock 标记的生图（管线需要知道产物是否来自真实模型）。"""
         before = len(self.call_log)
-        image_bytes = self.generate_image(prompt)
+        image_bytes = self.generate_image(prompt, images=images)
         record = self.call_log[-1] if len(self.call_log) > before else None
         return LLMResponse(
             text=base64.b64encode(image_bytes).decode("ascii"),
@@ -163,10 +180,26 @@ class CommonStackProvider(LLMProvider):
         path.write_bytes(image_bytes)
         return str(path)
 
-    def _generate_http(self, prompt: str) -> bytes:
+    @staticmethod
+    def _build_content(prompt: str, images: list[bytes] | None,
+                       image_mime: str):
+        """无参考图 → 纯文本字符串；有参考图 → text + image_url 数组（i2i）。"""
+        if not images:
+            return f"Generate an image: {prompt}"
+        content: list[dict] = [
+            {"type": "text", "text": f"Generate an image: {prompt}"}]
+        for image_bytes in images:
+            data_url = (f"data:{image_mime};base64,"
+                        + base64.b64encode(image_bytes).decode("ascii"))
+            content.append({"type": "image_url", "image_url": {"url": data_url}})
+        return content
+
+    def _generate_http(self, prompt: str, images: list[bytes] | None = None,
+                       image_mime: str = "image/jpeg") -> bytes:
         payload = {
             "model": self.model,
-            "messages": [{"role": "user", "content": f"Generate an image: {prompt}"}],
+            "messages": [{"role": "user",
+                          "content": self._build_content(prompt, images, image_mime)}],
         }
         url = f"{self.config['api_base'].rstrip('/')}/chat/completions"
         headers = {"Authorization": f"Bearer {self.config['api_key']}"}

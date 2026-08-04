@@ -47,18 +47,22 @@ class FakeVision:
 
 
 class FakeImage:
-    """确定性假生图：按 prompt 哈希铺色块，带 call_log 兼容管线 mock 判定。"""
+    """确定性假生图：按 prompt+参考图 哈希铺色块，带 call_log 兼容 mock 判定。"""
 
     model = "fake-image"
 
     def __init__(self, mock=False):
         self.mock = mock
         self.prompts = []
+        self.images = []
         self.call_log = []
 
-    def generate_image(self, prompt):
+    def generate_image(self, prompt, images=None):
         self.prompts.append(prompt)
-        digest = hashlib.sha256(prompt.encode()).digest()
+        self.images.append(images)
+        material = prompt.encode() + b"".join(
+            hashlib.sha256(img).digest() for img in (images or []))
+        digest = hashlib.sha256(material).digest()
         image = Image.new("RGB", (64, 64))
         pixels = image.load()
         for y in range(64):
@@ -69,6 +73,46 @@ class FakeImage:
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
         self.call_log.append(type("Record", (), {"mock": self.mock})())
+        return buffer.getvalue()
+
+
+def fake_head_on_bg_png(bg=(255, 0, 255)) -> bytes:
+    """合成"i2i 风格"瓦片原图：纯色背景 + 中央像素头（测键控用）。"""
+    from PIL import ImageDraw
+
+    image = Image.new("RGB", (200, 200), bg)
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((40, 20, 160, 170), fill=(210, 160, 120))  # 头
+    draw.rectangle((40, 20, 160, 70), fill=(30, 30, 30))      # 发
+    draw.rectangle((70, 95, 85, 110), fill=(20, 20, 20))      # 双眼
+    draw.rectangle((115, 95, 130, 110), fill=(20, 20, 20))
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+class FakeI2IImage(FakeImage):
+    """i2i 假生图：带参考图时返回"品红背景像素头"，否则走色块（t2i）。"""
+
+    model = "fake-i2i"
+
+    def generate_image(self, prompt, images=None):
+        self.prompts.append(prompt)
+        self.images.append(images)
+        self.call_log.append(type("Record", (), {"mock": self.mock})())
+        if images:
+            return fake_head_on_bg_png()
+        material = prompt.encode()
+        digest = hashlib.sha256(material).digest()
+        image = Image.new("RGB", (64, 64))
+        pixels = image.load()
+        for y in range(64):
+            for x in range(64):
+                seed = digest[(x // 8 + y // 8 * 8) % len(digest)]
+                pixels[x, y] = (seed, digest[(x + y) % len(digest)],
+                                digest[(x * 3 + y) % len(digest)])
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
         return buffer.getvalue()
 
 
@@ -350,7 +394,10 @@ def test_person_builder_orchestration(photo, tmp_path):
     validate_package(package)
     avatar = package["avatar"]
     assert avatar["type"] == "voxel-textured.v1"
-    assert avatar["palette"]["hair"] == FAKE_TRAITS["hairColor"]
+    # 发色以生成瓦片实测为准（tile-measured），palette 与 spec 保持一致
+    assert avatar["palette"]["hair"] == \
+        result["textures"].spec["visibleTraits"]["hairColor"]
+    assert result["textures"].spec["provenance"]["colors"] == "tile-measured"
     assert avatar["real_face_ref"].startswith("facts/person_x/photo-import/")
     # 表情 atlas 全部落盘且为合法 128x128 PNG
     for name in texture_gen.EXPRESSIONS:
@@ -378,3 +425,138 @@ def test_person_builder_skip_blender(photo, tmp_path):
         vision=FakeVision(), image=FakeImage(), skip_blender=True)
     assert result["glb"] is None
     assert result["package"]["avatar"]["model_mode"] == "skipped"
+
+
+# ---------- i2i 图生图主路径（2026-08-04 决策） ----------
+
+
+def test_generate_image_builds_i2i_content_array():
+    captured = {}
+    payload = base64.b64encode(_png_bytes()).decode()
+
+    def handler(request):
+        captured["json"] = json.loads(request.content)
+        return httpx.Response(200, json={"choices": [{"message": {
+            "images": [{"url": f"data:image/png;base64,{payload}"}]}}]})
+
+    provider = _provider(handler)
+    provider.generate_image("像素头", images=[b"\xff\xd8fake-jpeg"],
+                            image_mime="image/jpeg")
+    content = captured["json"]["messages"][0]["content"]
+    assert isinstance(content, list)
+    assert content[0]["type"] == "text"
+    assert content[0]["text"].startswith("Generate an image:")
+    assert content[1]["type"] == "image_url"
+    assert content[1]["image_url"]["url"].startswith("data:image/jpeg;base64,")
+
+
+def test_generate_image_without_images_keeps_string_content():
+    captured = {}
+    payload = base64.b64encode(_png_bytes()).decode()
+
+    def handler(request):
+        captured["json"] = json.loads(request.content)
+        return httpx.Response(200, json={"choices": [{"message": {
+            "images": [{"url": f"data:image/png;base64,{payload}"}]}}]})
+
+    _provider(handler).generate_image("纯文本生图")
+    content = captured["json"]["messages"][0]["content"]
+    assert isinstance(content, str)
+
+
+def test_i2i_tile_chroma_key_removes_background():
+    tile = texture_gen.postprocess_i2i_tile(fake_head_on_bg_png())
+    assert tile.size == (16, 16)
+    # 完全不透明（无渗色）且品红背景被键掉
+    assert all(p[3] == 255 for p in tile.getdata())
+    assert not any(p[0] > 230 and p[2] > 230 and p[1] < 40
+                   for p in tile.getdata())
+    # 内容色保留（肤/发/眼）
+    colors = {p[:3] for p in tile.getdata()}
+    assert len(colors) >= 3
+
+
+def test_i2i_tile_all_background_is_rejected():
+    buffer = io.BytesIO()
+    Image.new("RGB", (128, 128), (255, 0, 255)).save(buffer, format="PNG")
+    with pytest.raises(ValueError):
+        texture_gen.postprocess_i2i_tile(buffer.getvalue())
+
+
+def test_i2i_tile_without_background_passes_through():
+    """模型没听背景指令（边框颜色杂乱）时跳过键控，整幅量化兜底。"""
+    image = Image.new("RGB", (64, 64))
+    pixels = image.load()
+    for y in range(64):
+        for x in range(64):
+            pixels[x, y] = ((x * 4) % 256, (y * 4) % 256, ((x + y) * 2) % 256)
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    tile = texture_gen.postprocess_i2i_tile(buffer.getvalue())
+    assert tile.size == (16, 16)
+    assert all(p[3] == 255 for p in tile.getdata())
+
+
+def test_tile_cache_key_includes_reference_hash(photo, tmp_path):
+    cache = tmp_path / "cache"
+    image = FakeI2IImage()
+    texture_gen.generate([photo], "person_x", image=image, cache_dir=cache)
+    first_count = len(list(cache.glob("tile_*.png")))
+    assert first_count == 5  # 五面 i2i 各一张
+    other = tmp_path / "other.png"
+    Image.new("RGB", (32, 32), (9, 9, 9)).save(other)
+    texture_gen.generate([str(other)], "person_x", image=image, cache_dir=cache)
+    assert len(list(cache.glob("tile_*.png"))) == first_count * 2  # 换图即换键
+
+
+def test_i2i_falls_back_to_text_then_procedural(photo):
+    """降级链：i2i mock → 文本 t2i；t2i 也 mock → 程序化瓦片。"""
+
+    class I2IMockOnly(FakeImage):
+        def generate_image(self, prompt, images=None):
+            self.prompts.append(prompt)
+            self.images.append(images)
+            if images:
+                self.call_log.append(type("R", (), {"mock": True})())
+                from app.agents.llm.commonstack import _mock_png
+                return _mock_png(prompt, images)
+            self.call_log.append(type("R", (), {"mock": False})())
+            return super().generate_image(prompt, images=None)
+
+    # i2i 失败 → t2i 兜底：头正面/背面有瓦片，侧面/顶面程序化
+    textures = texture_gen.generate([photo], "person_x", image=I2IMockOnly())
+    assert set(textures.tiles) == {"head_front", "head_back"}
+    assert textures.model == "fake-image"
+    assert all(p[3] == 255 for p in textures.neutral.getdata())
+    # t2i 也失败 → 全程序化
+    textures2 = texture_gen.generate([photo], "person_x",
+                                     image=FakeImage(mock=True))
+    assert textures2.tiles == {} and textures2.model == "mock"
+
+
+def test_i2i_tiles_feed_all_five_head_faces(photo):
+    textures = texture_gen.generate([photo], "person_x", image=FakeI2IImage())
+    assert set(textures.tiles) == {"head_front", "head_back", "head_left",
+                                   "head_right", "head_top"}
+    assert textures.model == "fake-i2i"
+    assert all(p[3] == 255 for p in textures.neutral.getdata())
+
+
+def test_spec_from_photo_sampling(tmp_path):
+    """CharacterSpec 照片像素采样：分区主色 + 不可采样字段设计补全。"""
+    from PIL import ImageDraw
+
+    image = Image.new("RGB", (300, 400), (205, 160, 120))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((0, 0, 300, 60), fill=(35, 30, 28))       # 顶部发
+    draw.rectangle((0, 240, 300, 400), fill=(90, 110, 130))  # 下部衣服
+    photo = tmp_path / "person.png"
+    image.save(photo)
+    spec = texture_gen.spec_from_photo(str(photo), "person_x")
+    texture_gen.validate_character_spec(spec)
+    traits = spec["visibleTraits"]
+    assert traits["skinTone"] == "#C09078"   # 肤色过滤采样
+    assert traits["hairColor"] == "#181818"  # 顶部最暗主色
+    assert traits["outfitPalette"] == ["#5A6E82"]  # 胸部条带主色
+    assert set(spec["designCompletion"]) == {"hair", "glasses", "bodyTemplate"}
+    assert spec["provenance"]["vision"] == "photo-sampling"
