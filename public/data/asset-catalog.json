@@ -191,6 +191,30 @@
       "kind": "person-profile",
       "url": "data/people/person-demo-01/profile.json",
       "version": 1
+    },
+    {
+      "asset_id": "environment.hub-town.v1",
+      "kind": "environment",
+      "url": "models/echo_world_hub_town.glb",
+      "version": 1,
+      "style": "hub-town",
+      "root_node": "ROOT_HubTown"
+    },
+    {
+      "asset_id": "environment.cafe.interior.v2",
+      "kind": "environment",
+      "url": "models/echo_world_cafe_interior_v2.glb",
+      "version": 2,
+      "style": "cafe-wooden",
+      "root_node": "ROOT_Cafe"
+    },
+    {
+      "asset_id": "venue.cafe-exterior.v1",
+      "kind": "environment-module",
+      "url": "models/modules/echo_world_cafe_exterior_20260804.glb",
+      "version": 1,
+      "style": "hub-town",
+      "root_node": "ROOT_CafeExterior"
     }
   ]
 }

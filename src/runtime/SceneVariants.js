@@ -20,13 +20,20 @@ export const SCENE_VARIANTS = Object.freeze([
     environmentAssetId: "environment.cafe.painterly.v1",
     visualProfile: "painterlyAdventure",
   }),
+  Object.freeze({
+    id: "v4",
+    label: "木屋",
+    title: "木屋咖啡厅",
+    environmentAssetId: "environment.cafe.interior.v2",
+    visualProfile: "current",
+  }),
 ]);
 
 export const SCENE_VARIANT_OPTIONS = Object.freeze(
-  SCENE_VARIANTS.filter((variant) => variant.id !== "v2"),
+  SCENE_VARIANTS.filter((variant) => !["v2", "v3"].includes(variant.id)),
 );
 
-export const DEFAULT_SCENE_VARIANT_ID = "v3";
+export const DEFAULT_SCENE_VARIANT_ID = "v4";
 
 
 export function sceneVariantById(value) {

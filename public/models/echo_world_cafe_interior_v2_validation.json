@@ -1,0 +1,113 @@
+{
+  "schema_version": "echo-cafe-interior-validation.v2",
+  "file": "public/models/echo_world_cafe_interior_v2.glb",
+  "import_status": "ok",
+  "objects": 379,
+  "mesh_objects": 352,
+  "vertices": 21996,
+  "triangles": 10888,
+  "glb_bytes": 992744,
+  "seat_count": 18,
+  "seat_max_error_m": 0.0,
+  "seats": {
+    "SEAT_Central6_04": {
+      "x": 0.0,
+      "y_blender": 1.57,
+      "height": 0.46
+    },
+    "SEAT_Central6_03": {
+      "x": 1.36,
+      "y_blender": 0.785,
+      "height": 0.46
+    },
+    "SEAT_Central6_02": {
+      "x": 1.36,
+      "y_blender": -0.785,
+      "height": 0.46
+    },
+    "SEAT_Central6_01": {
+      "x": 0.0,
+      "y_blender": -1.57,
+      "height": 0.46
+    },
+    "SEAT_Central6_06": {
+      "x": -1.36,
+      "y_blender": -0.785,
+      "height": 0.46
+    },
+    "SEAT_Central6_05": {
+      "x": -1.36,
+      "y_blender": 0.785,
+      "height": 0.46
+    },
+    "SEAT_2_01_01": {
+      "x": -4.53,
+      "y_blender": -1.55,
+      "height": 0.46
+    },
+    "SEAT_2_01_02": {
+      "x": -2.77,
+      "y_blender": -1.55,
+      "height": 0.46
+    },
+    "SEAT_2_02_01": {
+      "x": -4.53,
+      "y_blender": 1.55,
+      "height": 0.46
+    },
+    "SEAT_2_02_02": {
+      "x": -2.77,
+      "y_blender": 1.55,
+      "height": 0.46
+    },
+    "SEAT_4_01_01": {
+      "x": 2.89,
+      "y_blender": -0.53,
+      "height": 0.46
+    },
+    "SEAT_4_01_02": {
+      "x": 3.67,
+      "y_blender": -0.53,
+      "height": 0.46
+    },
+    "SEAT_4_01_03": {
+      "x": 2.89,
+      "y_blender": -2.17,
+      "height": 0.46
+    },
+    "SEAT_4_01_04": {
+      "x": 3.67,
+      "y_blender": -2.17,
+      "height": 0.46
+    },
+    "SEAT_4_02_01": {
+      "x": 2.89,
+      "y_blender": 2.47,
+      "height": 0.46
+    },
+    "SEAT_4_02_02": {
+      "x": 3.67,
+      "y_blender": 2.47,
+      "height": 0.46
+    },
+    "SEAT_4_02_03": {
+      "x": 2.89,
+      "y_blender": 0.83,
+      "height": 0.46
+    },
+    "SEAT_4_02_04": {
+      "x": 3.67,
+      "y_blender": 0.83,
+      "height": 0.46
+    }
+  },
+  "contract_checks": {
+    "required_nodes_present": true,
+    "all_18_seats_within_0_01m": true,
+    "seat_height_0_46": true,
+    "preview_nodes_excluded": true,
+    "no_degenerate_triangles": true,
+    "triangle_budget": 60000,
+    "glb_size_budget_8mb": true
+  }
+}

@@ -5,27 +5,52 @@
       "id": "venue.cafe.v1",
       "kind": "venue",
       "label": "Echo Cafe",
-      "mount": { "world": "hall", "anchor_node": "FIXTURE_CafeDoorway" },
-      "entry": { "world": "cafe" },
-      "interaction": { "radius": 1.9, "verb": "进入咖啡厅" },
+      "mount": {
+        "world": "hall",
+        "anchor_node": "ANCHOR_CafeDoor"
+      },
+      "entry": {
+        "world": "cafe"
+      },
+      "interaction": {
+        "radius": 1.9,
+        "verb": "进入咖啡厅"
+      },
       "status": "available"
     },
     {
       "id": "field.relationship.v1",
       "kind": "dynamic-field",
       "label": "关系场域",
-      "mount": { "world": "hall", "module_type": "booth" },
-      "entry": { "world": "field", "parameter": "person" },
-      "interaction": { "radius": 2.1, "verb": "进入关系场域" },
+      "mount": {
+        "world": "hall",
+        "module_type": "booth"
+      },
+      "entry": {
+        "world": "field",
+        "parameter": "person"
+      },
+      "interaction": {
+        "radius": 2.1,
+        "verb": "进入关系场域"
+      },
       "status": "available"
     },
     {
       "id": "venue.cinema.preview.v1",
       "kind": "venue",
       "label": "回声放映室",
-      "mount": { "world": "hall", "anchor_node": "ANCHOR_APP_CINEMA" },
-      "entry": { "world": "cinema" },
-      "interaction": { "radius": 1.9, "verb": "查看放映室" },
+      "mount": {
+        "world": "hall",
+        "anchor_node": "ANCHOR_APP_CINEMA"
+      },
+      "entry": {
+        "world": "cinema"
+      },
+      "interaction": {
+        "radius": 1.9,
+        "verb": "查看放映室"
+      },
       "status": "reserved"
     }
   ]

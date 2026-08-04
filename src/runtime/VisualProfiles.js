@@ -42,6 +42,25 @@ const VISUAL_PROFILES = Object.freeze({
       Object.freeze({ position: [3.8, 2.4, -2.4], color: "#8fc7d5", intensity: 1.2, distance: 9 }),
     ]),
   }),
+  // 小镇 Hub 黄昏夜集：深蓝夜空 + 微弱暖阳 + 篝火/串灯/门灯暖点光
+  hubDusk: Object.freeze({
+    background: "#2e3a5c",
+    fog: Object.freeze({ color: "#3a4666", near: 16, far: 46 }),
+    toneMapping: THREE.ACESFilmicToneMapping,
+    exposure: 1.05,
+    shadowType: THREE.PCFShadowMap,
+    materialMode: "gltf",
+    hemisphere: Object.freeze({ sky: "#5a6c9e", ground: "#3e3226", intensity: 1.05 }),
+    sun: Object.freeze({ color: "#ffb98a", intensity: 1.5, position: [-9, 11, 7] }),
+    shadowBounds: Object.freeze({ left: -17, right: 17, top: 18, bottom: -18, far: 46 }),
+    points: Object.freeze([
+      Object.freeze({ position: [0, 1.5, 2.5], color: "#ff9a4e", intensity: 22, distance: 10 }),
+      Object.freeze({ position: [0, 3.0, -8.6], color: "#ffc46a", intensity: 12, distance: 13 }),
+      Object.freeze({ position: [-4.4, 2.2, 0.6], color: "#ffc46a", intensity: 9, distance: 9 }),
+      Object.freeze({ position: [0, 2.8, -14.2], color: "#ffc46a", intensity: 9, distance: 10 }),
+      Object.freeze({ position: [3.0, 1.6, 10.2], color: "#9ec2e8", intensity: 6, distance: 12 }),
+    ]),
+  }),
 });
 
 let toonGradient = null;
@@ -90,11 +109,12 @@ export function installVisualProfile(scene, renderer, profileId) {
   sun.castShadow = true;
   sun.shadow.mapSize.set(1024, 1024);
   sun.shadow.camera.near = 0.5;
-  sun.shadow.camera.far = 28;
-  sun.shadow.camera.left = -8;
-  sun.shadow.camera.right = 8;
-  sun.shadow.camera.top = 7;
-  sun.shadow.camera.bottom = -7;
+  const shadowBounds = profile.shadowBounds ?? { left: -8, right: 8, top: 7, bottom: -7, far: 28 };
+  sun.shadow.camera.far = shadowBounds.far;
+  sun.shadow.camera.left = shadowBounds.left;
+  sun.shadow.camera.right = shadowBounds.right;
+  sun.shadow.camera.top = shadowBounds.top;
+  sun.shadow.camera.bottom = shadowBounds.bottom;
   sun.shadow.bias = -0.00016;
   sun.shadow.normalBias = 0.025;
   sun.target.position.set(0, 0, -0.6);

@@ -1,0 +1,62 @@
+{
+  "schema_version": "echo-hub-town-validation.v1",
+  "file": "public/models/echo_world_hub_town.glb",
+  "import_status": "ok",
+  "root_node": "ROOT_HubTown",
+  "objects": 727,
+  "mesh_objects": 719,
+  "vertices": 44470,
+  "triangles": 21804,
+  "material_count": 50,
+  "glb_bytes": 2032188,
+  "bounds_after_reimport": {
+    "min_xyz": [
+      -15.0,
+      -17.0,
+      -0.53
+    ],
+    "max_xyz": [
+      15.0,
+      17.0,
+      6.69
+    ]
+  },
+  "anchors": {
+    "ANCHOR_PlayerSpawn": {
+      "x": 0.0,
+      "y": -12.8,
+      "z": 0.0
+    },
+    "ANCHOR_Campfire": {
+      "x": 0.0,
+      "y": 2.5,
+      "z": 0.0
+    },
+    "ANCHOR_CafeDoor": {
+      "x": -4.1,
+      "y": 0.6,
+      "z": 0.0
+    },
+    "ANCHOR_Broadcast": {
+      "x": 5.7,
+      "y": 2.8,
+      "z": 0.0
+    },
+    "ANCHOR_Gate": {
+      "x": 0.0,
+      "y": -14.5,
+      "z": 0.0
+    }
+  },
+  "contract_checks": {
+    "root_at_origin": true,
+    "required_nodes_present": true,
+    "anchors_within_tolerance": true,
+    "contract_materials_present": true,
+    "preview_nodes_excluded": true,
+    "no_degenerate_triangles": true,
+    "triangle_budget": 100000,
+    "all_materials_roughness_gte_0_7": true,
+    "glb_size_budget_10mb": true
+  }
+}

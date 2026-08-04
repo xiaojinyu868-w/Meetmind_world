@@ -6,12 +6,13 @@ export const WORLDS = Object.freeze([
 
 export const DEFAULT_WORLD_ID = "hall";
 
-// 集市街道布局：街道尺度（南北纵深 20m），出生点在街道南端、向北望（-Z）
+// 小镇 Hub 布局（blender/build_hub_town.py 为唯一事实源）：
+// 入口木门在北端（z=-14.5），出生点门内向南望（+Z，沿街道走向篝火广场）
 export const HALL_LAYOUT = Object.freeze({
-  bounds: Object.freeze({ minX: -5.5, maxX: 5.5, minZ: -10, maxZ: 10 }),
-  playerSpawn: Object.freeze({ x: 0, z: 9, yaw: Math.PI }),
+  bounds: Object.freeze({ minX: -14.2, maxX: 14.2, minZ: -15.4, maxZ: 15.4 }),
+  playerSpawn: Object.freeze({ x: 0, z: -12.8, yaw: 0 }),
   // NPC 出生点不再用门口一排：出生即站在各自展位前（见 BoothSystem.fallbackBoothAnchor）
-  environmentAssetId: "environment.market-street.v1",
+  environmentAssetId: "environment.hub-town.v1",
   boothTemplateAssetId: "module.market-stall.v2",
   // 大厅静止陈列，快照轮询低频即可；咖啡厅维持 2s 实时感
   snapshotPollMs: 10000,

@@ -106,7 +106,7 @@ def test_bounds_clamp_cafe_and_hall():
     hall.apply_event({"type": "agent-move", "agent_id": "p2",
                       "position": {"x": 99.0, "z": -99.0, "yaw": 0.0}, "state": "walking"})
     p2 = pos_of(hall, "p2")
-    assert (p2["x"], p2["z"]) == (5.5, -10.5)  # 街道边界
+    assert (p2["x"], p2["z"]) == (14.0, -15.2)  # 小镇 Hub 边界
 
 
 def test_cafe_colliders_registry_values():
