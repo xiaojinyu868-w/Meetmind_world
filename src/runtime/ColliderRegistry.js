@@ -1,4 +1,5 @@
 import { CAFE_LAYOUT } from "./CafeLayout.js";
+import { VILLAGE_CAMPFIRE_LAYOUT } from "./CampfireLayout.js";
 
 /**
  * ColliderRegistry —— 环境静态碰撞壳注册表（XZ 平面 2D 碰撞）。
@@ -95,7 +96,14 @@ const HUB_BLOCKOUT_SHELL = Object.freeze({
 const VILLAGE_MARKET_SHELL = Object.freeze({
   id: "village-market",
   bounds: Object.freeze({ minX: -30, maxX: 30, minZ: -30, maxZ: 30 }),
-  staticCircles: Object.freeze([]),
+  staticCircles: Object.freeze([
+    Object.freeze({
+      id: "campfire-c3525",
+      x: VILLAGE_CAMPFIRE_LAYOUT.position.x,
+      z: VILLAGE_CAMPFIRE_LAYOUT.position.z,
+      r: VILLAGE_CAMPFIRE_LAYOUT.blockerRadius,
+    }),
+  ]),
 });
 
 const SHELL_BY_ENVIRONMENT = Object.freeze({

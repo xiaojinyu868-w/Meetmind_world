@@ -6,6 +6,7 @@ import {
   CHARACTER_ACTIONS,
   CharacterSystem,
 } from "../src/runtime/CharacterSystem.js";
+import { boothPersonAnchor } from "../src/runtime/BoothSystem.js";
 import {
   capsuleFitsAt,
   capsuleFootprint,
@@ -14,6 +15,8 @@ import {
   CharacterCapsuleCollider,
 } from "../src/runtime/CharacterCapsule.js";
 import { CAFE_LAYOUT } from "../src/runtime/CafeLayout.js";
+import { CAFE_TABLE_COLLIDERS } from "../src/runtime/ColliderRegistry.js";
+import { createEntrySpawnScatter } from "../src/runtime/EntrySpawnScatter.js";
 import { eventIdentityKey } from "../src/runtime/LiveWorld.js";
 import { NpcAgentSystem } from "../src/runtime/NpcAgentSystem.js";
 import { normalizeEvent } from "../src/runtime/SnapshotAdapter.js";
@@ -41,6 +44,15 @@ function animationClip(name, ...nodeNames) {
         : []),
     ]),
   );
+}
+
+
+function seededRandom(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
 }
 
 
@@ -432,6 +444,87 @@ test("capsule placement includes body radius at world bounds and static blockers
   assert.equal(
     capsuleFitsAt(collider, 0.5, 0, [{ x: 1, z: 0, r: 0.25 }], { bounds }),
     false,
+  );
+});
+
+
+test("entry spawns scatter safely near the cafe center", () => {
+  const characterRadius = 0.28;
+  const clearance = 0.12;
+  const center = { x: 0, z: 2.35 };
+  const spawns = createEntrySpawnScatter({
+    count: 7,
+    bounds: CAFE_LAYOUT.bounds,
+    blockers: CAFE_TABLE_COLLIDERS,
+    surfaceHeightAt: () => 0,
+    center,
+    characterRadius,
+    clearance,
+    minSeparation: 0.76,
+    maxRadius: 2.35,
+    random: seededRandom(42),
+  });
+
+  assert.equal(spawns.length, 7);
+  for (const spawn of spawns) {
+    assert.ok(Math.hypot(spawn.x - center.x, spawn.z - center.z) <= 2.35 + 1e-8);
+    assert.ok(spawn.x >= CAFE_LAYOUT.bounds.minX + characterRadius + clearance);
+    assert.ok(spawn.x <= CAFE_LAYOUT.bounds.maxX - characterRadius - clearance);
+    assert.ok(spawn.z >= CAFE_LAYOUT.bounds.minZ + characterRadius + clearance);
+    assert.ok(spawn.z <= CAFE_LAYOUT.bounds.maxZ - characterRadius - clearance);
+    for (const blocker of CAFE_TABLE_COLLIDERS) {
+      assert.ok(
+        Math.hypot(spawn.x - blocker.x, spawn.z - blocker.z)
+          >= blocker.r + characterRadius + clearance,
+      );
+    }
+  }
+  for (let left = 0; left < spawns.length; left += 1) {
+    for (let right = left + 1; right < spawns.length; right += 1) {
+      assert.ok(
+        Math.hypot(
+          spawns[left].x - spawns[right].x,
+          spawns[left].z - spawns[right].z,
+        ) >= 0.76,
+      );
+    }
+  }
+});
+
+
+test("dynamic entry scatter keeps clear of characters already in the scene", () => {
+  const reserved = [{ x: 0, z: 0, radius: 0.28 }];
+  const random = seededRandom(7);
+  for (let index = 0; index < 3; index += 1) {
+    const [spawn] = createEntrySpawnScatter({
+      count: 1,
+      bounds: { minX: -2, maxX: 2, minZ: -2, maxZ: 2 },
+      occupied: reserved,
+      surfaceHeightAt: () => 0,
+      center: { x: 0, z: 0 },
+      maxRadius: 1.4,
+      random,
+    });
+    assert.ok(reserved.every((other) =>
+      Math.hypot(spawn.x - other.x, spawn.z - other.z) >= 0.72,
+    ));
+    reserved.push({ ...spawn, radius: 0.28 });
+  }
+});
+
+
+test("booth person anchors stay outside the character collision boundary", () => {
+  const booth = {
+    x: -10.914,
+    z: -4.454,
+    yaw: Math.PI / 2,
+    personOffset: 1.25,
+    blockerRadius: 1.9,
+  };
+  const anchor = boothPersonAnchor(booth, 0.28);
+  assert.ok(
+    Math.hypot(anchor.x - booth.x, anchor.z - booth.z)
+      >= booth.blockerRadius + 0.28 + 0.12 - 1e-8,
   );
 });
 

@@ -292,7 +292,15 @@
     width: min(300px, calc(100vw - 116px));
   }
 
-  .scene-interaction-picker {
+  body[data-world="hall"] .scene-interaction-prompt {
+    bottom: max(302px, calc(env(safe-area-inset-bottom) + 292px));
+  }
+
+  .scene-interaction-prompt kbd {
+    display: none;
+  }
+
+  .scene-interaction-sheet {
     right: 10px;
     bottom: max(10px, env(safe-area-inset-bottom));
     left: 10px;
@@ -302,5 +310,15 @@
   .scene-interaction-toast {
     bottom: max(140px, calc(env(safe-area-inset-bottom) + 130px));
     width: min(300px, calc(100vw - 40px));
+  }
+}
+
+@media (min-width: 360px) and (max-width: 700px) {
+  body[data-world="hall"] .scene-interaction-prompt {
+    right: 10px;
+    bottom: max(150px, calc(env(safe-area-inset-bottom) + 140px));
+    left: auto;
+    width: 175px;
+    transform: none;
   }
 }

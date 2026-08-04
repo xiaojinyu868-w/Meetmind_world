@@ -166,8 +166,54 @@ export function mountSceneInteraction({ root = document.body, onAction = async (
     prompt.setAttribute("aria-hidden", String(!nearby));
   }
 
-  async function run(action) {
-    if (!nearby || !action || busy) return;
+  async function activateDirectAction() {
+    const actionId = nearby?.directActionId;
+    if (!actionId || busy || !nearby) return false;
+    busy = true;
+    try {
+      const result = await onAction(nearby, actionId);
+      if (result?.close) close();
+      else if (result) showNarrative(result);
+    } catch (error) {
+      console.error(error);
+      showNarrative({
+        eyebrow: "互动没有完成",
+        title: "这里暂时没有回应",
+        detail: "世界状态没有成功保存，请稍后再试。",
+        icon: "message-circle",
+        actions: [],
+      });
+    } finally {
+      busy = false;
+    }
+    return true;
+  }
+
+  function activate() {
+    if (nearby?.directActionId) {
+      void activateDirectAction();
+      return true;
+    }
+    return open();
+  }
+
+  function showNarrative(narrative) {
+    if (!nearby) return;
+    sheetOpen = true;
+    renderSheet(nearby, narrative);
+    sheet.setAttribute("aria-hidden", "false");
+    prompt.setAttribute("aria-hidden", "true");
+  }
+
+  prompt.addEventListener("click", activate);
+  sheet.addEventListener("click", async (event) => {
+    const closeButton = event.target.closest("[data-scene-close]");
+    if (closeButton) {
+      close();
+      return;
+    }
+    const button = event.target.closest("[data-scene-action]");
+    if (!button || busy || !nearby) return;
     busy = true;
     try {
       const result = await onAction(nearby, action.id);
@@ -232,10 +278,9 @@ export function mountSceneInteraction({ root = document.body, onAction = async (
       if (!["KeyE", "KeyF"].includes(event.code) || event.repeat || event.target.closest?.("input, textarea, select")) {
         return false;
       }
-      if (!nearby) return false;
-      if (pickerOpen) return true; // 选人条打开时 E/F 留给 ESC/点按，吞掉按键防误触
-      run(event.code === "KeyE" ? nearby.primaryAction : nearby.secondaryAction);
-      return true;
+      if (sheetOpen) close();
+      else activate();
+      return Boolean(nearby);
     },
     get nearby() { return nearby; },
     get isOpen() { return pickerOpen; }, // 仅模态层（选人条）算打开：锁移动、吃 ESC

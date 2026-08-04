@@ -21,11 +21,11 @@ npm run build
 标题页
 -> 小镇夜集市（入口木门 -> 市集街道 -> 篝火广场 -> 花园小河；摊位即人物/共同课题入口）
 -> 合照入场（左下「合照入场」：上传合照 -> AI 认脸 -> 逐脸确认姓名 -> 批量建档进展位）
--> 点选人物或摊位查看资料包（点按 = 看资料，每个摊位有专属配色）
--> 摊位旁 E 与 TA 聊聊 / F 进入“我与 TA”的关系场域（场域内 E 即触发共同记忆与线索）
--> 咖啡厅门口 E 进入木屋咖啡厅：桌位 E 坐下/起身（坐下即点单）、吧台 E 喝一杯，F 邀请熟人
--> 中央圆桌 E 发起会议并对话，会议中可随时提前结束；v1 房间内 PersonAgent 可自主靠近/应邀入座
--> 篝火边 E 围炉坐下 -> 现场联机入口（创建/加入房间、第一印象游戏），再按 E 离开
+-> 点选人物或摊位查看资料包（每个摊位有专属配色）
+-> 进入“我与 TA”的关系场域，E/F 触发共同记忆与线索
+-> 咖啡厅门口按 E 进入木屋咖啡厅：桌位/吧台情境菜单
+-> 邀请熟人进入中央圆桌并对话
+-> 村庄草地中央的 C3525 Fire2 篝火是线下一起玩的入口：靠近后按 E 直接进入现场房间（创建/加入、第一印象游戏）
 -> 世界播报即时显示邀请、圆桌和场域事件
 -> 关系 Map / 集市 / 咖啡厅之间返回定位
 ```
@@ -61,6 +61,7 @@ npm run build
 - `src/runtime/RelationshipFieldSystem.js`：消费 `echo-field.v1` 生成可进入的关系场域与 4 类热点。
 - `src/runtime/WorldModuleRegistry.js`：严格校验 `echo-world-modules.v1` 小屋/场域挂载契约。
 - `src/runtime/WorldBroadcastSystem.js`：咖啡厅/集市大厅 3D 播报屏（位置按世界配置）与晨报摘要。
+- `src/runtime/CampfireLayout.js`、`src/runtime/CampfireEntrance.js`：村庄草地中央的 Fire2 篝火资产、比例校验、暖光与现场一起玩入口锚点。
 - `src/runtime/Input.js`、`CameraRelativeMovement.js`、`ThirdPersonCamera.js`：Pointer Lock 输入、镜头相对移动与第三人称轨道相机。
 - `src/ui/SceneInteraction.js`：统一 E/F、触屏提示与情境菜单。
 - `src/data/demoSignals.js`：6 个 NPC 的 `person-signal.v1` 占位快照，正式接口可直接替换。
@@ -91,6 +92,13 @@ V2 几何场景资产仍归档保留，但不再出现在前端选择器中，�
 ![几何 Low-poly 版本](renders/echo_world_cafe_reference-lowpoly-v2_preview.png)
 
 ![绘本冒险版本](renders/echo_world_storybook_cafe_preview.png)
+
+## Runtime audio
+
+- `src/runtime/WorldAudioSystem.js` attaches a shared `THREE.AudioListener` to the camera and preloads two ambient loops plus pooled UI effects.
+- `hall` and `field` use the evening forest ambience; `cafe` uses the cafe ambience.
+- Ambience fades in only during unblocked 3D free roam. Intro, relationship Map, hidden tabs, and blocking UI surfaces stay silent.
+- Source pages and CC0 license records are kept in `public/audio/SOURCES.md`.
 
 ## 当前限制
 
