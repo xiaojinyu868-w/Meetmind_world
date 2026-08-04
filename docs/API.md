@@ -1,4 +1,4 @@
-# EchoWorld 对外接口契约（API v0）
+# EchoWorld 对外接口契约（API v0 + MVP2 v1）
 
 > 地位：前后端之间的**唯一契约**。开发顺序为**先前端、后后端**：前端先用 mock 数据把效果做出来并对齐，后端再按本契约实现到一致。契约变更 = 改本文件 + 版本号递进 + 变更记录，不接受口头变更。
 >
@@ -15,10 +15,10 @@
 | IF-3 | `POST /api/v0/confirm` | MVP1 | 确认：用户确认人物身份绑定（FR-1.3） |
 | IF-4 | `GET /api/v0/world/snapshot` | MVP1 | 世界：快照 `echo-snapshot.v1`，前端唯一渲染数据源 |
 | IF-5 | `GET /api/v0/packages/...` `POST /api/v0/search` | MVP1 | 资料包查看 + 人脸/姓名/关键词检索（FR-1.8/1.9） |
-| IF-6 | `POST /api/v0/agents/meeting` 等 | MVP2 | 互动：发起圆桌、Agent 事件流 |
-| IF-7 | `GET /api/v0/notifications` `POST /api/v0/feedback` `POST /api/v0/refill` | MVP2 | 推送：价值事件通知、有用/无用反馈、微信行动回填 |
-| IF-8 | `/api/v0/group/sessions/...` | MVP2 | 现场房间：位置同步、第一印象互写、“谁写的？”破冰游戏 |
-| IF-9 | `/api/v0/fields/...` `/api/v0/world/events` | MVP2 | 关系场域、空间互动事件与世界晨报 |
+| IF-6 | `POST /api/v0/agents/meeting` 等（预留）；`/api/v1/rooms/...` | MVP2 | 互动：圆桌、Agent 事件流；v1 现场房间、热点、破冰、有序事件/WebSocket（目标架构，docs/MVP2-BACKEND.md） |
+| IF-7 | `GET /api/v0/notifications` `POST /api/v0/feedback` `POST /api/v0/refill`（预留）；`/api/v1/group-onboarding` `/impressions` `/fields/generations` | MVP2 | 推送与回填（暂缓）；v1 群体冷启动、数据回流、关系场域生成 |
+| IF-8 | `/api/v0/group/sessions/...` | MVP2 | 现场房间 v0 过渡实现：位置同步、第一印象互写、"谁写的？"破冰游戏（服务当前前端，v1 成熟后迁移） |
+| IF-9 | `/api/v0/fields/...` `/api/v0/world/events` | MVP2 | 关系场域 `echo-field.v1`、空间互动事件与世界晨报 |
 | IF-10 | 授权/组织/网络接口 | MVP3 | 本人确认、权限级别变更、组织空间、网络互联（届时另立详节） |
 
 设计要点：
@@ -108,7 +108,7 @@ event: result    data: {"encounter_draft": { ... echo-package.v0 的 encounter �
 参数（v0.3 加性）：
 
 - `?world=hall|cafe`（默认 cafe）：`hall` = 展位大厅快照——agents 只含 `at-booth` 站位（位置=展位锚点），`events` 恒为空数组；modules 含 booth 条目（见下）。`cafe` = 活的世界（现状）。
-- `?advance=1`：推进 tick（hall 仅推进计数，无 runtime 调度）。
+- 默认纯读；世界由服务端稀疏 heartbeat 推进。`?advance=1` 仅为旧客户端和测试保留。
 
 booth module 结构（快照 modules 内，`type: "booth"`）：
 
@@ -137,16 +137,33 @@ booth module 结构（快照 modules 内，`type: "booth"`）：
 { "results": [ { "person_id": "person_01JXXX", "name": "陈某", "score": 0.93, "last_encounter": { "time": "...", "place": "..." } } ] }
 ```
 
-## IF-6 互动接口（MVP2，详节届时补）
+## IF-6 现场房间与 Agent 互动（MVP2 `/api/v1`）
 
-- `POST /api/v0/agents/meeting`：发起圆桌（主题 + 参与者）。
-- `GET /api/v0/agents/events`：Agent 事件流（SSE）：走动、访问、讨论开始/结束。
+- `POST /api/v1/rooms`：创建房间和热点。
+- `POST /api/v1/rooms/{room_id}/join`：成员进入。
+- `GET /api/v1/rooms/{room_id}/snapshot`：纯读当前状态。
+- `POST /api/v1/rooms/{room_id}/commands`：提交带 `command_id` 的幂等命令。
+- `GET /api/v1/rooms/{room_id}/events?after_sequence=N`：断线补拉。
+- `WS /api/v1/rooms/{room_id}/stream?after_sequence=N`：实时有序事件。
+- `GET /api/v1/rooms/{room_id}/brief`：从已提交语义事件生成晨报。
 
-## IF-7 推送与回填接口（MVP2，详节届时补）
+事件统一为 `meetmind.event.v1`，至少包含 `event_id / room_id / sequence / type /
+actor_id / command_id / payload / occurred_at / correlation_id / causation_id`。
 
-- `GET /api/v0/notifications`：价值事件列表（阈值过滤后）。
-- `POST /api/v0/feedback`：`{ "notification_id", "useful": true|false }` → 写入推断层调优阈值。
-- `POST /api/v0/refill`：微信行动建议的回填（文本/语音/照片）→ 新事实入库 + 推断层重算。
+客户端命令：`member.move`、`hotspot.interact`、`meeting.invite`、
+`meeting.respond`、`meeting.start`、`meeting.end`、`icebreaker.request`、
+`icebreaker.submit`、`icebreaker.finish`。Agent 只能提出 Intent；主持议题、破冰启动和
+播报在 Policy/CommandValidator 校验后才由 RoomService 执行。
+
+## IF-7 群体冷启动、回流与场域（MVP2 `/api/v1`）
+
+- `POST /api/v1/group-onboarding`：multipart 合照、姓名数组、预期人数和确认标志；
+  返回独立 `person_id`、bbox/face_ref、程序化 voxel 状态和人工复核状态。
+- `POST /api/v1/impressions`：自评/互评；原始提交进入 facts，推断记录保留作者和来源。
+- `POST /api/v1/fields/generations`：共同事实 + 关系备注映射为版本化、可重算 Field。
+- `GET /api/v1/scenes/modules`：市集、摊位、咖啡厅、Field 的模块挂载契约。
+
+详细请求、测试和限制见 `MVP2-BACKEND.md`。
 
 ## IF-8 现场群体房间（MVP2）
 
@@ -241,3 +258,5 @@ booth module 结构（快照 modules 内，`type: "booth"`）：
 - 2026-08-03 | v0.3（加性）：IF-4 增加 `?world=hall|cafe` 参数与 booth module 结构；新增媒体路由 `GET /api/v0/media/{ref}`；IF-3 confirm 响应增加 `booth_id` | AI
 - 2026-08-04 | v0.4（加性）：原预留授权/组织接口顺延为 IF-9；IF-8 落地现场房间、第一印象与“谁写的？”协议，明确只消费上游参与者/资产 DTO，不处理视觉与音视频 | 人（边界）+ AI（实现）
 - 2026-08-04 | v0.5（加性）：授权/组织接口顺延为 IF-10；新增 IF-9 `echo-field.v1` 关系场域、持久化世界事件与晨报；confirm 响应增加 `field_status` | AI
+- 2026-08-03 | v1：现场房间、WebSocket、Agent Intent/Command、圆桌/破冰、合照入场、第一印象、Field 和场景模块契约落地 | AI
+- 2026-08-04 | 合并 codex/agent 两线：IF-6/7 同时登记 v0 预留项与 v1 rooms/group-onboarding 目标架构，IF-8 标注为 v0 过渡实现；v0 快照改为纯读（advance 默认 0，tick 由服务端 scheduler 心跳推进，advance=1 仅兼容旧客户端） | AI

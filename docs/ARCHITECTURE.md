@@ -166,20 +166,21 @@ Agent 行为按场景半规则驱动（走动/访问/圆桌），由 Agent Runti
 | ID | 决策 | 理由 |
 |---|---|---|
 | ADR-1 | Agent/World/Render 三层严格分离，事件驱动 | 可替换性；前端永远不需要理解 Agent 内部 |
-| ADR-2 | 人物数据以 Markdown + JSON 文件组织，而非一开始上数据库 | 人/AI 都可直接读写；关键词匹配够用；MVP3 再评估迁移（TBD-ARCH-2） |
-| ADR-3 | 世界快照是前端唯一数据源 | 防止前端与 Agent 状态耦合腐烂 |
+| ADR-2 | 人物事实保留 Markdown + JSON；MVP2 房间事件/状态用 SQLite WAL | 原媒体保持不可变文件；多人命令需要顺序、幂等和重启恢复 |
+| ADR-3 | v0 渲染走纯读快照；v1 房间走快照初始化 + 有序事件增量 | 防止前端读取 Agent 内部，同时支持实时多人 |
 | ADR-4 | 自进化只能改"状态"，不能改"规则" | 权限失控是最大的产品风险（P-8） |
 | ADR-5 | 沿用现有 three.js 咖啡厅原型演进，不重写 | 原型已验证渲染与交互闭环 |
 | ADR-6 | 人物形象走"体素 + AI 图片贴图"，不走 per-person 高模管线（2026-08-03） | 现场场景下生成速度与成本优先；辨识度由照片贴图保证；P-6 |
 | ADR-7 | 现场群体玩法使用独立 `GroupSessionService`，不叠加到单人 `WorldService`；MVP2 场地试点采用 HTTP 轮询 + 单调位置序号 | 房间/印象/游戏有自己的生命周期；先验证同场多设备与玩法节奏，避免把一次性试点协议固化成未来云联机架构 |
 | ADR-8 | 稳定场所入口使用 `echo-world-modules.v1`，用户场景事件使用 append-only `echo-world-event.v1` | 后续小屋/应用可按 mount/entry/interaction 挂载；播报与重启恢复不依赖前端瞬时状态 |
+| ADR-9 | Agent 只产 Intent，Policy/CommandValidator 后由确定性服务执行（v2 runtime） | LLM 不掌握事件顺序、权限、碰撞、会议或游戏状态 |
 
 ## 8. TBD
 
 - TBD-ARCH-1：前端是否/何时迁移 TypeScript。
 - TBD-ARCH-2：人物数据何时从文件迁移到数据库（触发条件：单人 Package 数 > 500 或多人协作写入冲突出现）。
-- TBD-ARCH-3：世界快照传输方式（MVP1 轮询即可；MVP2 评估 SSE/WebSocket）。
-- TBD-ARCH-4（2026-08-04 部分决策）：联机分两档——**现场联机**（FR-2.14，MVP2）已采用独立 `echo-group-room.v1` 权威状态、约 700ms HTTP 轮询、单调 `seq` 位置写入，供同一场地/局域部署试点；硬件形态与大屏只读视角仍为 TBD-H1。**云端联机**（FR-3.6，远期）仍须重新评审房间持久化、鉴权、断线恢复、WebSocket/传输与扩缩容，禁止直接沿用进程内试点实现。
+- TBD-ARCH-3 已决（2026-08-04）：v0 世界快照维持纯读轮询；v1 现场房间使用 WebSocket + sequence cursor replay。
+- TBD-ARCH-4（2026-08-04 现场档双线落地）：**现场联机**（FR-2.14）现有两条实现——v0 `echo-group-room.v1`（内存权威状态 + 约 700ms 轮询 + 单调 `seq`，服务当前前端 GroupPlay，同场试点）与 v1 `rooms`（SQLite 持久化 + WebSocket 有序事件 + Intent/Command 架构，目标形态，前端接线中）；硬件形态与大屏只读视角仍见 TBD-H1。**云端联机**（FR-3.6，远期）仍须重新评审：PostgreSQL 事务/outbox、Redis presence/pub-sub/分片锁、登录与 room token 鉴权，禁止直接扩展进程内或单节点实现。
 
 ## 变更记录
 
@@ -190,3 +191,5 @@ Agent 行为按场景半规则驱动（走动/访问/圆桌），由 Agent Runti
 - 2026-08-03 | TBD-F2 决策落档：场域 = "我与 TA 的关系"的表达，输入以双方共同事件与关系状态为主 | 人（决策）+ AI（记录）
 - 2026-08-04 | ADR-7 落档：现场房间与单人世界状态分离，以轮询 + 单调序号完成 MVP2 同场试点；视觉/音频链路由上游工作流负责，本服务只消费已授权 DTO | 人（边界）+ AI（实现）
 - 2026-08-04 | ADR-8 落档：版本化世界模块挂载清单、关系场域推断管线与 append-only 世界事件/晨报接入；视觉和音视频语义继续由上游提供 | AI
+- 2026-08-03 | MVP2 后端框架落地：Intent-only Agent、Policy/Command、SQLite EventStore、房间 WebSocket、圆桌/破冰、群体入场与 Field 工作流；现场单节点可验收 | AI
+- 2026-08-04 | 合并 codex/agent 两线：ADR-9 落档（Intent-only Agent 架构）；TBD-ARCH-3 已决、TBD-ARCH-4 现场档双线记录（v0 轮询试点 + v1 WS 目标形态）；v0 快照改纯读、tick 由服务端 scheduler 心跳推进 | AI

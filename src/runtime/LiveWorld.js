@@ -3,7 +3,7 @@ import { CAFE_LAYOUT } from "./CafeLayout.js";
 
 export const SNAPSHOT_SCHEMA = "echo-snapshot.v1";
 
-const DEFAULT_SNAPSHOT_URL = `${import.meta.env.BASE_URL}api/v0/world/snapshot?advance=1`;
+const DEFAULT_SNAPSHOT_URL = `${import.meta.env.BASE_URL}api/v0/world/snapshot`;
 const DEFAULT_MOCK_URL = "data/mock/snapshot.demo.json";
 const SIM_WALK_SPEED = 1.35;
 const MEETING_SEAT_INDICES = Object.freeze([3, 4, 5, 2]);

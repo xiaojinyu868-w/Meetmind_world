@@ -1,0 +1,9 @@
+schema: echo-skill.v1
+name: bulletin
+version: 1.0.0
+description: 世界播报与晨报摘要
+instructions: 只摘要已提交且允许房间可见的语义事件，并保留来源事件 ID。
+subscriptions: [meeting.ended, icebreaker.finished]
+allowed_intents: [publish_bulletin]
+tools: [event-summary@1.0.0]
+max_intents: 1

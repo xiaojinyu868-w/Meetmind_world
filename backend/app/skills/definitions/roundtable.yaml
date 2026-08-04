@@ -1,0 +1,9 @@
+schema: echo-skill.v1
+name: roundtable
+version: 1.0.0
+description: 圆桌开场与议题引导
+instructions: 只根据已提交会议事件生成简短议题，不决定成员、座位或会议状态。
+subscriptions: [meeting.started]
+allowed_intents: [propose_topic]
+tools: [memory-query@1.0.0]
+max_intents: 1

@@ -22,12 +22,12 @@ export const HALL_LAYOUT = Object.freeze({
   boothTemplateAssetId: "module.market-stall.v1",
   // 大厅静止陈列，快照轮询低频即可；咖啡厅维持 2s 实时感
   snapshotPollMs: 10000,
-  snapshotUrl: `${import.meta.env.BASE_URL}api/v0/world/snapshot?world=hall&advance=1`,
+  snapshotUrl: `${import.meta.env.BASE_URL}api/v0/world/snapshot?world=hall`,
 });
 
 export const CAFE_WORLD = Object.freeze({
   snapshotPollMs: 2000,
-  snapshotUrl: `${import.meta.env.BASE_URL}api/v0/world/snapshot?advance=1`,
+  snapshotUrl: `${import.meta.env.BASE_URL}api/v0/world/snapshot`,
 });
 
 export const FIELD_WORLD = Object.freeze({

@@ -8,6 +8,8 @@
 """
 
 import random
+from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -16,20 +18,53 @@ from app.agents.hall_runtime import HallRuntime
 from app.agents.llm import get_provider
 from app.agents.memory.store import MemoryStore
 from app.agents.runtime import AgentRuntime, EventBus
+from app.agents.roles import (
+    BulletinComposerAgent,
+    IcebreakerHostAgent,
+    RoundtableFacilitatorAgent,
+)
+from app.agents.contracts import PrivacyLevel
+from app.agents.runtime_v2 import AgentCoordinator, AgentRouter, ContextBuilder
+from app.agents.tools import EventSummaryTool, MemoryQueryTool, ToolRegistry
+from app.application import CommandValidator
 from app.api import confirm as confirm_api
 from app.api import admin, experience, group, ingest, media, packages, pipeline, search as search_api
 from app.api import world as world_api
 from app.group.service import GroupSessionService
+from app.api.v1 import rooms as rooms_v1_api
+from app.api.v1 import workflows as workflows_v1_api
+from app.api.v1 import scenes as scenes_v1_api
+from app.config import get_data_dir, get_world_heartbeat_seconds
+from app.domain.rooms import RoomService
+from app.domain.scenes import SceneModuleRegistry, default_scene_modules
+from app.eventing import EventDispatcher, InMemoryOutbox
 from app.harness.permissions.guard import DEFAULT_GUARD, PermissionDenied
 from app.packages.store import PackageStore
+from app.pipelines.field_generation import FieldGenerationService
+from app.pipelines.group_onboarding import GroupOnboardingService
+from app.pipelines.icebreaker_feedback import IcebreakerFeedbackService
+from app.persistence import SQLiteEventStore, SQLiteRoomRepository
+from app.security import PolicyEngine
+from app.skills import SkillRegistry
 from app.world.hall import HALL_BOUNDS, build_display_from_package
+from app.world.scheduler import WorldScheduler
 from app.world.seed import SEED_AGENTS, seed_demo_packages, seed_world
 from app.world.service import WorldService
 from app.world.event_store import WorldEventStore
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="EchoWorld Backend", version="0.1.0")
+    @asynccontextmanager
+    async def lifespan(application: FastAPI):
+        await application.state.world_scheduler.start()
+        try:
+            yield
+        finally:
+            await application.state.world_scheduler.stop()
+            application.state.event_store.close()
+            application.state.room_repository.close()
+
+    app = FastAPI(title="EchoWorld Backend", version="0.2.0", lifespan=lifespan)
 
     # 三层装配：Agent --事件--> EventBus --消费--> WorldService --快照--> 前端
     world_service = WorldService(seed_world())
@@ -80,6 +115,64 @@ def create_app() -> FastAPI:
     app.state.group_sessions = GroupSessionService(store)
     app.state.world_events = WorldEventStore(store.root / "world-events.v1.jsonl")
 
+    # MVP2 typed runtime infrastructure. The local adapters are intentionally
+    # dependency-free; PostgreSQL/Redis implementations can replace these ports.
+    runtime_db = get_data_dir() / "runtime" / "mvp2.sqlite3"
+    app.state.event_store = SQLiteEventStore(runtime_db)
+    app.state.room_repository = SQLiteRoomRepository(runtime_db)
+    app.state.event_dispatcher = EventDispatcher()
+    app.state.outbox = InMemoryOutbox()
+    app.state.policy = PolicyEngine()
+    app.state.icebreaker_feedback = IcebreakerFeedbackService(store)
+    app.state.room_service = RoomService(
+        icebreaker_feedback=app.state.icebreaker_feedback,
+        auto_bulletin=False,
+        event_store=app.state.event_store,
+        state_repository=app.state.room_repository,
+    )
+    context_builder = ContextBuilder(
+        world_provider=lambda _agent, _event: world_service.snapshot(),
+        room_provider=lambda _agent, event: app.state.room_service.snapshot(event.room_id),
+        privacy_resolver=lambda _agent, _event: {
+            PrivacyLevel.PUBLIC, PrivacyLevel.ROOM,
+        },
+        targets_provider=lambda _agent, event: {
+            member["member_id"]
+            for member in app.state.room_service.snapshot(event.room_id)["members"]
+        },
+    )
+    app.state.agent_router = AgentRouter(context_builder)
+    app.state.agent_router.register(RoundtableFacilitatorAgent())
+    app.state.agent_router.register(IcebreakerHostAgent())
+    app.state.agent_router.register(BulletinComposerAgent())
+    app.state.command_validator = CommandValidator(app.state.policy)
+    app.state.tool_registry = ToolRegistry()
+    app.state.tool_registry.register(MemoryQueryTool(memory))
+    app.state.tool_registry.register(EventSummaryTool())
+    app.state.skill_registry = SkillRegistry()
+    app.state.skill_registry.load_directory(
+        Path(__file__).resolve().parent / "skills" / "definitions"
+    )
+    app.state.agent_coordinator = AgentCoordinator(
+        app.state.agent_router,
+        context_builder,
+        app.state.command_validator,
+        lambda command: app.state.room_service.execute(
+            command.room_id,
+            command_id=command.command_id,
+            actor_id=command.actor_id,
+            command_type=command.type,
+            payload=command.payload,
+            expected_revision=command.expected_revision,
+        ),
+    )
+    app.state.group_onboarding = GroupOnboardingService(store, hall=hall_world)
+    app.state.field_generation = FieldGenerationService(store)
+    app.state.scene_modules = SceneModuleRegistry(default_scene_modules())
+    app.state.world_scheduler = WorldScheduler(
+        app, interval_seconds=get_world_heartbeat_seconds()
+    )
+
     # 自进化写入越权 → 403（ADR-4：权限失控是最大的产品风险）
     @app.exception_handler(PermissionDenied)
     async def permission_denied_handler(_request: Request, exc: PermissionDenied):
@@ -87,7 +180,7 @@ def create_app() -> FastAPI:
 
     @app.get("/api/health")
     def health():
-        return {"status": "ok", "service": "echoworld-backend", "version": "0.1.0"}
+        return {"status": "ok", "service": "echoworld-backend", "version": "0.2.0"}
 
     # 对外契约：全部挂载在 /api/v0/ 前缀下（docs/API.md，/api/health 除外）
     app.include_router(ingest.router)
@@ -98,8 +191,13 @@ def create_app() -> FastAPI:
     app.include_router(world_api.router)
     app.include_router(media.router)
     app.include_router(admin.router)
+    # v0 现场房间与场景体验（codex 线，服务当前前端；v1 rooms 成熟后迁移）
     app.include_router(group.router)
     app.include_router(experience.router)
+    # v1 类型化房间/工作流/场景模块契约（agent 线，见 docs/MVP2-BACKEND.md）
+    app.include_router(rooms_v1_api.router)
+    app.include_router(workflows_v1_api.router)
+    app.include_router(scenes_v1_api.router)
     return app
 
 
