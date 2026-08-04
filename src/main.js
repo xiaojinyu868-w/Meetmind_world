@@ -2296,7 +2296,7 @@ function startLiveWorld({ force = false } = {}) {
 
 async function startRoomWorld() {
   if (!roomEnabled || roomClient) return;
-  const fallbackById = new Map(FALLBACK_SNAPSHOT.agents.map((agent) => [agent.id, agent.position]));
+  const fallbackPositions = FALLBACK_SNAPSHOT.agents.map((agent) => agent.position);
   let packageMembers = [];
   try {
     const summaries = await api.getPackages();
@@ -2307,7 +2307,7 @@ async function startRoomWorld() {
         id: item.person_id,
         name: item.name ?? item.person_id,
         displayName: item.name ?? item.person_id,
-        position: NPC_ENTRY_SPAWNS[index % NPC_ENTRY_SPAWNS.length],
+        position: fallbackPositions[index % fallbackPositions.length],
       }));
   } catch (error) {
     console.warn("[EchoWorld] 无法读取新增 Package，咖啡厅先载入已有成员", error);
