@@ -155,6 +155,8 @@ export async function tryLoadFieldSplatWorld({
   const walk = analyzeWalkableSurface(colliderScene);
   const metricGroup = new THREE.Group();
   metricGroup.name = "WORLD_MarbleSplat";
+  // splatGroup 是 metricGroup 的子节点：翻转只能带 quaternion，不能重复
+  // 继承 scale/position（否则 splat 被缩放两次变成指甲盖）
   const splatGroup = new THREE.Group();
   splatGroup.name = "SPLAT_Flipped";
   splatGroup.quaternion.copy(SPLAT_FLIP_QUATERNION); // 只有 splat 翻转
@@ -163,15 +165,13 @@ export async function tryLoadFieldSplatWorld({
     const scale = THREE.MathUtils.clamp(
       WALK_TARGET_EXTENT_METERS / walk.extent, FIT_CLAMP.min, FIT_CLAMP.max);
     // collider 为原生 Y-up：splat 翻转后与 collider 同帧（collider = flip(splat_raw)），
-    // 两组共用同一 scale/position 即对齐
-    for (const group of [metricGroup, splatGroup]) {
-      group.scale.setScalar(scale);
-      group.position.set(
-        -walk.centerX * scale,
-        -walk.groundY * scale,
-        -walk.centerZ * scale,
-      );
-    }
+    // metricGroup 统一承载缩放与位移
+    metricGroup.scale.setScalar(scale);
+    metricGroup.position.set(
+      -walk.centerX * scale,
+      -walk.groundY * scale,
+      -walk.centerZ * scale,
+    );
     if (walk.spawn) {
       spawnHint = {
         x: (walk.spawn.x - walk.centerX) * scale,
