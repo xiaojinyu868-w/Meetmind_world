@@ -1,0 +1,60 @@
+{
+  "schema": "meetmind.group-onboarding.v1",
+  "group_id": "group-demo-0001",
+  "status": "ready",
+  "source_ref": "mock/group-photo",
+  "detected_count": 5,
+  "participants": [
+    {
+      "person_id": "group-demo-face_01",
+      "name": "朋友 1",
+      "confirmed": true,
+      "face_ref": "portraits/lin-che.png",
+      "bbox": { "x": 0.04, "y": 0.3, "width": 0.13, "height": 0.19 },
+      "needs_face_review": false,
+      "booth_id": "booth_group-demo-face_01",
+      "avatar_status": "ready"
+    },
+    {
+      "person_id": "group-demo-face_02",
+      "name": "朋友 2",
+      "confirmed": true,
+      "face_ref": "portraits/chen-mo.png",
+      "bbox": { "x": 0.25, "y": 0.32, "width": 0.11, "height": 0.16 },
+      "needs_face_review": false,
+      "booth_id": "booth_group-demo-face_02",
+      "avatar_status": "ready"
+    },
+    {
+      "person_id": "group-demo-face_03",
+      "name": "朋友 3",
+      "confirmed": true,
+      "face_ref": "portraits/zhou-ning.png",
+      "bbox": { "x": 0.44, "y": 0.33, "width": 0.1, "height": 0.15 },
+      "needs_face_review": false,
+      "booth_id": "booth_group-demo-face_03",
+      "avatar_status": "ready"
+    },
+    {
+      "person_id": "group-demo-face_04",
+      "name": "朋友 4",
+      "confirmed": true,
+      "face_ref": "portraits/xu-an.png",
+      "bbox": { "x": 0.62, "y": 0.33, "width": 0.11, "height": 0.17 },
+      "needs_face_review": false,
+      "booth_id": "booth_group-demo-face_04",
+      "avatar_status": "ready"
+    },
+    {
+      "person_id": "group-demo-face_05",
+      "name": "朋友 5",
+      "confirmed": true,
+      "face_ref": "portraits/su-he.png",
+      "bbox": { "x": 0.82, "y": 0.32, "width": 0.13, "height": 0.2 },
+      "needs_face_review": false,
+      "booth_id": "booth_group-demo-face_05",
+      "avatar_status": "ready"
+    }
+  ],
+  "issues": []
+}
