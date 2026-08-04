@@ -1,10 +1,11 @@
-import { CloudUpload, Coffee, Store, Users, createIcons } from "lucide";
+import { CloudUpload, Coffee, ScanFace, Store, Users, createIcons } from "lucide";
 import * as MockApi from "../runtime/mock/MockApi.js";
 import { publicUrl } from "../runtime/WorldSpec.js";
 import { navigateToWorld } from "../runtime/WorldSwitch.js";
 import { mountPackagePanel } from "../ui/package-panel/PackagePanel.js";
 import { mountPipelineFlow } from "../ui/pipeline/PipelineFlow.js";
 import { mountGroupPlay } from "../ui/group/GroupPlay.js";
+import { mountOnboardingFlow } from "../ui/onboarding/OnboardingFlow.js";
 
 /**
  * integrations —— 咖啡厅/大厅视图的统一集成层。
@@ -19,7 +20,7 @@ import { mountGroupPlay } from "../ui/group/GroupPlay.js";
  * z-index 分层：世界气泡(7) < 检索条(22) < 入口按钮(30) < 资料包面板(40) < 事件 Toast(60) < pipeline 浮层(80)。
  */
 
-const INTEGRATIONS_ICONS = { CloudUpload, Coffee, Store, Users };
+const INTEGRATIONS_ICONS = { CloudUpload, Coffee, ScanFace, Store, Users };
 
 const INTEGRATION_STYLES = `
 .echo-integrations .record-fab {
@@ -63,6 +64,19 @@ body[data-view="cafe"] .echo-integrations .record-fab { display: flex; }
 /* 世界切换导航：叠放在「记录相遇」之上，两个世界各显示对应的出口 */
 .echo-integrations .nav-world-fab {
   bottom: max(160px, calc(env(safe-area-inset-bottom) + 140px));
+}
+
+/* 「合照入场」：再上一层；空集市时 pulse 吸引注意 */
+.echo-integrations .onboard-fab {
+  bottom: max(228px, calc(env(safe-area-inset-bottom) + 208px));
+}
+.echo-integrations .onboard-fab.is-suggested {
+  animation: echo-onboard-pulse 1.8s ease-in-out infinite;
+  border-color: rgb(229 180 81 / 80%);
+}
+@keyframes echo-onboard-pulse {
+  0%, 100% { box-shadow: 0 12px 30px rgb(18 45 39 / 18%); }
+  50% { box-shadow: 0 12px 34px rgb(229 180 81 / 45%); }
 }
 
 .echo-integrations .group-fab {
@@ -109,8 +123,8 @@ body[data-view="cafe"] .echo-integrations .record-fab { display: flex; }
 `;
 
 
-// 事实层指针（portraits/xxx.png、facts/...）→ 可加载 URL；绝对 URL / data / blob 原样透传。
-// live 模式下 facts/... 媒体走后端媒体路由（/api/v0/media/<ref>，后端在建）；mock 模式保持 publicUrl。
+// 事实层指针（portraits/xxx.png、facts/...、derived/...）→ 可加载 URL；绝对 URL / data / blob 原样透传。
+// live 模式下 facts/... 与 derived/... 媒体走后端媒体路由（/api/v0/media/<ref>）；mock 模式保持 publicUrl。
 export function resolveMediaUrl(ref) {
   if (ref === null || ref === undefined) return "";
   const value = String(ref).trim();
@@ -118,7 +132,7 @@ export function resolveMediaUrl(ref) {
   if (/^(?:https?:)?\/\//.test(value) || value.startsWith("data:") || value.startsWith("blob:")) {
     return value;
   }
-  if (MockApi.isLiveMode() && value.startsWith("facts/")) {
+  if (MockApi.isLiveMode() && (value.startsWith("facts/") || value.startsWith("derived/"))) {
     return `${import.meta.env.BASE_URL}api/v0/media/${value}`;
   }
   return publicUrl(value);
@@ -147,6 +161,13 @@ export function createUnifiedApi(base = MockApi) {
         payload?.identity ?? {},
         payload?.privacy ?? "self-only",
       );
+    },
+    // FR-2.12 合照入场两段式
+    detectGroupPhoto(photo, options) {
+      return base.groupOnboardingDetect(photo, options);
+    },
+    confirmGroupPhoto(groupId, assignments) {
+      return base.groupOnboardingConfirm(groupId, assignments);
     },
     // IF-4
     fetchSnapshot() {
@@ -286,6 +307,22 @@ export function mountIntegrations({
     onToast: notifyToast,
   });
 
+  // 合照入场（FR-2.12 两段式：认脸 → 逐脸确认姓名 → 批量建档进展位）
+  const currentWorld = ["hall", "cafe", "field"].includes(document.body.dataset.world)
+    ? document.body.dataset.world
+    : "hall";
+  const onboardingFlow = mountOnboardingFlow(mountRoot, unifiedApi, {
+    onComplete({ count, names }) {
+      unifiedApi.invalidatePackages();
+      refreshPackages().catch((error) => {
+        console.warn("[integrations] 合照入场后刷新资料包列表失败", error);
+      });
+      notifyToast(`${count} 位朋友已进入集市${names?.length ? `：${names.join("、")}` : ""}`);
+    },
+    // 成功屏 CTA：不在大厅时整页跳集市（大厅内则下一轮快照自动带出新展位，无需刷新）
+    onNavigateHall: currentWorld === "hall" ? null : () => navigateToWorld("hall"),
+  });
+
   function refreshPackages() {
     return unifiedApi.getPackages().then((packages) => {
       pipelinePeople.length = 0;
@@ -314,9 +351,6 @@ export function mountIntegrations({
   mountRoot.append(fab);
 
   // 世界切换导航：大厅 →「去咖啡厅坐坐」，咖啡厅 →「回到我的集市」（body.dataset.world 由 main.js 写入）
-  const currentWorld = ["hall", "cafe", "field"].includes(document.body.dataset.world)
-    ? document.body.dataset.world
-    : "hall";
   const navTarget = currentWorld === "hall" ? "cafe" : "hall";
   const navToCafe = navTarget === "cafe";
   const navFab = document.createElement("button");
@@ -329,6 +363,28 @@ export function mountIntegrations({
     `<strong>${navToCafe ? "去咖啡厅坐坐" : "回到我的集市"}</strong></span>`;
   navFab.addEventListener("click", () => navigateToWorld(navTarget));
   mountRoot.append(navFab);
+
+  // 「合照入场」入口按钮（cafe 视图显示；空集市时 pulse 引导）
+  const onboardFab = document.createElement("button");
+  onboardFab.className = "record-fab onboard-fab";
+  onboardFab.type = "button";
+  onboardFab.setAttribute("aria-label", "用一张合照让朋友们入场");
+  onboardFab.innerHTML =
+    `<i data-lucide="scan-face"></i>` +
+    `<span><small>Group Onboarding</small><strong>合照入场</strong></span>`;
+  onboardFab.addEventListener("click", () => onboardingFlow.open());
+  mountRoot.append(onboardFab);
+
+  // 空集市引导：大厅快照同步后仍无展位时，提示合照入场（一次性）
+  if (currentWorld === "hall") {
+    window.setTimeout(() => {
+      const boothCount = document.querySelector("#world")?.dataset.boothCount;
+      if (boothCount === "0") {
+        onboardFab.classList.add("is-suggested");
+        notifyToast("集市还空着——用一张合照让大家一起入场");
+      }
+    }, 5000);
+  }
 
   const groupFab = document.createElement("button");
   groupFab.className = "record-fab group-fab";
@@ -343,8 +399,9 @@ export function mountIntegrations({
   if (currentWorld === "field") {
     fab.hidden = true;
     groupFab.hidden = true;
+    onboardFab.hidden = true;
   }
-  for (const button of [fab, navFab, groupFab]) {
+  for (const button of [fab, navFab, onboardFab, groupFab]) {
     createIcons({ icons: INTEGRATIONS_ICONS, root: button, attrs: { "stroke-width": 1.8 } });
   }
 
@@ -354,7 +411,9 @@ export function mountIntegrations({
     panel,
     searchBar,
     groupPlay,
+    onboardingFlow,
     openPipeline: () => flow.open(),
+    openOnboarding: () => onboardingFlow.open(),
     refreshPackages,
   };
 }

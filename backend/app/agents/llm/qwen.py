@@ -28,8 +28,9 @@ class QwenProvider(LLMProvider):
     name = "qwen"
 
     def analyze_image(self, image_bytes: bytes, prompt: str,
-                      mime: str = "image/jpeg") -> LLMResponse:
-        """OpenAI 兼容多模态消息：data URL 内联图片 + 文本提示。"""
+                      mime: str = "image/jpeg", model: str | None = None) -> LLMResponse:
+        """OpenAI 兼容多模态消息：data URL 内联图片 + 文本提示。
+        model：单次覆盖默认模型（人脸定位实测 qwen-vl-max 显著优于 vl-plus）。"""
         if not self.config.get("configured"):
             return LLMResponse(text=f"[mock:{self.model}] 未配置 vision API，返回占位分析",
                                model=self.model, mock=True)
@@ -43,7 +44,7 @@ class QwenProvider(LLMProvider):
                 ],
             }
         ]
-        return self.chat(messages, response_format={"type": "json_object"})
+        return self.chat(messages, response_format={"type": "json_object"}, model=model)
 
     def face_embedding(self, image_path: str) -> list:
         # TODO(算法待打磨)：接入真实人脸 embedding 端点

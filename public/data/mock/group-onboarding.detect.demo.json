@@ -1,0 +1,37 @@
+{
+  "schema": "meetmind.group-detection.v1",
+  "group_id": "group-demo-0001",
+  "status": "ready",
+  "source_ref": "mock/group-photo",
+  "detector": "mock",
+  "detected_count": 5,
+  "expected_count": 0,
+  "faces": [
+    {
+      "face_id": "face_01",
+      "bbox": { "x": 0.04, "y": 0.3, "width": 0.13, "height": 0.19 },
+      "face_ref": "portraits/lin-che.png"
+    },
+    {
+      "face_id": "face_02",
+      "bbox": { "x": 0.25, "y": 0.32, "width": 0.11, "height": 0.16 },
+      "face_ref": "portraits/chen-mo.png"
+    },
+    {
+      "face_id": "face_03",
+      "bbox": { "x": 0.44, "y": 0.33, "width": 0.1, "height": 0.15 },
+      "face_ref": "portraits/zhou-ning.png"
+    },
+    {
+      "face_id": "face_04",
+      "bbox": { "x": 0.62, "y": 0.33, "width": 0.11, "height": 0.17 },
+      "face_ref": "portraits/xu-an.png"
+    },
+    {
+      "face_id": "face_05",
+      "bbox": { "x": 0.82, "y": 0.32, "width": 0.13, "height": 0.2 },
+      "face_ref": "portraits/su-he.png"
+    }
+  ],
+  "issues": []
+}
