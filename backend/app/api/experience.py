@@ -5,6 +5,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+from app.agents.llm import get_provider
 from app.fields import ensure_field
 from app.packages.store import PackageNotFound
 from app.world.event_store import runtime_event_entry
@@ -47,7 +48,8 @@ def world_events(request: Request, limit: int = Query(20, ge=1, le=100)):
 
 @router.get("/world/brief")
 def world_brief(request: Request):
-    # 晨报 = 持久化用户互动事件 + 各世界 runtime 滚动缓冲里的 agent 自主事件
+    # 晨报 = 持久化用户互动事件 + 各世界 runtime 滚动缓冲里的 agent 自主事件；
+    # chat provider 可用时 headline/summary 经 LLM 润色（按分钟缓存），失败回退模板
     runtime_events = []
     for world_name in ("world", "hall"):
         service = getattr(request.app.state, world_name, None)
@@ -58,7 +60,9 @@ def world_brief(request: Request):
             entry = runtime_event_entry(event, world_name)
             if entry is not None:
                 runtime_events.append(entry)
-    return request.app.state.world_events.morning_brief(runtime_events)
+    return request.app.state.world_events.morning_brief(
+        runtime_events, chat_provider=get_provider("chat"),
+    )
 
 
 @router.post("/world/interactions")

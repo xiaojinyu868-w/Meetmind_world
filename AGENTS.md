@@ -19,7 +19,7 @@ EchoWorld Three.js 关系世界原型（包名 `echoworld-lowpoly-walk`）：包
 - 前端为静态站点（Vite 构建）；世界动态由 `backend/`（FastAPI）的世界快照驱动，LiveWorld 轮询 `/api/v0/world/snapshot`，后端不可用时自动降级本地 mock/内置快照（见"数据流"节）。
 - UI 语言为简体中文（`index.html` 为 `lang="zh-CN"`），文档与界面文案使用中文。
 - 场景：1 个玩家 + 6 个占位人物。人物形象方向（2026-08-03，PRD P-6）为 MC 体素 + AI 生成图片贴图；当前启用 voxel 方案（固定体素身体 + 照片特征贴图），无脸 GLB（`character.faceless-prototype.v1`）仅作历史占位；暂无骨骼动画，移动/入座为刚性模型的轻量表现。
-- 中央六人圆桌只接受用户发起的会议邀请，普通 Agent 调度不会占用它。
+- 中央六人圆桌承载两类会议：后端 runtime 自动调度（周期性）与用户发起（2026-08-04 起为真实 LLM 会议对话，`POST /api/v0/agents/meeting`，agent-talk 带 meeting_id 回流前端会议线程；非 live 模式保留本地轮播台词演示）。
 
 ## 技术栈
 
@@ -70,12 +70,14 @@ src/runtime/
   RelationshipFieldSystem.js  `echo-field.v1` 关系场域程序化地形、实体、热点与动画
   WorldModuleRegistry.js    `echo-world-modules.v1` 挂载契约加载和严格校验
   WorldBroadcastSystem.js   咖啡厅 3D 播报屏与 DOM 晨报摘要
-  mock/MockApi.js           API v0 契约客户端（IF-1~IF-5），`?api=live` 切真实后端
+  mock/MockApi.js           API v0 契约客户端（IF-1~IF-6 含会议端点），`?api=live` 切真实后端
 src/bootstrap/
   integrations.js           统一集成层：MockApi → 各 UI 模块的 api 适配（getPackages 缓存 + confirm 失效）、
                             挂载 PipelineFlow/PackagePanel/SearchBar、「记录相遇」入口按钮、模块联动
 src/ui/
   CafeShell.js              当前使用的 UI 壳：intro -> cafe -> map 流程、人物侧栏、圆桌会议 UI
+                            （live 模式会议线程消费快照 agent-talk[meeting_id]，玩家发言 POST 后端；
+                            旧的 #roundtable-prompt 悬浮入口已退役，圆桌统一走 SceneInteraction 热点）
   SceneInteraction.js       统一 E/F 与触屏情境菜单（摊位/桌位/吧台/圆桌/场域）
   RelationshipGraph.js      关系 Map：7 个节点 + 12 条边的 SVG/DOM 渲染
   pipeline/PipelineFlow.js  相遇「录入 → 处理 → 确认」三屏流程（IF-1/2/3，自带 pipeline.css）

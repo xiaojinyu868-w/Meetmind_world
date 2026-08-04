@@ -251,11 +251,13 @@ class WorldService:
         text = event.get("text")
         if speaker is None or listener is None or not isinstance(text, str) or not text.strip():
             return
-        self._record_event(
-            {"type": "agent-talk", "agent_id": event["agent_id"],
-             "to_agent_id": event["to_agent_id"], "text": text.strip()[:200],
-             "tick": self.tick}
-        )
+        record = {"type": "agent-talk", "agent_id": event["agent_id"],
+                  "to_agent_id": event["to_agent_id"], "text": text.strip()[:200],
+                  "tick": self.tick}
+        if event.get("meeting_id"):
+            # 会议台词归属标记：前端据此把发言归入圆桌会议线程
+            record["meeting_id"] = str(event["meeting_id"])
+        self._record_event(record)
 
     def _on_meeting_start(self, event: dict) -> None:
         """发起圆桌会议：参与者按占用分配入座圆桌锚点（6 座不重复，
@@ -287,11 +289,13 @@ class WorldService:
             return
         self.current_meeting = {
             "id": meeting_id, "participants": participants, "started_tick": self.tick,
+            "topic": str(event["topic"]).strip() if event.get("topic") else None,
         }
-        self._record_event(
-            {"type": "meeting-started", "meeting_id": meeting_id,
-             "participants": participants, "tick": self.tick}
-        )
+        record = {"type": "meeting-started", "meeting_id": meeting_id,
+                  "participants": participants, "tick": self.tick}
+        if self.current_meeting["topic"]:
+            record["topic"] = self.current_meeting["topic"]
+        self._record_event(record)
 
     def _on_meeting_end(self, event: dict) -> None:
         """结束会议：参与者散场（保持入座，状态回 seated）。"""
@@ -335,7 +339,8 @@ class WorldService:
         # 进行中的圆桌会议（附加信息，校验器对额外字段宽容）
         snapshot["meeting"] = (
             {"id": self.current_meeting["id"],
-             "participants": list(self.current_meeting["participants"])}
+             "participants": list(self.current_meeting["participants"]),
+             "topic": self.current_meeting.get("topic")}
             if self.current_meeting else None
         )
         return snapshot

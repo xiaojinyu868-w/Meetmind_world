@@ -28,6 +28,7 @@ import {
   sceneVariantFromLocation,
 } from "./runtime/SceneVariants.js";
 import { adaptSnapshot, normalizeEvent } from "./runtime/SnapshotAdapter.js";
+import { API_MODE } from "./runtime/mock/MockApi.js";
 import { slideStepAroundBlockers } from "./runtime/WalkSlide.js";
 import {
   CAFE_WORLD,
@@ -164,6 +165,10 @@ const onPersonSelected =
         if (personId) integrations.panel.openPerson(personId);
       };
 const liveEnabled = runtimeOptions.live !== false && !isFieldWorld;
+// 用户发起的圆桌会议由真实后端承载（IF-6）：仅 ?api=live 且 live 快照开启时；
+// 其余（静态 mock / 注入 api）保持本地轮播台词的演示行为
+const meetingBackendLive = liveEnabled && API_MODE === "live" &&
+  typeof api.startMeeting === "function" && typeof api.postMeetingMessage === "function";
 const snapshotPollMs =
   Number.isFinite(runtimeOptions.snapshotPollMs) && runtimeOptions.snapshotPollMs >= 250
     ? runtimeOptions.snapshotPollMs
@@ -252,6 +257,7 @@ const groupPresenceOverrides = new Map();
 const liveBubbles = new Map();
 const liveFacing = new THREE.Vector3();
 let liveMeetingSeatIndices = [];
+let liveMeetingId = null;
 let liveWorld = null;
 let liveWorldTick = null;
 let boothSystem = null;
@@ -294,6 +300,8 @@ const appShell = createCafeShell({
   onLocatePerson: (person) => selectWorldPerson(person.id),
   onMeetingStart: startMeeting,
   onMeetingEnd: endMeeting,
+  onMeetingMessage: (text) => api.postMeetingMessage(text),
+  meetingLive: meetingBackendLive,
   resolveMediaUrl,
   world: activeWorld.id,
   fieldPerson: isFieldWorld ? fieldTargetPerson : null,
@@ -612,12 +620,34 @@ function updateSelectionMarker() {
 }
 
 
-async function startMeeting(personIds) {
+async function startMeeting(personIds, topic = null) {
   if (!worldReady || meetingMode) return [];
   leavePlayerSeat();
   let accepted = [];
-  if (liveEnabled) {
-    // live 模式：不走 NpcAgentSystem 本地调度，改为快照驱动层上的会议覆盖目标
+  if (meetingBackendLive) {
+    // 真实会议（IF-6）：后端入座圆桌 + 按 tick 产出 LLM 会议对话；
+    // 409（已有会议/参与者在会上）抛错，由 CafeShell 把 detail 提示给用户
+    const requested = [...new Set(personIds)]
+      .filter((personId) => npcSystem.getEntity(personId))
+      .slice(0, 5);
+    const meeting = await api.startMeeting(requested, topic);
+    accepted = Array.isArray(meeting.participants) && meeting.participants.length
+      ? meeting.participants
+      : requested;
+    liveMeetingId = meeting.meeting_id ?? null;
+    // 不做本地座位覆盖：与会者由快照驱动入座圆桌（服务端已Teleport到圆桌锚点）；
+    // 只为玩家保留 0 号座位，防止快照适配把 NPC 排进玩家的位置
+    for (const personId of accepted) {
+      appShell.updateAgentState({
+        personId,
+        status: "joining-meeting",
+        tableId: CAFE_LAYOUT.roundtable.id,
+        tableLabel: CAFE_LAYOUT.roundtable.label,
+        meeting: true,
+      });
+    }
+  } else if (liveEnabled) {
+    // live 快照但未接真实后端（静态演示）：本地覆盖目标，台词走本地轮播
     accepted = [...new Set(personIds)]
       .filter((personId) => npcSystem.getEntity(personId))
       .slice(0, 5);
@@ -647,7 +677,9 @@ async function startMeeting(personIds) {
     accepted = npcSystem.startMeeting(personIds);
   }
   if (accepted.length === 0) return [];
-  liveMeetingSeatIndices = [0, ...accepted.map((_, index) => index + 1)];
+  liveMeetingSeatIndices = meetingBackendLive
+    ? [0]
+    : [0, ...accepted.map((_, index) => index + 1)];
   meetingMode = true;
   const playerSeat = CAFE_LAYOUT.roundtable.seats[0];
   actorAt(playerEntity, playerSeat.x, playerSeat.z, playerSeat.yaw, SEATED_ROOT_Y);
@@ -669,11 +701,8 @@ async function startMeeting(personIds) {
 }
 
 
-async function endMeeting() {
-  if (!worldReady) return;
-  const participants = canvas.dataset.meetingInvited
-    ? canvas.dataset.meetingInvited.split(",").filter(Boolean)
-    : [];
+// 会议本地状态的统一拆除（玩家离席/后端散场共用）：人物起身、覆盖与标志复位
+function teardownMeetingLocalState() {
   meetingMode = false;
   player.scale.set(1, 1, 1);
   playerMarker.visible = experienceMode === "cafe";
@@ -682,14 +711,36 @@ async function endMeeting() {
   playerGroundY = playerEntity.baseY;
   updatePlayerMarker();
   currentHeading.set(0, 0, -1);
-  if (liveEnabled) {
-    liveMeetingOverrides.clear();
-  } else {
-    npcSystem.endMeeting();
-  }
+  liveMeetingOverrides.clear();
   liveMeetingSeatIndices = [];
+  liveMeetingId = null;
   canvas.dataset.meetingActive = "false";
   canvas.dataset.meetingInvited = "";
+}
+
+
+// 后端会议自然散场（meeting-ended 事件到达）：本地离席，会议 sheet 定格为"会议结束"
+function finishLiveMeeting() {
+  if (!meetingMode) return;
+  teardownMeetingLocalState();
+  appShell.meetingEnded();
+}
+
+
+async function endMeeting() {
+  if (!worldReady) return;
+  const participants = canvas.dataset.meetingInvited
+    ? canvas.dataset.meetingInvited.split(",").filter(Boolean)
+    : [];
+  teardownMeetingLocalState();
+  if (meetingBackendLive) {
+    // 真实会议按自己的节奏在世界里散场（runtime 倒数 + meeting-ended 事件）；
+    // 玩家提前离席不额外写"会议结束"事件，避免晨报出现假象
+    return;
+  }
+  if (!liveEnabled) {
+    npcSystem.endMeeting();
+  }
   await recordWorldEvent(
     "meeting-ended",
     participants.length
@@ -1085,6 +1136,7 @@ async function handleSceneInteraction(hotspot, actionId) {
   }
   if (actionId === "open-meeting") {
     leavePlayerSeat();
+    sceneInteraction.close();  // UI 仲裁：会议 sheet 打开前先收掉场景 sheet
     appShell.openMeeting(pendingSceneInviteId ? [pendingSceneInviteId] : []);
     return { close: true };
   }
@@ -1333,6 +1385,10 @@ function handleLiveEvent(rawEvent) {
   if (!event) return;
   if (event.type === "agent-talk") {
     if (!event.agentId || !event.text) return;
+    // 本会台词（agent-talk 带 meeting_id）进会议线程；世界气泡照常展示
+    if (meetingMode && liveMeetingId && event.meetingId === liveMeetingId) {
+      appShell.ingestMeetingMessage({ personId: event.agentId, text: event.text });
+    }
     showLiveTalk(event.agentId, event.text);
     pushLiveToast(`${nameOf(event.agentId)} 和 ${nameOf(event.toAgentId)} 聊了起来`);
     return;
@@ -1343,6 +1399,9 @@ function handleLiveEvent(rawEvent) {
     return;
   }
   if (event.type === "meeting-ended") {
+    if (liveMeetingId && event.meetingId === liveMeetingId) {
+      finishLiveMeeting();  // 自己发起的会议散场：玩家离席，线程定格"会议结束"
+    }
     pushLiveToast("圆桌会议结束，大家回到各自的座位", { level: "meeting" });
   }
 }
@@ -1771,11 +1830,13 @@ function updateSpeechPositions() {
 
 
 function updateRoundtablePrompt() {
+  // 旧的 #roundtable-prompt 悬浮入口已退役（由场景热点 cafe-roundtable 的
+  // E/F 情境菜单完全取代，修复双重提示/面板重叠）；这里只维护 dataset 标志位，
+  // 供诊断与验收脚本读取
   if (!isCafeWorld) {
     // 集市与关系场域没有圆桌会议
     if (roundtableNearby) {
       roundtableNearby = false;
-      appShell.setRoundtableNearby(false);
       canvas.dataset.roundtableNearby = "false";
     }
     return;
@@ -1784,8 +1845,9 @@ function updateRoundtablePrompt() {
     player.position.x - CAFE_LAYOUT.roundtable.center.x,
     player.position.z - CAFE_LAYOUT.roundtable.center.z,
   );
-  roundtableNearby = experienceMode === "cafe" && !meetingMode && distance <= CAFE_LAYOUT.roundtable.interactionRadius;
-  appShell.setRoundtableNearby(roundtableNearby);
+  roundtableNearby = experienceMode === "cafe" && !meetingMode
+    && !appShell.isMeetingSheetOpen
+    && distance <= CAFE_LAYOUT.roundtable.interactionRadius;
   canvas.dataset.roundtableNearby = String(roundtableNearby);
 }
 
@@ -1946,6 +2008,21 @@ window.addEventListener("keydown", (event) => {
   if (experienceMode === "cafe" && sceneInteraction.handleKey(event)) {
     event.preventDefault();
     return;
+  }
+  if (event.code === "Escape" && !event.repeat && !event.target.closest?.("input, textarea")) {
+    // UI 仲裁：ESC 一次只关最顶层一层（场景 sheet → 会议 sheet → 起身）；
+    // 资料包面板有自己的 ESC 处理（PackagePanel 内），这里不重复关
+    if (integrations.panel?.isOpen) return;
+    if (sceneInteraction.isOpen) {
+      sceneInteraction.close();
+      event.preventDefault();
+      return;
+    }
+    if (appShell.isMeetingSheetOpen) {
+      void appShell.requestCloseMeeting();
+      event.preventDefault();
+      return;
+    }
   }
   if (event.code === "Escape" && playerSeatedAt && !event.target.closest?.("input, textarea")) {
     leavePlayerSeat();

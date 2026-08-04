@@ -19,7 +19,14 @@ import logging
 import math
 import random
 
-from app.agents.dialogue import build_pair_context, llm_dialogue, template_dialogue
+from app.agents.dialogue import (
+    build_meeting_context,
+    build_pair_context,
+    llm_dialogue,
+    llm_meeting_turn,
+    template_dialogue,
+    template_meeting_turn,
+)
 from app.agents.skills import load_skill
 from app.agents.utils.jsonish import extract_json
 from app.harness.permissions.guard import DEFAULT_GUARD
@@ -36,6 +43,9 @@ WORLD_BOUND = 6.0          # 咖啡厅边界（与前端 CafeLayout 同一量级
 MEETING_INTERVAL_TICKS = 20   # 两场圆桌会议的最小间隔
 MEETING_DURATION_TICKS = 6    # 一场会议持续的 tick 数
 MEETING_START_PROBABILITY = 0.5  # 间隔满足后每 tick 发起会议的概率
+
+USER_MEETING_DURATION_TICKS = 8   # 用户发起会议的持续 tick 数（心跳 15s ≈ 2 分钟）
+MEETING_TRANSCRIPT_KEEP = 8       # 注入 prompt 的会议发言记录条数上限
 
 
 class EventBus:
@@ -64,7 +74,9 @@ class AgentRuntime:
         self._guard = guard or DEFAULT_GUARD
         self._last_talk_tick: dict = {}      # agent_id -> 最近交谈 tick
         self._last_meeting_end = -MEETING_INTERVAL_TICKS
-        self._meeting: dict | None = None    # runtime 侧会议记账 {id, participants, ticks_left}
+        # runtime 侧会议记账：{id, participants, ticks_left}；
+        # 用户发起会议额外带 {initiator: "user", topic, transcript, player_message}
+        self._meeting: dict | None = None
 
     # ---------- 主循环 ----------
 
@@ -81,13 +93,75 @@ class AgentRuntime:
 
     # ---------- 圆桌会议调度（skills/meeting.md） ----------
 
+    @property
+    def meeting_in_progress(self) -> bool:
+        """runtime 记账中是否有进行中的会议（自动或用户发起）。"""
+        return self._meeting is not None
+
+    def start_user_meeting(self, participant_ids: list, *, topic: str | None = None,
+                           tick: int = 0) -> dict | None:
+        """用户发起的圆桌会议（IF-6）：发 meeting-start（带 topic），随后每个世界
+        tick 由 dialogue 机制产出围绕主题/发起人发言的真实对话；进行期间自动
+        调度器被抑制（_tick_meeting 早退）。已有会议进行中返回 None（调用方 409）。
+
+        注意：发事件不代表世界一定入座成功（圆桌可能坐满）；调用方需在世界侧
+        确认 current_meeting 已建立，否则用 cancel_meeting 回滚本记账。
+        """
+        if self._meeting is not None:
+            return None
+        participants = [str(pid) for pid in participant_ids]
+        topic = (topic or "").strip() or None
+        meeting_id = f"user_meeting_{tick}"
+        event = {"type": "meeting-start", "meeting_id": meeting_id,
+                 "participants": participants}
+        if topic:
+            event["topic"] = topic
+        self._emit(event)
+        self._meeting = {
+            "id": meeting_id, "participants": participants,
+            "ticks_left": USER_MEETING_DURATION_TICKS,
+            "initiator": "user", "topic": topic,
+            "transcript": [],       # [(显示名, 文本)]，含发起人发言
+            "player_message": None, # 发起人的最新发言：下一轮 Agent 发言必须回应
+        }
+        return {
+            "meeting_id": meeting_id,
+            "participants": participants,
+            "topic": topic,
+            "duration_ticks": USER_MEETING_DURATION_TICKS,
+        }
+
+    def cancel_meeting(self, meeting_id: str) -> bool:
+        """回滚 runtime 侧会议记账（世界侧入座失败时由调用方触发，不发事件）。"""
+        if self._meeting is None or self._meeting["id"] != meeting_id:
+            return False
+        self._meeting = None
+        return True
+
+    def post_player_message(self, text: str) -> dict | None:
+        """玩家（会议发起人）向进行中的用户会议发言：存为当前讨论点，
+        下一轮 Agent 发言的 prompt 必须带上并直接回应；无用户会议进行中返回 None。
+
+        发言只活在会议记账里（ephemeral world eventing），不写入任何 Package。
+        """
+        if self._meeting is None or self._meeting.get("initiator") != "user":
+            return None
+        message = str(text).strip()[:200]
+        if not message:
+            return None
+        self._meeting["player_message"] = message
+        return {"meeting_id": self._meeting["id"], "accepted": True}
+
     def _tick_meeting(self, tick_no: int, agents: dict) -> bool:
         if self._meeting is not None:
             # 进行中：与会者轮流发言，倒数结束
             participants = [p for p in self._meeting["participants"] if p in agents]
-            if len(participants) >= 2:
+            if self._meeting.get("initiator") == "user":
+                self._tick_user_meeting(agents, participants)
+            elif len(participants) >= 2:
                 pair = self.rng.sample(participants, 2)
-                self._talk(tick_no, agents[pair[0]], agents[pair[1]])
+                self._talk(tick_no, agents[pair[0]], agents[pair[1]],
+                           meeting_id=self._meeting["id"])
             self._meeting["ticks_left"] -= 1
             if self._meeting["ticks_left"] <= 0:
                 self._emit({"type": "meeting-end", "meeting_id": self._meeting["id"]})
@@ -107,6 +181,45 @@ class AgentRuntime:
                              "ticks_left": MEETING_DURATION_TICKS}
             return True
         return False
+
+    # ---------- 用户发起的圆桌会议（IF-6：真实对话，围绕主题与发言人） ----------
+
+    def _tick_user_meeting(self, agents: dict, participants: list) -> None:
+        """用户会议的一轮：与会者围绕 topic + 发起人发言产出真实对话（dialogue
+        机制），agent-talk 事件带 meeting_id 供前端归到会议线程；玩家发言在
+        本轮 prompt 消费后转入 transcript（后续轮次仍可见）。"""
+        if len(participants) < 2:
+            return
+        meeting = self._meeting
+        round_index = USER_MEETING_DURATION_TICKS - meeting["ticks_left"]
+        context = build_meeting_context(
+            self._memory, participants,
+            topic=meeting.get("topic"),
+            transcript=meeting["transcript"],
+            player_message=meeting.get("player_message"),
+        )
+        # 发起人发言已进入本轮 prompt：无论 LLM 成败都消费掉，转入发言记录
+        if meeting.get("player_message"):
+            meeting["transcript"].append(("发起人（玩家）", meeting["player_message"]))
+            meeting["player_message"] = None
+        lines = None
+        if self._chat is not None and self._chat.config.get("configured"):
+            result = llm_meeting_turn(self._chat, context)
+            if result is not None:
+                lines = result["lines"]
+        if not lines:
+            lines = template_meeting_turn(context, round_index)
+        meeting["transcript"] = meeting["transcript"][-MEETING_TRANSCRIPT_KEEP:]
+        for speaker_id, text in lines:
+            if speaker_id not in participants:
+                continue  # 越权 speaker 一律丢弃
+            speaker = agents[speaker_id]
+            listener = agents[participants[(participants.index(speaker_id) + 1)
+                                           % len(participants)]]
+            self._emit({"type": "agent-talk", "agent_id": speaker_id,
+                        "to_agent_id": listener["id"], "text": text,
+                        "meeting_id": meeting["id"]})
+            meeting["transcript"].append((speaker.get("name") or speaker_id, text))
 
     # ---------- 咖啡厅日常（skills/cafe_daily.md） ----------
 
@@ -232,7 +345,8 @@ class AgentRuntime:
 
     # ---------- 对话生成（共同上下文驱动 + 信息量闸门，INTERACTION-DESIGN §3） ----------
 
-    def _talk(self, tick_no: int, agent: dict, target: dict) -> None:
+    def _talk(self, tick_no: int, agent: dict, target: dict,
+              meeting_id: str | None = None) -> None:
         last = max(self._last_talk_tick.get(agent["id"], -99),
                    self._last_talk_tick.get(target["id"], -99))
         if tick_no - last < TALK_COOLDOWN_TICKS:
@@ -246,8 +360,11 @@ class AgentRuntime:
         self._last_talk_tick[agent["id"]] = tick_no
         self._last_talk_tick[target["id"]] = tick_no
         for speaker_id, listener_id, text in lines:
-            self._emit({"type": "agent-talk", "agent_id": speaker_id,
-                        "to_agent_id": listener_id, "text": text})
+            event = {"type": "agent-talk", "agent_id": speaker_id,
+                     "to_agent_id": listener_id, "text": text}
+            if meeting_id:
+                event["meeting_id"] = meeting_id  # 前端据此把台词归到会议线程
+            self._emit(event)
         self._emit({"type": "agent-state", "agent_id": agent["id"], "state": "talking"})
         self._emit({"type": "agent-state", "agent_id": target["id"], "state": "talking"})
 
