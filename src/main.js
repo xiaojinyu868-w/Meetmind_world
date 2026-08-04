@@ -631,7 +631,8 @@ async function spawnCharacters() {
   const visiblePeople = isFieldWorld ? [fieldTargetPerson] : people;
   const entrySpawns = isFieldWorld
     ? [
-        FIELD_WORLD.playerSpawn,
+        // splat 场域：出生点落在高程图实测的可行走面上（无 splat 时用契约出生点）
+        fieldSplatWorld?.spawnHint ?? FIELD_WORLD.playerSpawn,
         relationshipField?.scene?.companion ?? { x: 0, z: -1.1, yaw: 0 },
       ]
     : allocateEntrySpawns(visiblePeople.length + 1);
@@ -3183,10 +3184,7 @@ async function boot() {
     });
     relationshipFieldSystem.applyAtmosphere(scene, { fog: !fieldSplatWorld });
     if (fieldSplatWorld) {
-      // 出生点落在实测可行走面上；互动实体/同伴底座射线贴地，贴不上的隐藏
-      if (fieldSplatWorld.spawnHint) {
-        worldPlayerSpawn = fieldSplatWorld.spawnHint;
-      }
+      // 互动实体/同伴底座射线贴地，贴不上的隐藏；出生点由 spawnHint 供 spawnCharacters 使用
       const groundedHotspots = [];
       for (const object of relationshipFieldSystem.root.children) {
         const isEntity = object.isGroup && object.userData?.fieldEntityId;
