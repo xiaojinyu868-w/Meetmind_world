@@ -70,6 +70,11 @@ export function normalizeEvent(rawEvent) {
             ? rawEvent.toAgentId
             : (typeof rawEvent.target_id === "string" ? rawEvent.target_id : null)),
     text: typeof rawEvent.text === "string" ? rawEvent.text : "",
+    meetingId:
+      typeof rawEvent.meeting_id === "string"
+        ? rawEvent.meeting_id
+        : (typeof rawEvent.meetingId === "string" ? rawEvent.meetingId : null),
+    topic: typeof rawEvent.topic === "string" ? rawEvent.topic : null,
     participants: Array.isArray(rawEvent.participants)
       ? rawEvent.participants.filter((id) => typeof id === "string")
       : [],

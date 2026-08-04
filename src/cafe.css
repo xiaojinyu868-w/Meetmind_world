@@ -397,7 +397,6 @@ svg {
 .cafe-hud-top,
 .world-inspector,
 .meeting-sheet,
-.roundtable-prompt,
 .cafe-bottom-status {
   pointer-events: auto;
 }
@@ -520,34 +519,6 @@ svg {
   font-size: 8px;
 }
 
-.roundtable-prompt {
-  position: absolute;
-  z-index: 13;
-  bottom: max(24px, env(safe-area-inset-bottom));
-  left: 50%;
-  display: grid;
-  min-width: 370px;
-  min-height: 68px;
-  grid-template-columns: 46px 1fr auto;
-  gap: 12px;
-  align-items: center;
-  padding: 9px 10px;
-  border: 1px solid rgb(255 255 255 / 60%);
-  border-radius: 24px;
-  background: var(--glass-strong);
-  box-shadow: var(--shadow);
-  transform: translateX(-50%);
-  transition: opacity 200ms ease, transform 200ms ease, visibility 200ms ease;
-  backdrop-filter: blur(24px) saturate(1.15);
-}
-
-.roundtable-prompt[aria-hidden="true"] {
-  visibility: hidden;
-  opacity: 0;
-  pointer-events: none;
-  transform: translate(-50%, 18px);
-}
-
 .roundtable-symbol,
 .meeting-header-icon {
   display: grid;
@@ -562,32 +533,6 @@ svg {
 .roundtable-symbol svg,
 .meeting-header-icon svg {
   width: 21px;
-}
-
-.roundtable-prompt > span:nth-child(2) {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.roundtable-prompt small {
-  color: var(--ink-muted);
-  font-size: 9px;
-  font-weight: 700;
-}
-
-.roundtable-prompt strong {
-  font-size: 13px;
-}
-
-.roundtable-prompt > button {
-  min-width: 68px;
-  height: 44px;
-  border-radius: 16px;
-  color: #fffdf4;
-  background: var(--green);
-  font-size: 11px;
-  font-weight: 800;
 }
 
 .world-speech-layer {
@@ -1523,6 +1468,38 @@ svg {
   padding: 4px 14px 8px;
 }
 
+.meeting-topic-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 2px 16px 10px;
+}
+
+.meeting-topic-field > span {
+  color: var(--ink-muted);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.meeting-topic-field > span small {
+  font-weight: 500;
+}
+
+.meeting-topic-field > input {
+  height: 40px;
+  padding: 0 13px;
+  border: 1px solid rgb(31 106 89 / 18%);
+  border-radius: 13px;
+  background: rgb(255 255 255 / 72%);
+  color: var(--ink);
+  font-size: 11px;
+  outline: none;
+}
+
+.meeting-topic-field > input:focus {
+  border-color: rgb(31 106 89 / 45%);
+}
+
 .meeting-person-row {
   display: grid;
   width: 100%;
@@ -1691,6 +1668,21 @@ svg {
   border-radius: 15px 15px 5px 15px;
   color: #fffdf4;
   background: var(--green);
+}
+
+.meeting-message.is-system {
+  display: block;
+  max-width: 100%;
+  text-align: center;
+}
+
+.meeting-message.is-system p {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 12px;
+  background: rgb(31 106 89 / 6%);
+  color: var(--ink-muted);
+  font-size: 9px;
 }
 
 .meeting-topics {
@@ -2311,14 +2303,6 @@ body:not([data-view="cafe"]) .touch-stick {
 
   .cafe-bottom-status {
     display: none;
-  }
-
-  .roundtable-prompt {
-    bottom: max(14px, env(safe-area-inset-bottom));
-    min-width: 0;
-    width: calc(100% - 24px);
-    grid-template-columns: 44px 1fr auto;
-    border-radius: 22px;
   }
 
   .world-inspector,

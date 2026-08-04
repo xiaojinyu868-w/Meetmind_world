@@ -125,6 +125,124 @@ def llm_dialogue(chat_provider, pair_context: dict, max_lines: int = 2) -> dict 
     return {"lines": lines, "informative": informative}
 
 
+def build_meeting_context(memory, participant_ids: list, *, topic: str | None = None,
+                          transcript: list | None = None,
+                          player_message: str | None = None) -> dict:
+    """组装圆桌会议上下文（prompt 注入用）：与会者授权视图（精简）+ 两两关系备注
+    + 会议主题 + 最近发言记录 + 发起人（玩家）刚说的话。
+
+    transcript 条目为 (显示名, 文本) 元组；player_message 是会议发起人的最新发言，
+    下一轮 Agent 发言必须直接回应它（由 llm_meeting_turn 的 prompt 硬约束保证）。
+    """
+    views = []
+    for person_id in participant_ids:
+        view = memory.authorized_agent_view(person_id) if memory else None
+        views.append(view or {"person_id": person_id, "name": person_id, "tags": []})
+    relations = []
+    for index, view_a in enumerate(views):
+        for view_b in views[index + 1:]:
+            relation = relation_between(memory, view_a, view_b)
+            if relation:
+                relations.append({
+                    "between": [view_a.get("name") or view_a.get("person_id"),
+                                view_b.get("name") or view_b.get("person_id")],
+                    "note": relation["note"],
+                    "keywords": relation["keywords"],
+                })
+    return {
+        "topic": topic,
+        "participants": [
+            {
+                "id": str(view.get("person_id") or person_id),
+                "name": view.get("name") or person_id,
+                "tags": sorted(tag_set(view))[:8],
+            }
+            for view, person_id in zip(views, participant_ids)
+        ],
+        "relations": relations,
+        "transcript": [
+            {"speaker": str(speaker), "text": str(text)}
+            for speaker, text in list(transcript or [])[-8:]
+        ],
+        "player_message": player_message,
+    }
+
+
+def llm_meeting_turn(chat_provider, meeting_context: dict, max_lines: int = 2) -> dict | None:
+    """调 chat provider 生成圆桌会议的一轮发言（用户发起会议专用）。
+
+    返回 {"lines": [(speaker_id, text)]}；speaker 必须是与会者 id，
+    未配置/mock/解析失败/无有效行返回 None（调用方走模板兜底）。
+    """
+    participant_ids = [p["id"] for p in meeting_context.get("participants", [])]
+    messages = [
+        {"role": "system", "content": (
+            "你在为一场圆桌会议写一轮发言。规则："
+            "由 participants 中的 1-2 人发言（speaker 填参与者的 id），每人 1-2 句简短中文；"
+            "发言围绕 topic（会议主题）展开，结合参与者的授权标签与彼此的关系备注，"
+            "给出具体、可落地的想法或真实的相关经历，不空谈、不客套；"
+            "发言以第一人称说自己的事，提到别人时用对方的名字，"
+            "不要混淆自己和别人，更不要用第三人称称呼自己；"
+            "有 transcript 时接续讨论：必须提出新信息/新角度，"
+            "严禁复述或变相重复 transcript 里已经出现过的话；"
+            "若 player_message 非空，本轮必须有一人直接回应会议发起人的这句话"
+            "（先回应，再展开）；"
+            "只能使用授权上下文里的信息，禁止编造与会者的未授权信息。"
+            "只输出 JSON：{\"lines\": [{\"speaker\": \"<participant id>\", \"text\": \"...\"}]}。"
+        )},
+        {"role": "user", "content": "会议上下文（≥ agent-usable）："
+         + json.dumps(meeting_context, ensure_ascii=False)},
+    ]
+    response = chat_provider.chat(messages, response_format={"type": "json_object"})
+    if response.mock:
+        return None
+    data = extract_json(response.text)
+    if not data or not isinstance(data.get("lines"), list):
+        logger.warning("会议发言解析失败，回退模板：%.80s", response.text)
+        return None
+    lines = []
+    for item in data["lines"][:max_lines]:
+        if not isinstance(item, dict):
+            continue
+        speaker = item.get("speaker")
+        text = str(item.get("text") or "").strip()
+        if speaker in participant_ids and text:
+            lines.append((speaker, text[:160]))
+    if not lines:
+        logger.warning("会议发言无有效行（speaker 越权或空文本），回退模板")
+        return None
+    return {"lines": lines}
+
+
+def template_meeting_turn(meeting_context: dict, round_index: int = 0) -> list:
+    """会议发言模板兜底（LLM 不可用时会议仍然推进）：与会者轮流发言，
+    优先回应发起人发言，其次围绕主题，最后接续彼此授权标签。"""
+    participants = meeting_context.get("participants") or []
+    if len(participants) < 2:
+        return []
+    speaker = participants[round_index % len(participants)]
+    listener = participants[(round_index + 1) % len(participants)]
+    player_message = (meeting_context.get("player_message") or "").strip()
+    topic = (meeting_context.get("topic") or "").strip()
+    if player_message:
+        return [(
+            speaker["id"],
+            f"回应一下发起人说的「{player_message[:30]}」：我觉得可以先小成本试一次，"
+            f"{listener['name']}你觉得呢？",
+        )]
+    if topic:
+        tags = speaker.get("tags") or []
+        anchor = f"我这边能搭上的是「{tags[0]}」这块" if tags else "我先抛个砖"
+        return [
+            (speaker["id"], f"围绕「{topic[:30]}」，{anchor}。"),
+            (listener["id"], "这个方向可以，我们再往具体走一步。"),
+        ]
+    tags = listener.get("tags") or []
+    if tags:
+        return [(speaker["id"], f"{listener['name']}，你最近在「{tags[0]}」上有什么新进展吗？")]
+    return [(speaker["id"], f"{listener['name']}，最近怎么样？有什么想一起做的事吗？")]
+
+
 def template_dialogue(pair_context: dict, id_a: str, id_b: str) -> list:
     """模板兜底（视为 informative=true）：带关系备注的变体，只用授权字段。
 

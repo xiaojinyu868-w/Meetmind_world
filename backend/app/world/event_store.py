@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app.config import get_data_dir
+from app.world.brief import polish_brief
 
 EVENT_SCHEMA = "echo-world-event.v1"
 
@@ -30,7 +31,9 @@ def runtime_event_entry(event: dict, source: str) -> dict | None:
         person_ids = [event.get("agent_id"), event.get("to_agent_id")]
     elif event_type == "meeting-started":
         person_ids = [str(pid) for pid in (event.get("participants") or [])]
-        summary = f"{len(person_ids)} 人的会议开始"
+        topic = str(event.get("topic") or "").strip()
+        summary = (f"{len(person_ids)} 人围桌讨论「{topic}」" if topic
+                   else f"{len(person_ids)} 人的会议开始")
     else:
         person_ids = [str(pid) for pid in (event.get("participants") or [])]
         summary = "一场会议结束，大家回到各自的位置"
@@ -79,6 +82,9 @@ class WorldEventStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.touch(exist_ok=True)
         self._lock = threading.Lock()
+        # 晨报 LLM 润色缓存：{"key": (event_count, 分钟级时间戳), "result": {...}}
+        # 避免前端轮询（秒级）每帧都打一次 LLM
+        self._brief_polish_cache: dict | None = None
 
     def append(self, event_type: str, summary: str, *, person_ids=(), source="world",
                payload: dict | None = None) -> dict:
@@ -116,11 +122,17 @@ class WorldEventStore:
                 break
         return events
 
-    def morning_brief(self, extra_events: list[dict] | None = None) -> dict:
+    def morning_brief(self, extra_events: list[dict] | None = None,
+                      chat_provider=None) -> dict:
         """今日播报：持久化世界事件（用户互动）优先占位，agent 自主事件
         （runtime 滚动缓冲，经 runtime_event_entry 归一后传入）补充剩余空位；
         event_id 跨源去重、各源内按 created_at 倒序、封顶 6 条。
-        用户真实的互动永远比 agent 闲聊更接近头条。"""
+        用户真实的互动永远比 agent 闲聊更接近头条。
+
+        chat_provider 可用时 headline/summary 经 LLM 润色（只引用真实事件，
+        不编造；按 (event_count, 分钟) 缓存避免轮询期重复调用）；
+        未配置/失败一律回退模板拼接。generated_by 标记文案来源（llm/template）。
+        """
         persisted = merge_brief_events(self.list_recent(6), limit=6)
         runtime = merge_brief_events(list(extra_events or ()), limit=6)
         seen = {event.get("event_id") for event in persisted}
@@ -132,6 +144,12 @@ class WorldEventStore:
         else:
             headline = "集市今天安静开门"
             summary = "还没有新事件。走近一个摊位，或邀请一位朋友到圆桌坐下。"
+        generated_by = "template"
+        if events and chat_provider is not None:
+            polished = self._cached_polish(chat_provider, events)
+            if polished is not None:
+                headline, summary = polished["headline"], polished["summary"]
+                generated_by = "llm"
         return {
             "schema": "echo-world-brief.v1",
             "date": datetime.now(timezone.utc).date().isoformat(),
@@ -139,4 +157,16 @@ class WorldEventStore:
             "summary": summary,
             "event_count": len(events),
             "events": events,
+            "generated_by": generated_by,
         }
+
+    def _cached_polish(self, chat_provider, events: list[dict]) -> dict | None:
+        """按 (event_count, 分钟) 缓存的晨报润色：同一分钟内事件数不变就直接
+        复用上次结果（含失败结果 None——失败这一分钟不再重试，下一分钟再试）。"""
+        minute_key = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M")
+        cache_key = (len(events), minute_key)
+        if self._brief_polish_cache and self._brief_polish_cache["key"] == cache_key:
+            return self._brief_polish_cache["result"]
+        result = polish_brief(chat_provider, events)
+        self._brief_polish_cache = {"key": cache_key, "result": result}
+        return result

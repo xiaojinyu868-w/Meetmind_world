@@ -428,6 +428,8 @@ export function createCafeShell({
   onLocatePerson = () => {},
   onMeetingStart = async () => {},
   onMeetingEnd = async () => {},
+  onMeetingMessage = async () => {},
+  meetingLive = false,
   resolveMediaUrl = (ref) => ref,
   world = "cafe",
   fieldPerson = null,
@@ -438,11 +440,12 @@ export function createCafeShell({
 }) {
   let currentView = "intro";
   let worldReady = false;
-  let roundtableNearby = false;
   let selectedWorldPerson = null;
   let selectedMapPerson = null;
   let meetingSheetOpen = false;
   let meetingActive = false;
+  let meetingEndedState = false;
+  let meetingTopic = null;
   let meetingCursor = 0;
   const invitedIds = new Set();
   const agentStates = new Map();
@@ -546,12 +549,6 @@ export function createCafeShell({
 
         <div id="world-speech-layer" class="world-speech-layer" aria-live="polite"></div>
 
-        <div id="roundtable-prompt" class="roundtable-prompt" aria-hidden="true">
-          <span class="roundtable-symbol">${icon("users")}</span>
-          <span><small>中央六人圆桌</small><strong>发起一次圆桌会议</strong></span>
-          <button type="button" data-action="open-meeting">开始</button>
-        </div>
-
         <aside id="world-inspector" class="world-inspector glass-panel" aria-label="人物资料" aria-hidden="true"></aside>
         <aside id="meeting-sheet" class="meeting-sheet glass-panel" aria-label="圆桌会议" aria-hidden="true"></aside>
 
@@ -578,7 +575,6 @@ export function createCafeShell({
   const graph = root.querySelector("#cafe-relationship-graph");
   const worldInspector = root.querySelector("#world-inspector");
   const mapInspector = root.querySelector("#map-inspector");
-  const roundtablePrompt = root.querySelector("#roundtable-prompt");
   const meetingSheet = root.querySelector("#meeting-sheet");
   const speechLayer = root.querySelector("#world-speech-layer");
   const toast = root.querySelector("#cafe-toast");
@@ -780,6 +776,11 @@ export function createCafeShell({
         <button class="glass-icon-button" type="button" data-action="close-meeting" title="关闭" aria-label="关闭圆桌会议">${icon("x")}</button>
       </header>
       ${renderRoundtableSeats()}
+      <label class="meeting-topic-field">
+        <span>议题 <small>可选，会成为大家讨论的中心</small></span>
+        <input name="meeting-topic" data-meeting-topic-input maxlength="80"
+          placeholder="例如：帮 TA 的摄影展想想宣传点子" value="${escapeHtml(meetingTopic ?? "")}" />
+      </label>
       <div class="meeting-invite-list">
         ${people.map((person) => {
           const selected = invitedIds.has(person.id);
@@ -800,6 +801,27 @@ export function createCafeShell({
     hydrateIcons(meetingSheet);
   }
 
+  function meetingMessageMarkup(message) {
+    if (message.system) {
+      return `<div class="meeting-message is-system"><p>${escapeHtml(message.text)}</p></div>`;
+    }
+    const person = message.personId === currentUser.id
+      ? currentUser
+      : people.find((candidate) => candidate.id === message.personId);
+    if (!person) return "";
+    return `<div class="meeting-message${message.personId === currentUser.id ? " is-me" : ""}">
+      ${avatarImg(person)}
+      <span><small>${person.displayName ?? person.name}</small><p>${escapeHtml(message.text)}</p></span>
+    </div>`;
+  }
+
+  function scrollMeetingThread() {
+    requestAnimationFrame(() => {
+      const thread = meetingSheet.querySelector("[data-meeting-thread]");
+      if (thread) thread.scrollTop = thread.scrollHeight;
+    });
+  }
+
   function renderMeetingActive() {
     const participants = people.filter((person) => invitedIds.has(person.id));
     meetingSheet.innerHTML = `
@@ -808,17 +830,11 @@ export function createCafeShell({
           ${avatarImg(currentUser)}
           ${participants.map((person) => avatarImg(person)).join("")}
         </div>
-        <div><small>${participants.length + 1} 人已入座</small><h2>圆桌会议进行中</h2></div>
+        <div><small>${participants.length + 1} 人已入座${meetingTopic ? ` · 议题：${escapeHtml(meetingTopic)}` : ""}</small><h2>圆桌会议进行中</h2></div>
         <button class="glass-icon-button" type="button" data-action="end-meeting" title="结束会议" aria-label="结束圆桌会议">${icon("x")}</button>
       </header>
       <div class="meeting-thread" data-meeting-thread>
-        ${meetingMessages.map((message) => {
-          const person = message.personId === currentUser.id ? currentUser : people.find((candidate) => candidate.id === message.personId);
-          return `<div class="meeting-message${message.personId === currentUser.id ? " is-me" : ""}">
-            ${avatarImg(person)}
-            <span><small>${person.displayName ?? person.name}</small><p>${escapeHtml(message.text)}</p></span>
-          </div>`;
-        }).join("")}
+        ${meetingMessages.map(meetingMessageMarkup).join("")}
       </div>
       <div class="meeting-topics">
         <button type="button" data-meeting-topic="最近有什么新变化？">最近的变化</button>
@@ -831,24 +847,80 @@ export function createCafeShell({
       </form>`;
     meetingSheet.setAttribute("aria-hidden", "false");
     hydrateIcons(meetingSheet);
-    requestAnimationFrame(() => {
-      const thread = meetingSheet.querySelector("[data-meeting-thread]");
-      if (thread) thread.scrollTop = thread.scrollHeight;
-    });
+    scrollMeetingThread();
+  }
+
+  function renderMeetingEnded() {
+    const participants = people.filter((person) => invitedIds.has(person.id));
+    meetingSheet.innerHTML = `
+      <header class="meeting-header">
+        <div class="meeting-party-faces">
+          ${avatarImg(currentUser)}
+          ${participants.map((person) => avatarImg(person)).join("")}
+        </div>
+        <div><small>${meetingTopic ? `议题：${escapeHtml(meetingTopic)}` : "圆桌会议"}</small><h2>会议结束</h2></div>
+        <button class="glass-icon-button" type="button" data-action="close-meeting" title="关闭" aria-label="关闭圆桌会议">${icon("x")}</button>
+      </header>
+      <div class="meeting-thread" data-meeting-thread>
+        ${meetingMessages.map(meetingMessageMarkup).join("")}
+        <div class="meeting-message is-system"><p>会议结束，大家回到了各自的位置。这次讨论已写入今日播报。</p></div>
+      </div>
+      <footer class="meeting-footer">
+        <span>感谢发起这场讨论</span>
+        <button type="button" data-action="close-meeting">收起会议记录</button>
+      </footer>`;
+    meetingSheet.setAttribute("aria-hidden", "false");
+    hydrateIcons(meetingSheet);
+    scrollMeetingThread();
   }
 
   function closeMeetingSheet() {
     meetingSheetOpen = false;
+    meetingEndedState = false;
     meetingSheet.innerHTML = "";
     meetingSheet.setAttribute("aria-hidden", "true");
     shell.classList.remove("has-meeting-sheet");
   }
 
+  // 结束/离开会议的统一出口：setup 阶段直接关 sheet；会议进行中走 onMeetingEnd
+  // （live 模式下后端会议继续在世界里跑完，玩家只是提前离席）
+  async function requestCloseMeeting() {
+    if (!meetingSheetOpen) return false;
+    if (meetingEndedState) {
+      closeMeetingSheet();
+      invitedIds.clear();
+      return true;
+    }
+    if (!meetingActive) {
+      closeMeetingSheet();
+      return true;
+    }
+    await onMeetingEnd();
+    meetingActive = false;
+    invitedIds.clear();
+    closeMeetingSheet();
+    showToast(meetingLive ? "你已离开圆桌，讨论会在世界里继续" : "圆桌会议已结束");
+    return true;
+  }
+
+  function pushMeetingMessage(message) {
+    meetingMessages.push(message);
+    if (meetingMessages.length > 80) meetingMessages.splice(0, meetingMessages.length - 80);
+  }
+
   function submitMeetingMessage(message) {
     const text = String(message).trim();
     if (!text || !meetingActive) return;
-    meetingMessages.push({ personId: currentUser.id, text });
+    pushMeetingMessage({ personId: currentUser.id, text });
     renderMeetingActive();
+    if (meetingLive) {
+      // live：发言 POST 给后端会议，作为当前讨论点；Agent 的回应从快照事件回流
+      Promise.resolve(onMeetingMessage(text)).catch((error) => {
+        console.warn("[EchoWorld] 会议发言未送达", error);
+        showToast("这句话没有传到圆桌上，请再试一次");
+      });
+      return;
+    }
     const participants = people.filter((person) => invitedIds.has(person.id));
     if (participants.length === 0) return;
     const responder = participants[meetingCursor % participants.length];
@@ -860,7 +932,7 @@ export function createCafeShell({
     });
     window.setTimeout(() => {
       if (!meetingActive) return;
-      meetingMessages.push({ personId: responder.id, text: reply });
+      pushMeetingMessage({ personId: responder.id, text: reply });
       setPersonExpression(responder.id, expressionForText(reply), {
         source: "roundtable-reply",
         text: reply,
@@ -956,15 +1028,8 @@ export function createCafeShell({
       showToast(`已在咖啡厅中定位 ${person.name}`);
       return;
     }
-    if (target.dataset.action === "open-meeting") {
-      meetingSheetOpen = true;
-      invitedIds.clear();
-      shell.classList.add("has-meeting-sheet");
-      renderMeetingSetup();
-      return;
-    }
     if (target.dataset.action === "close-meeting") {
-      closeMeetingSheet();
+      await requestCloseMeeting();
       return;
     }
     if (target.dataset.meetingPerson) {
@@ -978,37 +1043,54 @@ export function createCafeShell({
     if (target.dataset.action === "start-meeting" && invitedIds.size > 0) {
       target.disabled = true;
       try {
-        const acceptedIds = await onMeetingStart([...invitedIds]);
+        const topic = String(meetingTopic ?? "").trim().slice(0, 80) || null;
+        const acceptedIds = await onMeetingStart([...invitedIds], topic);
         invitedIds.clear();
         acceptedIds.forEach((personId) => invitedIds.add(personId));
         meetingActive = true;
+        meetingEndedState = false;
+        meetingTopic = topic;
+        meetingCursor = 0;
         meetingMessages.length = 0;
-        meetingMessages.push({
-          personId: [...invitedIds][0],
-          text: "大家都到了。既然坐在同一张桌边，我们从最近发生的一件事开始吧。",
-        });
-        setPersonExpression([...invitedIds][0], "happy", {
-          source: "roundtable-opening",
-          duration: 4.5,
-        });
+        if (meetingLive) {
+          // live：会议对话由后端 LLM 产出，经快照事件回流；这里没有预制台词
+          pushMeetingMessage({
+            system: true,
+            text: topic
+              ? `议题「${topic}」已定下，大家正在入座，讨论马上开始。`
+              : "大家正在入座，讨论马上开始。",
+          });
+        } else {
+          pushMeetingMessage({
+            personId: [...invitedIds][0],
+            text: "大家都到了。既然坐在同一张桌边，我们从最近发生的一件事开始吧。",
+          });
+          setPersonExpression([...invitedIds][0], "happy", {
+            source: "roundtable-opening",
+            duration: 4.5,
+          });
+        }
         renderMeetingActive();
       } catch (error) {
         console.error(error);
         target.disabled = false;
-        showToast("圆桌暂时没有准备好");
+        showToast(error?.message || "圆桌暂时没有准备好");
       }
       return;
     }
     if (target.dataset.action === "end-meeting") {
-      await onMeetingEnd();
-      meetingActive = false;
-      invitedIds.clear();
-      closeMeetingSheet();
-      showToast("圆桌会议已结束");
+      await requestCloseMeeting();
       return;
     }
     if (target.dataset.meetingTopic) {
       submitMeetingMessage(target.dataset.meetingTopic);
+    }
+  });
+
+  // 议题输入即时同步（邀请列表重渲染会重建输入框，靠 meetingTopic 恢复值）
+  root.addEventListener("input", (event) => {
+    if (event.target.closest("[data-meeting-topic-input]")) {
+      meetingTopic = event.target.value;
     }
   });
 
@@ -1066,14 +1148,16 @@ export function createCafeShell({
       if (selectedWorldPerson?.id === state.personId) renderWorldInspector();
       if (selectedMapPerson?.id === state.personId) renderMapInspector();
     },
-    setRoundtableNearby(nearby) {
-      roundtableNearby = Boolean(nearby);
-      const visible = currentView === "cafe" && roundtableNearby && !meetingActive && !meetingSheetOpen;
-      roundtablePrompt.setAttribute("aria-hidden", String(!visible));
+    setRoundtableNearby() {
+      // 已退役（2026-08-04）：旧的 #roundtable-prompt 悬浮入口由场景热点
+      // cafe-roundtable（E/F 情境菜单）完全取代，避免两套提示并存造成的重叠。
+      // 方法保留为空操作，兼容既有调用点。
     },
     openMeeting(personIds = []) {
       if (meetingActive || meetingSheetOpen || world !== "cafe") return false;
       meetingSheetOpen = true;
+      meetingEndedState = false;
+      meetingTopic = null;
       invitedIds.clear();
       for (const personId of personIds) {
         if (people.some((person) => person.id === personId) && invitedIds.size < 5) {
@@ -1087,6 +1171,29 @@ export function createCafeShell({
     closeMeeting() {
       if (meetingActive) return false;
       closeMeetingSheet();
+      return true;
+    },
+    requestCloseMeeting,
+    // live 模式：快照事件里的会议台词（agent-talk 带本场 meeting_id）进入会议线程
+    ingestMeetingMessage({ personId, text } = {}) {
+      if (!meetingActive || !meetingSheetOpen) return false;
+      const person = people.find((candidate) => candidate.id === personId);
+      if (!person || !text) return false;
+      pushMeetingMessage({ personId, text: String(text) });
+      setPersonExpression(personId, expressionForText(String(text)), {
+        source: "roundtable-live",
+        text: String(text),
+        duration: 4.5,
+      });
+      renderMeetingActive();
+      return true;
+    },
+    // live 模式：后端会议散场（meeting-ended 事件）→ 线程定格为"会议结束"
+    meetingEnded() {
+      if (!meetingActive) return false;
+      meetingActive = false;
+      meetingEndedState = true;
+      if (meetingSheetOpen) renderMeetingEnded();
       return true;
     },
     showNpcConversation({ speakerId, text, duration = 4.5 }) {

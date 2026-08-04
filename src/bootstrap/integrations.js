@@ -184,6 +184,13 @@ export function createUnifiedApi(base = MockApi) {
     saveChatNote(personId, text) {
       return base.saveChatNote(personId, text);
     },
+    // IF-6：用户发起的圆桌会议 + 玩家会议发言
+    startMeeting(participantIds, topic) {
+      return base.startMeeting(participantIds, topic);
+    },
+    postMeetingMessage(text) {
+      return base.postMeetingMessage(text);
+    },
     getField(personId) {
       return base.getField(personId);
     },

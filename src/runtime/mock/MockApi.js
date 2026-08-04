@@ -103,6 +103,27 @@ async function postJson(path, body) {
   return response.json();
 }
 
+/** 带后端 detail 的 POST（会议室等需要把 409 原因透传到 UI 的端点用）。 */
+async function postJsonWithDetail(path, body) {
+  const response = await fetch(`${LIVE_BASE_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    let detail = "";
+    try {
+      detail = (await response.json())?.detail ?? "";
+    } catch {
+      detail = "";
+    }
+    const error = new Error(detail || `POST ${path} failed: HTTP ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+  return response.json();
+}
+
 async function postV1Json(path, body) {
   const response = await fetch(`${LIVE_V1_BASE_URL}${path}`, {
     method: "POST",
@@ -578,6 +599,49 @@ export async function saveChatNote(personId, text) {
     created_at: new Date().toISOString(),
   };
   return { inference_ref: `inferences/${personId}/player-note-${note.id}.json`, note };
+}
+
+/**
+ * IF-6 用户发起的圆桌会议：`POST /api/v0/agents/meeting`。
+ *
+ * mock 模式：不真正开会，返回契约形状的演示响应（静态 demo 仍走本地轮播台词）。
+ * @contract IF-6
+ * @param {string[]} participantIds 2..5 名在场人物
+ * @param {string|null} [topic] 可选议题（≤80 字）
+ * @returns {Promise<{meeting_id: string, participants: string[], topic: string|null,
+ *   duration_ticks: number, state: string}>}
+ */
+export async function startMeeting(participantIds, topic = null) {
+  if (isLiveMode()) {
+    return postJsonWithDetail("/agents/meeting", {
+      participant_ids: participantIds,
+      topic: topic ?? null,
+    });
+  }
+  await delay(randomStepDelay());
+  return {
+    meeting_id: `mock_meeting_${Date.now().toString(36)}`,
+    participants: participantIds,
+    topic: topic ?? null,
+    duration_ticks: 0,
+    state: "running",
+  };
+}
+
+/**
+ * IF-6 玩家对进行中的会议发言：`POST /api/v0/agents/meeting/current/message`。
+ *
+ * mock 模式：直接受理（无真实会议可发言，仅保持契约形状）。
+ * @contract IF-6
+ * @param {string} text 玩家发言（1..200 字）
+ * @returns {Promise<{meeting_id: string, accepted: boolean}>}
+ */
+export async function postMeetingMessage(text) {
+  if (isLiveMode()) {
+    return postJsonWithDetail("/agents/meeting/current/message", { text });
+  }
+  await delay(120);
+  return { meeting_id: "mock_meeting", accepted: true };
 }
 
 /** 收集资料包内可检索文本（mock keyword 检索用）。 */
