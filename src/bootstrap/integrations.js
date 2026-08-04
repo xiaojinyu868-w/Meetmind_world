@@ -396,6 +396,9 @@ export function mountIntegrations({
     `<span><small>Group Session</small><strong>现场一起玩</strong></span>`;
   groupFab.addEventListener("click", () => groupPlay.open());
   mountRoot.append(groupFab);
+  // 大厅把草地中央的实体篝火作为现场一起玩的唯一世界入口；房间建立后
+  // GroupPlay 自己的房间 HUD 仍会显示，方便从任意位置恢复现场房间。
+  if (currentWorld === "hall") groupFab.hidden = true;
   if (currentWorld === "field") {
     fab.hidden = true;
     groupFab.hidden = true;

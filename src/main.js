@@ -7,9 +7,10 @@ import {
   BoothSystem,
   boothInteractionRadius,
   buildFallbackBooths,
-  fallbackBoothAnchor,
 } from "./runtime/BoothSystem.js";
 import { CAFE_LAYOUT, tableById } from "./runtime/CafeLayout.js";
+import { CampfireEntrance } from "./runtime/CampfireEntrance.js";
+import { VILLAGE_CAMPFIRE_LAYOUT } from "./runtime/CampfireLayout.js";
 import {
   CAFE_SCENE_VARIANTS,
   cafeSceneVariantFromLocation,
@@ -23,9 +24,10 @@ import {
   capsulePenetrationAt,
 } from "./runtime/CharacterCapsule.js";
 import { colliderShellFor } from "./runtime/ColliderRegistry.js";
+import { createEntrySpawnScatter } from "./runtime/EntrySpawnScatter.js";
 import { HeartSignalSystem } from "./runtime/HeartSignalSystem.js";
 import { createHubBlockoutEnvironment } from "./runtime/HubBlockout.js";
-import { FALLBACK_SNAPSHOT, LiveWorld } from "./runtime/LiveWorld.js";
+import { LiveWorld } from "./runtime/LiveWorld.js";
 import { NpcAgentSystem } from "./runtime/NpcAgentSystem.js";
 import { PersonSignalStore } from "./runtime/PersonSignalStore.js";
 import { RelationshipFieldSystem } from "./runtime/RelationshipFieldSystem.js";
@@ -35,6 +37,7 @@ import {
 } from "./runtime/VillageMarketEnvironment.js";
 import { WorldBroadcastSystem } from "./runtime/WorldBroadcastSystem.js";
 import { WorldModuleRegistry } from "./runtime/WorldModuleRegistry.js";
+import { WorldAudioSystem } from "./runtime/WorldAudioSystem.js";
 import {
   CHARACTER_VARIANT_OPTIONS,
   characterAssetId,
@@ -119,17 +122,13 @@ const environmentAssetId = isHallWorld
   : isFieldWorld
     ? FIELD_WORLD.environmentAssetId
     : activeSceneVariant.environmentAssetId;
+const isVillageMarket = environmentAssetId === VILLAGE_CAMPFIRE_LAYOUT.environmentAssetId;
 const hallCafeDoor = environmentAssetId === "environment.village-market.v1"
   ? VILLAGE_MARKET_LAYOUT.cafeDoor
   : Object.freeze({ x: -4.1, z: 0.6 });
 // 静态碰撞壳（边界 + 静态圆）统一从注册表取数；大厅动态摊位圆由 BoothSystem 注入
 const worldShell = colliderShellFor(environmentAssetId);
 const worldBounds = worldShell.bounds;
-const worldPlayerSpawn = isHallWorld
-  ? activeSceneVariant.playerSpawn ?? HALL_LAYOUT.playerSpawn
-  : isFieldWorld
-    ? FIELD_WORLD.playerSpawn
-    : CAFE_LAYOUT.playerSpawn;
 const worldTitle = isHallWorld
   ? activeSceneVariant.title
   : isCafeWorld
@@ -138,23 +137,16 @@ const worldTitle = isHallWorld
 const cinematicProfile = isHallWorld ? activeSceneVariant.cinematic : null;
 document.body.dataset.world = activeWorld.id;
 
-const MOVE_SPEED = 2.7;
+const PLAYER_MOVE_SPEED_MULTIPLIER = 1.2;
+const MOVE_SPEED = 2.7 * PLAYER_MOVE_SPEED_MULTIPLIER;
+const SHOW_CHARACTER_BOARDS = environmentAssetId !== "environment.village-market.v1";
+const SHOW_WORLD_BROADCAST_BOARD = false;
 const PLAYER_FOOT_OFFSET = 0.018;
 const PLAYER_SEAT_ARRIVAL_DISTANCE = 0.06;
 const LIVE_SEAT_APPROACH_DISTANCE = 0.72;
 const LIVE_SEAT_ARRIVAL_DISTANCE = 0.08;
 const LIVE_SEAT_EXIT_DISTANCE = 0.24;
 const MODEL_FORWARD = new THREE.Vector3(0, 0, 1);
-// 咖啡厅 NPC 出生的最后兜底（优先用 LiveWorld.FALLBACK_SNAPSHOT 的生活化座位/站位，
-// 避免快照到达前所有人在门口站成一排）
-const NPC_ENTRY_SPAWNS = Object.freeze([
-  { x: -2.55, z: 4.05, yaw: Math.PI },
-  { x: -1.75, z: 4.25, yaw: Math.PI },
-  { x: -0.95, z: 4.02, yaw: Math.PI },
-  { x: 0.95, z: 4.02, yaw: Math.PI },
-  { x: 1.75, z: 4.25, yaw: Math.PI },
-  { x: 2.55, z: 4.05, yaw: Math.PI },
-]);
 const LIVE_WALK_SPEED = 1.5;
 const LIVE_BUBBLE_DURATION = 4;
 const HALL_GLANCE_DURATION = 0.9;
@@ -171,6 +163,7 @@ function hashString(value) {
 
 // 运行时注入（window.__ECHOWORLD_OPTIONS__）：api / onPersonSelected / live / snapshotPollMs
 const runtimeOptions = globalThis.__ECHOWORLD_OPTIONS__ ?? {};
+let worldAudio = null;
 // 注入的 api 必须覆盖录入流程三方法，否则回退内置 MockApi 适配层（避免集成模块挂载抛错导致白屏）
 const injectedApi = runtimeOptions.api ?? null;
 const usableApi =
@@ -230,6 +223,20 @@ const cameraController = new ThirdPersonCamera({
 });
 const camera = cameraController.camera;
 camera.position.set(6.7, 4.6, 8.2);
+worldAudio = new WorldAudioSystem({
+  camera,
+  worldId: activeWorld.id,
+  resolveUrl: publicUrl,
+  onStateChange: (state) => {
+    canvas.dataset.audioZone = state.zone;
+    canvas.dataset.audioState = state.activeAmbient ?? (state.freeRoam ? "waiting" : "silent");
+    canvas.dataset.audioUnlocked = String(state.unlocked);
+    canvas.dataset.audioEffect = state.lastEffect ?? "";
+    canvas.dataset.audioClickCount = String(state.effectPlayCounts.click);
+    canvas.dataset.audioNotificationCount = String(state.effectPlayCounts.notification);
+  },
+});
+void worldAudio.preload();
 // Cafe bounds are walls. Outdoor worlds get a wider shell so the camera can
 // orbit naturally at the edge of their walkable terrain.
 const cameraBounds = isCafeWorld
@@ -316,6 +323,7 @@ let relationshipFieldSystem = null;
 let relationshipField = null;
 let worldBroadcastSystem = null;
 let worldModuleRegistry = null;
+let campfireEntrance = null;
 let playerSeatedAt = null;
 let playerSeatTarget = null;
 let pendingSceneInviteId = people.some((person) => person.id === invitedPersonId)
@@ -326,6 +334,7 @@ let sceneHotspots = [];
 const hallGlances = new Map();
 const dynamicPeople = new Map();
 const pendingAgentSpawns = new Set();
+const pendingEntrySpawns = new Map();
 const hoverNdc = new THREE.Vector2();
 let hoverClientX = 0;
 let hoverClientY = 0;
@@ -358,6 +367,7 @@ const appShell = createCafeShell({
   onLocatePerson: (person) => selectWorldPerson(person.id),
   onMeetingStart: startMeeting,
   onMeetingEnd: endMeeting,
+  onNotification: () => worldAudio?.playNotification(),
   resolveMediaUrl,
   world: activeWorld.id,
   fieldPerson: isFieldWorld ? fieldTargetPerson : null,
@@ -456,6 +466,49 @@ function makeGroundMarker(color, innerRadius, outerRadius, opacity) {
 }
 
 
+function entryScatterCenter() {
+  const center = {
+    x: (worldBounds.minX + worldBounds.maxX) * 0.5,
+    z: (worldBounds.minZ + worldBounds.maxZ) * 0.5,
+  };
+  if (isCafeWorld) center.z = 2.35;
+  return center;
+}
+
+
+function currentCharacterOccupancy() {
+  const occupied = (characterSystem?.entities ?? []).map((entity) => ({
+    x: entity.root.position.x,
+    z: entity.root.position.z,
+    radius: entity.collider?.radius ?? DEFAULT_CHARACTER_COLLIDER.radius,
+  }));
+  for (const spawn of pendingEntrySpawns.values()) {
+    occupied.push({
+      x: spawn.x,
+      z: spawn.z,
+      radius: DEFAULT_CHARACTER_COLLIDER.radius,
+    });
+  }
+  return occupied;
+}
+
+
+function allocateEntrySpawns(count, occupied = []) {
+  return createEntrySpawnScatter({
+    count,
+    bounds: worldBounds,
+    blockers: currentBlockers(),
+    occupied,
+    surfaceHeightAt,
+    center: entryScatterCenter(),
+    characterRadius: DEFAULT_CHARACTER_COLLIDER.radius,
+    clearance: 0.12,
+    minSeparation: 0.76,
+    maxRadius: isCafeWorld ? 2.35 : (isFieldWorld ? 1.8 : 3),
+  });
+}
+
+
 function characterSpec(person, instanceId, spawn, idleBob = 0.005) {
   return {
     instance_id: instanceId,
@@ -513,8 +566,15 @@ function validateRuntimeAnchors(root) {
 
 async function spawnCharacters() {
   setProgress(0.73, "正在唤醒你的关系 Agent");
+  const visiblePeople = isFieldWorld ? [fieldTargetPerson] : people;
+  const entrySpawns = isFieldWorld
+    ? [
+        FIELD_WORLD.playerSpawn,
+        relationshipField?.scene?.companion ?? { x: 0, z: -1.1, yaw: 0 },
+      ]
+    : allocateEntrySpawns(visiblePeople.length + 1);
   playerEntity = await characterSystem.spawn(
-    characterSpec(currentUser, "self-player", worldPlayerSpawn, 0),
+    characterSpec(currentUser, "self-player", entrySpawns[0], 0),
   );
   player = playerEntity.root;
   playerGroundY = player.position.y;
@@ -522,7 +582,6 @@ async function spawnCharacters() {
   syncPlayerHeading(currentHeading);
   expressionSystem.register(playerEntity, currentUser.id, activeCharacterVariant.id);
 
-  const visiblePeople = isFieldWorld ? [fieldTargetPerson] : people;
   npcSystem = new NpcAgentSystem({
     people: visiblePeople,
     resolveMovement: ({ agent, entity, stepX, stepZ, targetX, targetZ }) =>
@@ -547,24 +606,13 @@ async function spawnCharacters() {
     },
   });
 
-  const fieldCompanion = relationshipField?.scene?.companion ?? { x: 0, z: -1.1, yaw: 0 };
-  // 出生即"生活化"：快照到达前 NPC 也不能在门口站成一排——
-  // 集市直接站在各自展位前（与 buildFallbackBooths 同序），咖啡厅落在兜底快照的座位/站位上
-  const fallbackSnapshotSpawn = new Map(
-    FALLBACK_SNAPSHOT.agents.map((agent) => [agent.id, agent.position]),
-  );
-  const npcSpawnFor = (person, index) => {
-    if (isHallWorld) return fallbackBoothAnchor(index, environmentAssetId);
-    if (isFieldWorld) return fieldCompanion;
-    return fallbackSnapshotSpawn.get(person.id) ?? NPC_ENTRY_SPAWNS[index];
-  };
   for (let index = 0; index < visiblePeople.length; index += 1) {
     setProgress(0.76 + index * 0.03, `正在载入 ${visiblePeople[index].name} 的人物模型`);
     const entity = await characterSystem.spawn(
       characterSpec(
         visiblePeople[index],
         `agent-${visiblePeople[index].id}`,
-        npcSpawnFor(visiblePeople[index], index),
+        entrySpawns[index + 1],
       ),
     );
     expressionSystem.register(entity, visiblePeople[index].id, activeCharacterVariant.id);
@@ -583,6 +631,9 @@ async function spawnCharacters() {
   selectionMarker = makeGroundMarker("#d36f59", 0.36, 0.48, 0.72);
   selectionMarker.name = "SELECTION_GroundMarker";
   selectionMarker.visible = false;
+  canvas.dataset.entrySpawnPositions = entrySpawns
+    .map((spawn) => `${spawn.x.toFixed(3)},${spawn.z.toFixed(3)}`)
+    .join("|");
   updatePlayerMarker();
 }
 
@@ -636,8 +687,14 @@ async function configureWorld(root) {
   if (isCafeWorld) validateRuntimeAnchors(root);
   await spawnCharacters();
   rebuildSceneHotspots();
-  worldBroadcastSystem = new WorldBroadcastSystem({ scene, api, world: activeWorld.id });
+  worldBroadcastSystem = new WorldBroadcastSystem({
+    scene,
+    api,
+    world: activeWorld.id,
+    showBoard: SHOW_WORLD_BROADCAST_BOARD,
+  });
   worldBroadcastSystem.mount();
+  canvas.dataset.broadcastBoardVisible = String(Boolean(worldBroadcastSystem.mesh));
   worldReady = true;
   syncControlAvailability();
   canvas.dataset.ready = "true";
@@ -645,6 +702,13 @@ async function configureWorld(root) {
   canvas.dataset.npcCount = String(npcSystem.agents.size);
   canvas.dataset.environment = environmentAssetId;
   canvas.dataset.sceneVariant = activeSceneVariant?.id ?? "field";
+  canvas.dataset.campfireMounted = String(Boolean(campfireEntrance?.root));
+  canvas.dataset.campfirePosition = `${VILLAGE_CAMPFIRE_LAYOUT.position.x.toFixed(2)},${VILLAGE_CAMPFIRE_LAYOUT.position.z.toFixed(2)}`;
+  canvas.dataset.campfireSize = campfireEntrance?.size
+    ? [campfireEntrance.size.x, campfireEntrance.size.y, campfireEntrance.size.z]
+      .map((value) => value.toFixed(3))
+      .join(",")
+    : "";
   setProgress(1, `${worldTitle} 已准备好`);
   appShell.setWorldReady(true);
   startLiveWorld();
@@ -711,6 +775,7 @@ function hasBlockingWorldUi() {
 
 function syncControlAvailability() {
   const uiBlocked = hasBlockingWorldUi();
+  worldAudio?.setFreeRoamActive(experienceMode === "cafe" && !uiBlocked);
   const freeCamera = (
     worldReady &&
     experienceMode === "cafe" &&
@@ -977,19 +1042,28 @@ function rebuildSceneHotspots() {
       {
         id: "hall-campfire",
         kind: "campfire",
-        x: 0,
-        z: 2.5,
-        radius: 2.55,
-        eyebrow: "篝火广场 · 多人社交",
-        title: "篝火边的位置还空着",
-        detail: playerSeatedAt === "campfire"
-          ? "联机入口已经打开：创建或加入现场房间，和同行的人坐到一起。"
-          : "篝火是现场联机的入口。坐下来，创建或加入一个现场房间，和同行的人围炉相聚。",
-        prompt: playerSeatedAt === "campfire" ? "篝火边（联机中）" : "在篝火边坐下（联机入口）",
+        x: VILLAGE_CAMPFIRE_LAYOUT.position.x,
+        z: VILLAGE_CAMPFIRE_LAYOUT.position.z,
+        radius: isVillageMarket ? VILLAGE_CAMPFIRE_LAYOUT.interactionRadius : 2.55,
+        eyebrow: isVillageMarket ? "篝火 · 现场联机入口" : "篝火广场 · 多人社交",
+        title: isVillageMarket ? "现场一起玩" : "篝火边的位置还空着",
+        detail: isVillageMarket
+          ? "靠近篝火按 E，创建或加入现场房间，和同行的人一起开始游戏。"
+          : playerSeatedAt === "campfire"
+            ? "联机入口已经打开：创建或加入现场房间，和同行的人坐到一起。"
+            : "篝火是现场联机的入口。坐下来，创建或加入一个现场房间，和同行的人围炉相聚。",
+        prompt: isVillageMarket
+          ? "进入现场一起玩"
+          : playerSeatedAt === "campfire"
+            ? "篝火边（联机中）"
+            : "在篝火边坐下（联机入口）",
         icon: "users",
-        actions: playerSeatedAt === "campfire"
-          ? [{ id: "leave-fire", label: "起身离开", description: "退出联机入口，回到自己的世界", icon: "door-open" }]
-          : [{ id: "sit-by-fire", label: "围炉坐下", description: "打开现场联机入口", icon: "users" }],
+        directActionId: isVillageMarket ? "enter-group-play" : null,
+        actions: isVillageMarket
+          ? [{ id: "enter-group-play", label: "进入现场一起玩", description: "创建或加入现场房间", icon: "users" }]
+          : playerSeatedAt === "campfire"
+            ? [{ id: "leave-fire", label: "起身离开", description: "退出联机入口，回到自己的世界", icon: "door-open" }]
+            : [{ id: "sit-by-fire", label: "围炉坐下", description: "打开现场联机入口", icon: "users" }],
       },
     ];
     for (const record of boothSystem?.booths.values() ?? []) {
@@ -1099,6 +1173,9 @@ function rebuildSceneHotspots() {
     },
     ...tableHotspots,
   ];
+  if (!SHOW_WORLD_BROADCAST_BOARD) {
+    sceneHotspots = sceneHotspots.filter((hotspot) => hotspot.kind !== "broadcast");
+  }
 }
 
 
@@ -1214,7 +1291,10 @@ function sitPlayerAt(tableId) {
 
 
 // 篝火木凳（与 build_hub_town.py FIRE_Stool 布局一致）：5 个树桩围火
-const CAMPFIRE_CENTER = Object.freeze({ x: 0, z: 2.5 });
+const CAMPFIRE_CENTER = Object.freeze({
+  x: VILLAGE_CAMPFIRE_LAYOUT.position.x,
+  z: VILLAGE_CAMPFIRE_LAYOUT.position.z,
+});
 const CAMPFIRE_STOOLS = Object.freeze(
   Array.from({ length: 5 }, (_, index) => {
     const angle = (index / 5) * Math.PI * 2 + 0.35;
@@ -1310,6 +1390,11 @@ async function handleSceneInteraction(hotspot, actionId) {
   }
   if (actionId === "exit-cafe") {
     navigateToWorld("hall");
+    return { close: true };
+  }
+  if (actionId === "enter-group-play") {
+    integrations.groupPlay?.open();
+    void recordWorldEvent("campfire-joined", "你靠近草地中央的篝火，打开了现场一起玩", []);
     return { close: true };
   }
   if (actionId === "sit-by-fire") {
@@ -1477,6 +1562,7 @@ function pushLiveToast(message, { level = "info" } = {}) {
     "opacity:0;transform:translateY(-6px);transition:opacity .24s ease,transform .24s ease;";
   toast.textContent = message;
   toastStack.append(toast);
+  void worldAudio?.playNotification();
   while (toastStack.children.length > 4) toastStack.firstElementChild.remove();
   requestAnimationFrame(() => {
     toast.style.opacity = "1";
@@ -1633,8 +1719,11 @@ function applyLiveSnapshot(rawSnapshot) {
           seat: null,
         });
       } else {
-        // Preserve a live snapshot position; local fallback agents use their booth anchor.
-        const anchor = agent.position ?? boothSystem?.personAnchorFor(agent.id);
+        // Backend positions may be booth centers; the visual anchor keeps the capsule in front.
+        const anchor = boothSystem?.personAnchorFor(
+          agent.id,
+          DEFAULT_CHARACTER_COLLIDER.radius,
+        ) ?? agent.position;
         if (anchor) {
           liveTargets.set(agent.id, {
             x: anchor.x,
@@ -1907,9 +1996,8 @@ async function ensureAgentEntity(agent) {
       conversation: { replies: ["（TA 还在整理自己的故事。）"] },
     };
     dynamicPeople.set(agent.id, personLike);
-    const spawn = agent.position
-      ? { x: agent.position.x, z: agent.position.z, yaw: agent.position.yaw ?? 0 }
-      : worldPlayerSpawn;
+    const [spawn] = allocateEntrySpawns(1, currentCharacterOccupancy());
+    pendingEntrySpawns.set(agent.id, spawn);
     const entity = await characterSystem.spawn(
       characterSpec(personLike, `agent-${agent.id}`, spawn, 0.005),
     );
@@ -1920,6 +2008,7 @@ async function ensureAgentEntity(agent) {
     dynamicPeople.delete(agent.id);
     console.warn(`[EchoWorld] 新人 ${agent.id} 的实体生成失败`, error);
   } finally {
+    pendingEntrySpawns.delete(agent.id);
     pendingAgentSpawns.delete(agent.id);
   }
 }
@@ -2452,6 +2541,7 @@ function animate(timestamp) {
     if (liveEnabled) updateLiveAgents(delta);
     else npcSystem.update(delta, elapsed);
     heartSignalSystem.update(elapsed);
+    campfireEntrance?.update(elapsed);
     if (experienceMode === "cafe") {
       updatePlayer(delta);
       if (meetingMode) updateMeetingCamera(delta);
@@ -2630,11 +2720,13 @@ for (const eventName of ["pointerup", "pointercancel"]) {
 window.addEventListener("resize", resizeRenderer);
 window.addEventListener("beforeunload", () => {
   input.destroy();
+  worldAudio?.dispose();
   cameraController.dispose();
   appShell.destroy();
   sceneInteraction.destroy();
   relationshipFieldSystem?.dispose();
   worldBroadcastSystem?.dispose();
+  campfireEntrance?.dispose();
   unsubscribePersonSignals();
   heartSignalSystem.dispose();
   expressionSystem.dispose();
@@ -2695,6 +2787,7 @@ async function boot() {
       assetCatalog,
       resolveMediaUrl,
       templateAssetId: activeSceneVariant.boothTemplateAssetId,
+      showDisplayBoard: SHOW_CHARACTER_BOARDS,
     });
     await boothSystem.prepare();
   }
@@ -2722,6 +2815,16 @@ async function boot() {
     } catch (error) {
       console.warn(`[EchoWorld] 环境资产 ${environmentAssetId} 未就绪，使用简易占位场地`, error);
       environment = buildFallbackEnvironment();
+    }
+  }
+  if (isVillageMarket && environment) {
+    try {
+      setProgress(0.58, "正在点亮草地中央的篝火");
+      campfireEntrance = new CampfireEntrance({ assetStore, assetCatalog });
+      environment.add(await campfireEntrance.load());
+    } catch (error) {
+      campfireEntrance = null;
+      console.warn("[EchoWorld] 篝火模块未就绪，保留现场入口提示", error);
     }
   }
   setProgress(0.68);
@@ -2801,11 +2904,13 @@ window.__echoWorld = {
   get liveSource() { return liveWorld?.source ?? null; },
   get worldTick() { return liveWorldTick; },
   get world() { return activeWorld.id; },
+  get audio() { return worldAudio?.diagnostics ?? null; },
   get boothSystem() { return boothSystem; },
   get relationshipField() { return relationshipField; },
   get sceneHotspots() { return [...sceneHotspots]; },
   get nearbyHotspot() { return nearbySceneHotspot; },
   get worldBrief() { return worldBroadcastSystem?.brief ?? null; },
+  get campfire() { return campfireEntrance?.root ?? null; },
   get integrations() { return integrations; },
   getAgentState: (personId) => worldAgentState(personId),
   selectPerson: selectWorldPerson,

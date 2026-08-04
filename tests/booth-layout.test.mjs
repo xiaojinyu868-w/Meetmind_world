@@ -77,24 +77,58 @@ test("every village booth remains reachable outside its collision boundary", () 
 });
 
 
-test("village display template keeps the board and removes the brown counter", async () => {
+test("village booth instances omit character boards and the brown counter", async () => {
   const system = new BoothSystem({
     scene: new THREE.Scene(),
     assetStore: {},
     assetCatalog: {},
     resolveMediaUrl: (ref) => ref,
     templateAssetId: null,
+    showDisplayBoard: false,
   });
   await system.prepare();
+  system.sync(buildFallbackBooths(
+    [{ id: "person-1", name: "Person 1" }],
+    VILLAGE_MARKET_ASSET_ID,
+  ));
 
-  assert.equal(system.template.getObjectByName("MESH_FallbackCounter"), undefined);
-  const board = system.template.getObjectByName("MESH_BackdropBoard");
-  assert.ok(board);
-  assert.equal(board.position.z, -1.45);
+  const record = [...system.booths.values()][0];
+  assert.ok(record);
+  assert.equal(record.root.getObjectByName("MESH_FallbackCounter"), undefined);
+  assert.equal(record.root.getObjectByName("MESH_BackdropBoard"), undefined);
+  assert.equal(record.root.getObjectByName("MESH_NamePlate"), undefined);
+  assert.equal(system.readablePanelCount, 0);
+  system.update(1);
+  record.root.updateMatrixWorld(true);
+  const pickProxy = record.root.getObjectByName("BOOTH_PickProxy");
+  assert.ok(pickProxy);
+  assert.equal(pickProxy.material.opacity, 0);
+  const raycaster = new THREE.Raycaster(
+    new THREE.Vector3(record.position.x, 3, record.position.z),
+    new THREE.Vector3(0, -1, 0),
+  );
+  assert.ok(raycaster.intersectObject(record.root, true).some(({ object }) => object === pickProxy));
 });
 
 
-test("village people and display boards clear the source environment meshes", async () => {
+test("visible fallback templates retain their display board assets", async () => {
+  const system = new BoothSystem({
+    scene: new THREE.Scene(),
+    assetStore: {},
+    assetCatalog: {},
+    resolveMediaUrl: (ref) => ref,
+    templateAssetId: null,
+    showDisplayBoard: true,
+  });
+  await system.prepare();
+
+  assert.ok(system.template.getObjectByName("MESH_BackdropBoard"));
+  assert.ok(system.template.getObjectByName("MESH_NamePlate"));
+  assert.ok(system.template.getObjectByName("MESH_Backdrop"));
+});
+
+
+test("village people clear the source environment meshes", async () => {
   globalThis.self ??= globalThis;
   globalThis.ProgressEvent ??= class ProgressEvent {
     constructor(type, init = {}) {
@@ -132,15 +166,6 @@ test("village people and display boards clear the source environment meshes", as
     }
   });
 
-  const templateSystem = new BoothSystem({
-    scene: new THREE.Scene(),
-    assetStore: {},
-    assetCatalog: {},
-    resolveMediaUrl: (ref) => ref,
-    templateAssetId: null,
-  });
-  await templateSystem.prepare();
-  const templateBoard = templateSystem.template.getObjectByName("MESH_BackdropBoard");
   const slots = boothSlotsForEnvironment(VILLAGE_MARKET_ASSET_ID);
 
   slots.forEach((slot, index) => {
@@ -157,17 +182,5 @@ test("village people and display boards clear the source environment meshes", as
       `${slot.sourceNode} person intersects environment geometry`,
     );
 
-    const boardRoot = new THREE.Group();
-    boardRoot.position.set(slot.x, 0, slot.z);
-    boardRoot.rotation.y = slot.yaw;
-    boardRoot.add(templateBoard.clone());
-    boardRoot.updateMatrixWorld(true);
-    const boardBox = new THREE.Box3().setFromObject(boardRoot);
-    const boardHits = environmentMeshes.filter(({ box }) => boardBox.intersectsBox(box));
-    assert.deepEqual(
-      boardHits.map(({ name }) => name),
-      [],
-      `${slot.sourceNode} display board intersects environment geometry`,
-    );
   });
 });

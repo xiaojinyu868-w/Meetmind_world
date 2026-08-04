@@ -435,6 +435,7 @@ export function createCafeShell({
   onLocatePerson = () => {},
   onMeetingStart = async () => {},
   onMeetingEnd = async () => {},
+  onNotification = () => {},
   resolveMediaUrl = (ref) => ref,
   world = "cafe",
   fieldPerson = null,
@@ -610,6 +611,7 @@ export function createCafeShell({
     window.clearTimeout(toastTimer);
     toast.textContent = message;
     toast.classList.add("is-visible");
+    onNotification(message);
     toastTimer = window.setTimeout(() => toast.classList.remove("is-visible"), 2200);
   }
 

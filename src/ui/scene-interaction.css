@@ -221,6 +221,10 @@
     width: min(270px, calc(100vw - 116px));
   }
 
+  body[data-world="hall"] .scene-interaction-prompt {
+    bottom: max(302px, calc(env(safe-area-inset-bottom) + 292px));
+  }
+
   .scene-interaction-prompt kbd {
     display: none;
   }
@@ -231,5 +235,15 @@
     left: 10px;
     width: auto;
     max-height: min(66vh, 560px);
+  }
+}
+
+@media (min-width: 360px) and (max-width: 700px) {
+  body[data-world="hall"] .scene-interaction-prompt {
+    right: 10px;
+    bottom: max(150px, calc(env(safe-area-inset-bottom) + 140px));
+    left: auto;
+    width: 175px;
+    transform: none;
   }
 }

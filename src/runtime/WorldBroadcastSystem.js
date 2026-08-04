@@ -74,10 +74,11 @@ const BROADCAST_PLACEMENTS = Object.freeze({
 });
 
 export class WorldBroadcastSystem {
-  constructor({ scene, api, world }) {
+  constructor({ scene, api, world, showBoard = true }) {
     this.scene = scene;
     this.api = api;
     this.world = world;
+    this.showBoard = showBoard;
     this.canvas = document.createElement("canvas");
     this.canvas.width = 1024;
     this.canvas.height = 576;
@@ -94,43 +95,45 @@ export class WorldBroadcastSystem {
   mount() {
     const placement = BROADCAST_PLACEMENTS[this.world];
     if (!placement) return;
-    const frame = new THREE.Mesh(
-      new THREE.BoxGeometry(2.64, 1.54, 0.08),
-      new THREE.MeshStandardMaterial({ color: "#4d3f34", roughness: 0.92, flatShading: true }),
-    );
-    frame.name = "WORLD_BroadcastFrame";
-    frame.position.set(placement.frame.x, placement.frame.y, placement.frame.z);
-    frame.rotation.y = placement.yaw;
-    frame.castShadow = true;
-    this.scene.add(frame);
-    this.frame = frame;
+    if (this.showBoard) {
+      const frame = new THREE.Mesh(
+        new THREE.BoxGeometry(2.64, 1.54, 0.08),
+        new THREE.MeshStandardMaterial({ color: "#4d3f34", roughness: 0.92, flatShading: true }),
+      );
+      frame.name = "WORLD_BroadcastFrame";
+      frame.position.set(placement.frame.x, placement.frame.y, placement.frame.z);
+      frame.rotation.y = placement.yaw;
+      frame.castShadow = true;
+      this.scene.add(frame);
+      this.frame = frame;
 
-    if (placement.posts) {
-      // 立柱式告示牌：两根木柱把屏架离地面（沿屏面法线的垂直方向排布）
-      const postMaterial = new THREE.MeshStandardMaterial({ color: "#4d3f34", roughness: 0.92, flatShading: true });
-      const tangentX = Math.cos(placement.yaw);
-      const tangentZ = -Math.sin(placement.yaw);
-      for (const side of [-1, 1]) {
-        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 2.6, 8), postMaterial);
-        post.name = `WORLD_BroadcastPost_${side}`;
-        post.position.set(
-          placement.frame.x + tangentX * side * 1.15,
-          1.3,
-          placement.frame.z + tangentZ * side * 1.15,
-        );
-        post.castShadow = true;
-        this.scene.add(post);
+      if (placement.posts) {
+        // 立柱式告示牌：两根木柱把屏架离地面（沿屏面法线的垂直方向排布）
+        const postMaterial = new THREE.MeshStandardMaterial({ color: "#4d3f34", roughness: 0.92, flatShading: true });
+        const tangentX = Math.cos(placement.yaw);
+        const tangentZ = -Math.sin(placement.yaw);
+        for (const side of [-1, 1]) {
+          const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 2.6, 8), postMaterial);
+          post.name = `WORLD_BroadcastPost_${side}`;
+          post.position.set(
+            placement.frame.x + tangentX * side * 1.15,
+            1.3,
+            placement.frame.z + tangentZ * side * 1.15,
+          );
+          post.castShadow = true;
+          this.scene.add(post);
+        }
       }
-    }
 
-    this.mesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(2.42, 1.34),
-      new THREE.MeshBasicMaterial({ map: this.texture, toneMapped: false, side: THREE.FrontSide }),
-    );
-    this.mesh.name = "WORLD_BroadcastScreen";
-    this.mesh.position.set(placement.screen.x, placement.screen.y, placement.screen.z);
-    this.mesh.rotation.y = placement.yaw;
-    this.scene.add(this.mesh);
+      this.mesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(2.42, 1.34),
+        new THREE.MeshBasicMaterial({ map: this.texture, toneMapped: false, side: THREE.FrontSide }),
+      );
+      this.mesh.name = "WORLD_BroadcastScreen";
+      this.mesh.position.set(placement.screen.x, placement.screen.y, placement.screen.z);
+      this.mesh.rotation.y = placement.yaw;
+      this.scene.add(this.mesh);
+    }
 
     this.element = document.createElement("section");
     this.element.className = "world-brief-strip";

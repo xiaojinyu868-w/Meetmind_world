@@ -222,6 +222,20 @@
       "style": "fantasy-village-lowpoly"
     },
     {
+      "asset_id": "module.campfire.c3525.v1",
+      "kind": "environment-module",
+      "url": "props/c3525-fire2.glb",
+      "version": 1,
+      "style": "fantasy-village-lowpoly",
+      "root_node": "ROOT_Campfire",
+      "dimensions_m": {
+        "width": 1.848,
+        "height": 1.006,
+        "depth": 1.808
+      },
+      "source_model": "C3525 Fire2"
+    },
+    {
       "asset_id": "environment.cafe.interior.v2",
       "kind": "environment",
       "url": "models/echo_world_cafe_interior_v2.glb",

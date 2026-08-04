@@ -28,6 +28,9 @@ const VILLAGE_MARKET_ENVIRONMENT_ASSET_ID = "environment.village-market.v1";
 const DISPLAY_MESH_NAMES = Object.freeze(
   new Set(["MESH_NamePlate", "MESH_Portrait", "MESH_PhotoFrame_01", "MESH_PhotoFrame_02", "MESH_Backdrop"]),
 );
+const REMOVABLE_BOARD_MESH_NAMES = Object.freeze(
+  new Set(["MESH_BackdropBoard", ...DISPLAY_MESH_NAMES]),
+);
 const CANVAS_FONT = '"PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif';
 
 // mock 快照缺 booth 时的内置演示锚点：小镇 Hub 街道两侧（与 build_hub_town.py PAD_Booth 一致，面向街道中心）
@@ -90,6 +93,25 @@ export function boothInteractionRadius(blockerRadius, visitorRadius = 0) {
     MIN_BOOTH_INTERACTION_RADIUS,
     obstacleRadius + actorRadius + BOOTH_INTERACTION_MARGIN,
   );
+}
+
+
+export function boothPersonAnchor(position, visitorRadius = 0) {
+  const safeOffset = Math.max(
+    finiteOr(position?.personOffset, PERSON_ANCHOR_OFFSET),
+    finiteOr(position?.blockerRadius, BOOTH_BLOCKER_RADIUS)
+      + Math.max(0, finiteOr(visitorRadius, 0))
+      + BOOTH_INTERACTION_MARGIN,
+  );
+  const x = finiteOr(position?.x, 0);
+  const z = finiteOr(position?.z, 0);
+  const yaw = finiteOr(position?.yaw, 0);
+  const lateral = finiteOr(position?.personLateral, 0);
+  return {
+    x: x + Math.sin(yaw) * safeOffset + Math.cos(yaw) * lateral,
+    z: z + Math.cos(yaw) * safeOffset - Math.sin(yaw) * lateral,
+    yaw,
+  };
 }
 
 
@@ -339,8 +361,41 @@ function buildFallbackTemplate({ includeCounter = true } = {}) {
 }
 
 
+function removeDisplayBoardMeshes(root) {
+  const displayMeshes = [];
+  root.traverse((object) => {
+    if (object.isMesh && REMOVABLE_BOARD_MESH_NAMES.has(object.name)) displayMeshes.push(object);
+  });
+  for (const mesh of displayMeshes) mesh.removeFromParent();
+}
+
+
+function buildBoothPickProxy(radius) {
+  const proxy = new THREE.Mesh(
+    new THREE.CylinderGeometry(radius, radius, 1.2, 24),
+    new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      colorWrite: false,
+    }),
+  );
+  proxy.name = "BOOTH_PickProxy";
+  proxy.position.y = 0.6;
+  return proxy;
+}
+
+
 export class BoothSystem {
-  constructor({ scene, assetStore, assetCatalog, resolveMediaUrl, placeholderRef = PLACEHOLDER_PORTRAIT, templateAssetId = BOOTH_TEMPLATE_ASSET_ID }) {
+  constructor({
+    scene,
+    assetStore,
+    assetCatalog,
+    resolveMediaUrl,
+    placeholderRef = PLACEHOLDER_PORTRAIT,
+    templateAssetId = BOOTH_TEMPLATE_ASSET_ID,
+    showDisplayBoard = true,
+  }) {
     this.scene = scene;
     this.assetStore = assetStore;
     this.assetCatalog = assetCatalog;
@@ -348,6 +403,7 @@ export class BoothSystem {
       typeof resolveMediaUrl === "function" ? resolveMediaUrl : (ref) => String(ref ?? "");
     this.placeholderRef = placeholderRef;
     this.templateAssetId = templateAssetId;
+    this.showDisplayBoard = showDisplayBoard;
     this.template = null;
     this.booths = new Map();
     this.textureLoader = new THREE.TextureLoader();
@@ -424,19 +480,15 @@ export class BoothSystem {
   }
 
   // 出展人站位锚点：展位正前方，按摊台深度保留不穿模距离，朝向与展位一致。
-  personAnchorFor(personId) {
+  personAnchorFor(personId, visitorRadius = 0) {
     const record = this.boothForPerson(personId);
     if (!record) return null;
-    const { x, z, yaw, personOffset, personLateral } = record.position;
-    return {
-      x: x + Math.sin(yaw) * personOffset + Math.cos(yaw) * personLateral,
-      z: z + Math.cos(yaw) * personOffset - Math.sin(yaw) * personLateral,
-      yaw,
-    };
+    return boothPersonAnchor(record.position, visitorRadius);
   }
 
   #add(booth) {
     const root = this.template.clone(true);
+    if (!this.showDisplayBoard) removeDisplayBoardMeshes(root);
     root.name = `BOOTH_${booth.id}`;
     root.position.set(booth.position.x, 0, booth.position.z);
     root.rotation.set(0, booth.position.yaw, 0);
@@ -468,6 +520,10 @@ export class BoothSystem {
       displayBacks.set(mesh.name, back);
       displayMaterials.push(back.material);
     }
+    const pickProxy = this.showDisplayBoard
+      ? null
+      : buildBoothPickProxy(booth.position.blockerRadius);
+    if (pickProxy) root.add(pickProxy);
     // hover 提示地环（初始隐藏，setHighlighted 控制）
     const hoverRing = new THREE.Mesh(
       new THREE.RingGeometry(
@@ -500,6 +556,7 @@ export class BoothSystem {
       displaySignature: null,
       displayName: null,
       displayHeadline: null,
+      pickProxy,
       hoverRing,
       namePlate: root.getObjectByName("MESH_NamePlate") ?? null,
       entrance: 0,
@@ -523,6 +580,8 @@ export class BoothSystem {
     record.root.removeFromParent();
     record.hoverRing?.geometry.dispose();
     record.hoverRing?.material.dispose();
+    record.pickProxy?.geometry.dispose();
+    record.pickProxy?.material.dispose();
     for (const texture of record.ownedTextures.values()) texture.dispose();
     for (const material of record.displayMaterials) material.dispose();
     this.booths.delete(record.id);
