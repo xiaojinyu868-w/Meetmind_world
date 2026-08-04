@@ -18,7 +18,7 @@ def default_scene_modules() -> tuple[SceneModuleDefinition, ...]:
         SceneModuleDefinition(
             module_id="cafe-house", module_type="interior", label="关系咖啡厅",
             entry_action="scene.enter", capabilities=("hotspot", "roundtable", "memory"),
-            asset_id="environment.cafe.v1",
+            asset_id="environment.cafe.painterly.v1",
         ),
         SceneModuleDefinition(
             module_id="relationship-field", module_type="field", label="个人场域",

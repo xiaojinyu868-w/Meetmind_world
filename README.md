@@ -7,7 +7,7 @@ npm install
 npm run dev
 ```
 
-打开 `http://127.0.0.1:5173/`。桌面使用 `W/A/S/D` 移动；触屏设备显示虚拟摇杆。
+打开 `http://127.0.0.1:5173/`。桌面点击 3D 场景后，用鼠标环视、滚轮缩放、`W/A/S/D` 沿镜头方向移动，按住 `Shift` 跑动；触屏设备继续使用虚拟摇杆。
 
 生产构建：
 
@@ -61,6 +61,7 @@ npm run build
 - `src/runtime/RelationshipFieldSystem.js`：消费 `echo-field.v1` 生成可进入的关系场域与 4 类热点。
 - `src/runtime/WorldModuleRegistry.js`：严格校验 `echo-world-modules.v1` 小屋/场域挂载契约。
 - `src/runtime/WorldBroadcastSystem.js`：咖啡厅/集市大厅 3D 播报屏（位置按世界配置）与晨报摘要。
+- `src/runtime/Input.js`、`CameraRelativeMovement.js`、`ThirdPersonCamera.js`：Pointer Lock 输入、镜头相对移动与第三人称轨道相机。
 - `src/ui/SceneInteraction.js`：统一 E/F、触屏提示与情境菜单。
 - `src/data/demoSignals.js`：6 个 NPC 的 `person-signal.v1` 占位快照，正式接口可直接替换。
 - `src/main.js`：Three.js 场景、第三人称相机、移动、碰撞、射线选择和会议编排。
@@ -85,7 +86,7 @@ V2 几何场景资产仍归档保留，但不再出现在前端选择器中，�
 
 绘本人物资产仍归档保留，但不再出现在前端选择器中，旧 `?character=storybook` 地址会回落到 `voxel`。
 
-人物与表情生产契约、照片输入边界和服务接口见 [`docs/PHOTO_CHARACTER_PIPELINES.md`](docs/PHOTO_CHARACTER_PIPELINES.md)。运行时表情使用 `neutral / happy / surprised / thinking`，每次切换同一人物的完整 128x128 像素 atlas，并使用 nearest 采样。
+人物、表情和骨骼动作的生产契约、照片输入边界与服务接口见 [`docs/PHOTO_CHARACTER_PIPELINES.md`](docs/PHOTO_CHARACTER_PIPELINES.md)。运行时表情使用 `neutral / happy / surprised / thinking`，每次切换同一人物的完整 128x128 像素 atlas，并使用 nearest 采样；身体动作由 GLB 内的 `Idle / Walk / Talk / SitDown / Sit / SitTalk / RaiseRightHand / RaiseBothHands` 驱动。
 
 ![几何 Low-poly 版本](renders/echo_world_cafe_reference-lowpoly-v2_preview.png)
 
@@ -98,7 +99,7 @@ V2 几何场景资产仍归档保留，但不再出现在前端选择器中，�
 - 当前是可信单机：房间 API 尚无登录身份/room token，不应直接暴露到不可信公网或作为多用户生产服务。
 - `?api=mock` 使用明确标注的 demo 生理信号；live 模式只读取 K3 Ring 聚合接口，没有真实值时显示不可用。后端只做会话时间窗统计，前端不自行判断喜欢、厌恶或医疗状态。
 - 合照入场的照片输入已接真实链路：qwen-vl 定位前景人脸 bbox（OpenCV 兜底），逐脸确认姓名后批量建档；识别质量仍受照片清晰度影响，支持人工跳过/重新认脸。
-- 人物暂时没有骨骼动画；移动和入座采用刚性模型的轻量表现。
+- 人物已具备整肢刚性骨骼动画，可静止、走路、入座、保持坐姿、坐姿点头/摇头、举右手和举双手；当前没有肘、膝等分段骨骼，因此坐姿采用整条腿从髋部旋转的体素风表现。
 - 关系场域支持 Marble splat 世界（配置 `WORLDLABS_API_KEY` 后 `POST /api/v0/fields/{person_id}/world` 触发生成，约 5 分钟/次、按次计费）：ready 时前端用 Spark 渲染 splat 并以 collider GLB 行走，未生成/失败时回退程序化场域。
 - 咖啡厅使用运行时圆形桌面碰撞，尚未从 Blender 导出完整碰撞壳。
 - 上游只负责提供 K3 package 与媒体归属；EchoWorld 负责事实分层、推断记忆、关系、体素资产、信号 DTO、Agent 授权和世界加载。embedding、原始 Ring 序列和内部存储地址不下发浏览器。

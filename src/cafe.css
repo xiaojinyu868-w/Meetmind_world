@@ -287,9 +287,8 @@ svg {
   position: absolute;
   z-index: 11;
   top: max(92px, calc(env(safe-area-inset-top) + 74px));
-  left: 50%;
+  right: max(20px, env(safe-area-inset-right));
   pointer-events: auto;
-  transform: translateX(-50%);
 }
 
 .intro-copy {
@@ -2228,6 +2227,7 @@ body:not([data-view="cafe"]) .touch-stick {
 
   .variant-controls--cafe {
     top: max(72px, calc(env(safe-area-inset-top) + 62px));
+    right: 10px;
   }
 
   .intro-copy {

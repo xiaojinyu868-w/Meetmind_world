@@ -17,6 +17,44 @@ RENDER_ROOT = PROJECT_ROOT / "renders"
 MANIFEST_PATH = EXPORT_ROOT / "photo_character_modes_manifest.json"
 REPORT_PATH = EXPORT_ROOT / "photo_character_modes_validation.json"
 ROOT_NODE_NAME = "ROOT_PhotoCharacter"
+RIG_OBJECT_NAME = "RIG_Voxel"
+RIG_BONE_NAMES = (
+    "Root",
+    "Torso",
+    "Head",
+    "Arm_L",
+    "Arm_R",
+    "Leg_L",
+    "Leg_R",
+)
+ANIMATION_ACTIONS = (
+    "Idle",
+    "Walk",
+    "Talk",
+    "SitDown",
+    "Sit",
+    "SitTalk",
+    "RaiseRightHand",
+    "RaiseBothHands",
+)
+ACTION_BONE_TARGETS = {
+    "Idle": {"Torso"},
+    "Walk": {"Arm_L", "Arm_R", "Leg_L", "Leg_R"},
+    "Talk": {"Head"},
+    "SitDown": {"Root", "Torso", "Leg_L", "Leg_R"},
+    "Sit": {"Root", "Leg_L", "Leg_R"},
+    "SitTalk": {"Root", "Head", "Leg_L", "Leg_R"},
+    "RaiseRightHand": {"Arm_R"},
+    "RaiseBothHands": {"Arm_L", "Arm_R"},
+}
+VOXEL_MESH_BONES = {
+    "GEO_Head": "Head",
+    "GEO_Torso": "Torso",
+    "GEO_Arm_L": "Arm_L",
+    "GEO_Arm_R": "Arm_R",
+    "GEO_Leg_L": "Leg_L",
+    "GEO_Leg_R": "Leg_R",
+}
 PERSON_IDS = tuple(f"person_{index:02d}" for index in range(1, 7)) + ("host",)
 MODES = {
     "storybook": {
@@ -44,6 +82,8 @@ VOXEL_HEAD_REGIONS = {
 
 def reset_scene() -> None:
     bpy.ops.wm.read_factory_settings(use_empty=True)
+    for action in list(bpy.data.actions):
+        bpy.data.actions.remove(action, do_unlink=True)
 
 
 def sha256(path: Path) -> str:
@@ -91,6 +131,70 @@ def texture_nodes(materials: list[bpy.types.Material]) -> list[bpy.types.ShaderN
             continue
         nodes.extend(node for node in material.node_tree.nodes if node.type == "TEX_IMAGE")
     return nodes
+
+
+def action_fcurves(action: bpy.types.Action) -> list[bpy.types.FCurve]:
+    return [
+        fcurve
+        for layer in action.layers
+        for strip in layer.strips
+        if strip.type == "KEYFRAME"
+        for channelbag in strip.channelbags
+        for fcurve in channelbag.fcurves
+    ]
+
+
+def action_target_bones(action: bpy.types.Action) -> set[str]:
+    targets: set[str] = set()
+    prefix = 'pose.bones["'
+    for fcurve in action_fcurves(action):
+        if not fcurve.data_path.startswith(prefix):
+            continue
+        targets.add(fcurve.data_path[len(prefix) :].split('"', 1)[0])
+    return targets
+
+
+def action_channel_values(
+    action: bpy.types.Action | None,
+    bone_name: str,
+    property_name: str,
+    array_index: int,
+) -> list[float]:
+    if action is None:
+        return []
+    data_path = f'pose.bones["{bone_name}"].{property_name}'
+    for fcurve in action_fcurves(action):
+        if fcurve.data_path == data_path and fcurve.array_index == array_index:
+            return [float(point.co.y) for point in fcurve.keyframe_points]
+    return []
+
+
+def object_actions(obj: bpy.types.Object | None) -> list[bpy.types.Action]:
+    if obj is None or obj.animation_data is None:
+        return []
+    actions: dict[int, bpy.types.Action] = {}
+    animation_data = obj.animation_data
+    if animation_data.action is not None:
+        actions[id(animation_data.action)] = animation_data.action
+    for track in animation_data.nla_tracks:
+        for strip in track.strips:
+            if strip.action is not None:
+                actions[id(strip.action)] = strip.action
+    return list(actions.values())
+
+
+def rigid_weight_check(mesh: bpy.types.Object, bone_name: str) -> bool:
+    vertex_group = mesh.vertex_groups.get(bone_name)
+    if vertex_group is None or not mesh.data.vertices:
+        return False
+    for vertex in mesh.data.vertices:
+        assignments = [assignment for assignment in vertex.groups if assignment.weight > 1e-6]
+        if len(assignments) != 1:
+            return False
+        assignment = assignments[0]
+        if assignment.group != vertex_group.index or abs(assignment.weight - 1.0) > 1e-5:
+            return False
+    return True
 
 
 def region_has_opaque_pixels(
@@ -248,6 +352,29 @@ def validate_glb(mode: str, person_id: str) -> dict[str, object]:
     if mode == "voxel":
         head = bpy.data.objects.get("GEO_Head")
         uv_counts = head_uv_region_counts(head) if head is not None else {name: 0 for name in VOXEL_HEAD_REGIONS}
+    armatures = [obj for obj in objects if obj.type == "ARMATURE"]
+    armature = armatures[0] if len(armatures) == 1 else None
+    actions = object_actions(armature)
+    actions_by_name = {action.name: action for action in actions}
+    action_reports = {
+        action.name: {
+            "frame_range": [round(value, 4) for value in action.frame_range],
+            "target_bones": sorted(action_target_bones(action)),
+            "nonempty": not action.is_empty,
+        }
+        for action in actions
+    }
+    skin_reports: dict[str, dict[str, object]] = {}
+    if mode == "voxel":
+        for mesh_name, bone_name in VOXEL_MESH_BONES.items():
+            mesh = bpy.data.objects.get(mesh_name)
+            modifiers = [] if mesh is None else [modifier for modifier in mesh.modifiers if modifier.type == "ARMATURE"]
+            skin_reports[mesh_name] = {
+                "bone": bone_name,
+                "armature_modifiers": len(modifiers),
+                "modifier_targets_rig": len(modifiers) == 1 and modifiers[0].object is armature,
+                "rigid_weight": mesh is not None and rigid_weight_check(mesh, bone_name),
+            }
     checks: dict[str, object] = {
         "root_present": True,
         "root_at_origin": max(abs(value) for value in root.location) <= 0.001,
@@ -281,6 +408,88 @@ def validate_glb(mode: str, person_id: str) -> dict[str, object]:
         checks["head_declares_five_generated_faces"] = str(root.get("head_texture_faces", "")).startswith(
             "front,left,right,back,top"
         )
+        checks["single_armature"] = len(armatures) == 1
+        checks["rig_object_name"] = armature is not None and armature.name == RIG_OBJECT_NAME
+        checks["required_bones_exact"] = armature is not None and set(armature.data.bones.keys()) == set(RIG_BONE_NAMES)
+        checks["all_meshes_have_armature_skin"] = all(
+            report["modifier_targets_rig"] for report in skin_reports.values()
+        )
+        checks["all_meshes_have_rigid_100_percent_weights"] = all(
+            report["rigid_weight"] for report in skin_reports.values()
+        )
+        checks["exactly_declared_actions"] = (
+            set(action_reports) == set(ANIMATION_ACTIONS)
+            and len(action_reports) == len(ANIMATION_ACTIONS)
+        )
+        checks["actions_are_nonempty"] = all(
+            action_reports.get(name, {}).get("nonempty", False) for name in ANIMATION_ACTIONS
+        )
+        checks["actions_target_required_bones"] = all(
+            required.issubset(set(action_reports.get(name, {}).get("target_bones", [])))
+            for name, required in ACTION_BONE_TARGETS.items()
+        )
+        idle_root_y = action_channel_values(
+            actions_by_name.get("Idle"), "Root", "location", 1
+        )
+        sit_root_y = action_channel_values(
+            actions_by_name.get("Sit"), "Root", "location", 1
+        )
+        sit_talk_root_y = action_channel_values(
+            actions_by_name.get("SitTalk"), "Root", "location", 1
+        )
+        sit_down_root_y = action_channel_values(
+            actions_by_name.get("SitDown"), "Root", "location", 1
+        )
+        seated_leg_x = {
+            action_name: {
+                bone_name: action_channel_values(
+                    actions_by_name.get(action_name),
+                    bone_name,
+                    "rotation_quaternion",
+                    1,
+                )
+                for bone_name in ("Leg_L", "Leg_R")
+            }
+            for action_name in ("SitDown", "Sit", "SitTalk")
+        }
+        checks["idle_root_is_static"] = (
+            bool(idle_root_y) and max(abs(value) for value in idle_root_y) <= 0.001
+        )
+        checks["sit_root_is_lowered_and_static"] = all(
+            values
+            and max(values) < -0.10
+            and max(values) - min(values) <= 0.001
+            for values in (sit_root_y, sit_talk_root_y)
+        )
+        checks["sit_down_lowers_root"] = (
+            bool(sit_down_root_y)
+            and abs(sit_down_root_y[0]) <= 0.001
+            and sit_down_root_y[-1] < -0.10
+            and all(
+                right <= left + 0.001
+                for left, right in zip(sit_down_root_y, sit_down_root_y[1:])
+            )
+        )
+        checks["sit_legs_are_bent"] = all(
+            values and min(abs(value) for value in values) >= 0.65
+            for action_name in ("Sit", "SitTalk")
+            for values in seated_leg_x[action_name].values()
+        )
+        checks["sit_down_bends_legs"] = all(
+            values
+            and abs(values[0]) <= 0.01
+            and abs(values[-1]) >= 0.65
+            for values in seated_leg_x["SitDown"].values()
+        )
+        try:
+            declared_actions = json.loads(str(root.get("animation_actions", "[]")))
+        except json.JSONDecodeError:
+            declared_actions = []
+        checks["animation_metadata"] = (
+            root.get("rig_kind") == "rigid-voxel-v1"
+            and declared_actions == list(ANIMATION_ACTIONS)
+            and root.get("animation_fps") == 24
+        )
     record = {
         "asset_id": f"character.photo.{person_id}.{mode}.v1",
         "path": str(path.relative_to(PROJECT_ROOT)).replace("\\", "/"),
@@ -300,6 +509,14 @@ def validate_glb(mode: str, person_id: str) -> dict[str, object]:
         "sampler_interpolation": interpolation_values,
         "voxel_head_uv_region_triangles": uv_counts,
         "missing_nodes": required_missing,
+        "rig": {
+            "armatures": [obj.name for obj in armatures],
+            "bones": sorted(armature.data.bones.keys()) if armature is not None else [],
+            "skins": skin_reports,
+        }
+        if mode == "voxel"
+        else None,
+        "actions": action_reports,
         "checks": checks,
     }
     record["passed"] = all(bool(value) for value in checks.values())
@@ -352,6 +569,11 @@ def validate_manifest(
         "raw_photos_not_copied": manifest.get("identity_policy", {}).get("raw_photos_copied_to_public") is False,
         "source_photo_crops_forbidden": manifest.get("identity_policy", {}).get("source_photo_crops_in_public") is False,
         "hashes_match": not mismatches,
+        "voxel_rig_actions_declared": all(
+            manifest_assets.get(f"character.photo.{person_id}.voxel.v1", {}).get("animation_actions")
+            == list(ANIMATION_ACTIONS)
+            for person_id in PERSON_IDS
+        ),
     }
     return {
         "path": str(MANIFEST_PATH.relative_to(PROJECT_ROOT)).replace("\\", "/"),

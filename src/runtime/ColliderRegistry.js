@@ -10,16 +10,17 @@ import { CAFE_LAYOUT } from "./CafeLayout.js";
  * - market-street / expo-hall：边界 + 空静态圆列表——摊位/展位圆为动态锚点，
  *   由 BoothSystem 在快照同步后注入（main.js currentBlockers() 每帧合并）。
  *
- * NPC ↔ NPC 的分离解算权威在后端（位置权威分离），前端壳只做静态保险。
+ * CharacterSystem owns dynamic vertical capsules. main.js combines those capsules
+ * with this static shell for player, local NPC, and live snapshot movement.
  */
 
 // 咖啡厅桌位圆形阻挡（原 main.js TABLE_BLOCKERS 迁入，锚点按 v1 原始咖啡厅标定）
 export const CAFE_TABLE_COLLIDERS = Object.freeze([
-  Object.freeze({ x: 0, z: 0, r: 1.27 }),
-  Object.freeze({ x: -3.65, z: -1.55, r: 0.72 }),
-  Object.freeze({ x: -3.65, z: 1.55, r: 0.72 }),
-  Object.freeze({ x: 3.28, z: -1.35, r: 0.94 }),
-  Object.freeze({ x: 3.28, z: 1.65, r: 0.94 }),
+  Object.freeze({ id: "roundtable-six", x: 0, z: 0, r: 1.27 }),
+  Object.freeze({ id: "table-window-two", x: -3.65, z: -1.55, r: 0.72 }),
+  Object.freeze({ id: "table-poster-two", x: -3.65, z: 1.55, r: 0.72 }),
+  Object.freeze({ id: "table-library-four", x: 3.28, z: -1.35, r: 0.94 }),
+  Object.freeze({ id: "table-counter-four", x: 3.28, z: 1.65, r: 0.94 }),
 ]);
 
 const CAFE_SHELL = Object.freeze({
@@ -81,6 +82,22 @@ const HUB_TOWN_SHELL = Object.freeze({
   ]),
 });
 
+const HUB_BLOCKOUT_SHELL = Object.freeze({
+  id: "hub-blockout",
+  bounds: Object.freeze({ minX: -6.5, maxX: 6.5, minZ: -13.7, maxZ: 8.8 }),
+  staticCircles: Object.freeze([
+    Object.freeze({ x: -4.1, z: 0.6, r: 0.78 }),
+    Object.freeze({ x: 0, z: 2.5, r: 1.05 }),
+    Object.freeze({ x: 5.7, z: 2.8, r: 0.78 }),
+  ]),
+});
+
+const VILLAGE_MARKET_SHELL = Object.freeze({
+  id: "village-market",
+  bounds: Object.freeze({ minX: -30, maxX: 30, minZ: -30, maxZ: 30 }),
+  staticCircles: Object.freeze([]),
+});
+
 const SHELL_BY_ENVIRONMENT = Object.freeze({
   "environment.cafe.v1": CAFE_SHELL,
   // 美术变体几何不同，但活的世界锁定 v1 锚点（见 main.js 提示 Toast），碰撞同 v1
@@ -88,6 +105,8 @@ const SHELL_BY_ENVIRONMENT = Object.freeze({
   "environment.cafe.painterly.v1": CAFE_SHELL,
   "environment.market-street.v1": MARKET_STREET_SHELL,
   "environment.hub-town.v1": HUB_TOWN_SHELL,
+  "environment.hub-blockout.v1": HUB_BLOCKOUT_SHELL,
+  "environment.village-market.v1": VILLAGE_MARKET_SHELL,
   "environment.cafe.interior.v2": CAFE_SHELL,
   "environment.expo-hall.v1": EXPO_HALL_SHELL,
   "environment.relationship-field.v1": RELATIONSHIP_FIELD_SHELL,
@@ -96,7 +115,7 @@ const SHELL_BY_ENVIRONMENT = Object.freeze({
 /**
  * 按环境资产 id 取静态碰撞壳；未知环境保守回退咖啡厅壳并告警。
  * @param {string} environmentAssetId
- * @returns {{ id: string, bounds: object, staticCircles: ReadonlyArray<{x: number, z: number, r: number}> }}
+ * @returns {{ id: string, bounds: object, staticCircles: ReadonlyArray<{id?: string, x: number, z: number, r: number}> }}
  */
 export function colliderShellFor(environmentAssetId) {
   const shell = SHELL_BY_ENVIRONMENT[environmentAssetId];

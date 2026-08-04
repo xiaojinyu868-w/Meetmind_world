@@ -684,5 +684,13 @@ export function mountGroupPlay(root, {
     open();
   }
 
-  return { open, close, getRoom: () => room, getViewerId: () => viewerId };
+  return {
+    open,
+    close,
+    get isOpen() {
+      return overlay.classList.contains("is-open");
+    },
+    getRoom: () => room,
+    getViewerId: () => viewerId,
+  };
 }

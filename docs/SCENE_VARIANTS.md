@@ -1,80 +1,74 @@
-# EchoWorld 场景多版本说明
+# EchoWorld 场景版本说明
 
-## 版本入口
+## 当前入口
 
-各版本共用同一套玩法、桌位、Agent 和碰撞契约，只替换环境资产和渲染配置。人物资产现在由独立的人物方案参数决定。
+Hub 和咖啡厅使用两套独立的场景契约：
 
-| 版本 | 地址参数 | 环境 | 视觉目标 |
+- `?world=hall&scene=v1`：默认进入 Hub 1.0，占位阶段只搭建市集与广场。
+- `?world=hall&scene=original`：保留“木屋夜集”场景，作为回看与对照版本。
+- `?world=cafe`：默认进入绘本咖啡厅，可在右上角切换三套咖啡厅场景。
+
+界面中的 Hub 版本选择只显示“原始版本”和“1.0”。旧的咖啡厅“原始 / 木屋”选择已经移除。
+
+## Hub 1.0
+
+1.0 是重新构建场景的工作版本，当前采用程序化 Three.js 几何，不依赖 Blender GLB：
+
+- 一块长条矩形地面表示市集区域。
+- 一块圆形地面表示广场区域。
+- 市集两侧使用基础 Box 标记摊位位置。
+- 红、黄、蓝色基础几何分别标记咖啡厅入口、广场活动点和广播点。
+- 人物、数据面板、移动与热点逻辑继续由现有运行时驱动，方便在占位阶段验证完整交互。
+
+相关代码：
+
+- `src/runtime/HubBlockout.js`：1.0 空间、占位物和交互锚点。
+- `src/runtime/SceneVariants.js`：Hub 版本、渲染配置与开场镜头。
+- `src/runtime/ColliderRegistry.js`：不同环境的边界与静态碰撞。
+- `src/runtime/BoothSystem.js`：1.0 使用基础 Box 摊位，原始版本继续加载完整摊位资产。
+
+## 原始版本
+
+“原始版本”保留当前木屋夜集 Hub：
+
+- 环境：`environment.hub-town.v1`
+- 摊位：`module.market-stall.v2`
+- 渲染：`hubDusk`
+
+该版本只作为保留版本，不在本轮重构中修改。
+
+## 咖啡厅版本
+
+咖啡厅的三个版本共享人物、18 个座位、中央圆桌、出生点、碰撞与互动锚点，只切换环境资产与渲染配置：
+
+| 选项 | URL | 环境资产 | 渲染配置 |
 | --- | --- | --- | --- |
-| V1 原始 | `?scene=v1` | `echo_world_lowpoly_cafe.glb` | 保留此前粉彩咖啡厅 |
-| V2 几何（归档） | 前端隐藏 | `echo_world_cafe_reference-lowpoly-v2.glb` | 对齐 `examples/scence` 的硬切面微缩景观 |
-| V3 绘本（归档） | 前端隐藏 | `echo_world_storybook_cafe.glb` | 原创手绘幻想冒险氛围 |
-| V4 木屋（默认） | `?scene=v4` | `echo_world_cafe_interior_v2.glb` | 参考 643e66a9 的木质咖啡厅：北墙吧台、中央六人圆桌、双人/四人桌、沙发区、黄昏暖灯 |
+| 原版 | `?world=cafe&scene=original` | `environment.cafe.v1` | `current` |
+| 几何 | `?world=cafe&scene=reference` | `environment.cafe.reference.v1` | `referenceLowpoly` |
+| 绘本（默认） | `?world=cafe&scene=storybook` | `environment.cafe.painterly.v1` | `painterlyAdventure` |
 
-未提供参数时默认进入 V4。界面顶部提供 V1 与 V4；旧 `?scene=v2/v3` 地址会规范为默认版。切换会刷新页面，避免旧场景的地面射线、NPC、灯光和材质缓存残留。人物生成方案当前只启用 `?character=voxel`，详见 [`PHOTO_CHARACTER_PIPELINES.md`](PHOTO_CHARACTER_PIPELINES.md)。
+木屋 `environment.cafe.interior.v2` 不进入本次选择器。人物仍使用当前像素角色方案。
 
-## 小镇 Hub 环境（hall 世界，2026-08-04 起）
+## 版本约束
 
-大厅（`?world=hall`，默认）自 2026-08-04 起使用箱庭夜集市 `echo_world_hub_town.glb`（`blender/build_hub_town.py`，布局参考 `docs/84a074ecf6a20c847a41b64a0cdb7d9b.png`）：入口木门（北）→ 市集街道（两侧摊位垫）→ 篝火广场（中央篝火 + 5 木凳，联机入口）→ 咖啡厅外观（西侧，模块追加自 `build_cafe_exterior.py`）→ 花园/小河（南侧，汀步 + 木桥）。视觉为黄昏夜集（VisualProfiles `hubDusk`）：深蓝夜空 + 暖点光（篝火/串灯/门灯）。
-配套资产：摊位 `module.market-stall.v2`（旅行商人推车，`build_market_stall_v2.py`，每摊位按 personId 稳定配色变体）、咖啡厅外观 `venue.cafe-exterior.v1`。
-旧 `environment.market-street.v1`（`build_market_street.py`）保留在库，不再被引用。
+- `scene` 参数根据 `world` 分别解析：Hub 使用 `original/v1`，咖啡厅使用 `original/reference/storybook`。
+- Hub 未提供或提供无效的 `scene` 时回退到 `v1`；咖啡厅回退到 `storybook`。
+- 从一个世界进入另一个世界时会清理 `scene`，避免同名版本在 Hub 与咖啡厅之间串场。
+- 切换 Hub 版本会刷新页面，避免环境网格、材质、灯光和碰撞缓存串场。
+- 后续重构应只修改 `v1`，除非明确要求同步更新保留版本。
 
-## 视觉策略
-
-### V2 几何 Low-poly
-
-- 三角块面草地和硬边轮廓，不依赖圆角盒体表达低多边形。
-- 草绿、芥黄、木色和深绿组成有限色板。
-- 单一暖色主光形成清楚的长阴影，辅以较弱天光。
-- 家具、植物、发型和服装均使用低边数切面。
-- 环境为 `3,157` 三角面，人物为 `440` 三角面。
-
-### V3 绘本冒险
-
-- 开放木梁、拱形入口、室内树、藤蔓、草坡和手绘式光斑组成更具叙事性的空间。
-- Blender 环境材质以 PBR 色块导出，Three.js 保留这些底色；人物在浏览器中使用四级 Toon 明暗。
-- 人物增加围巾、披肩、束腰和深色结构边，头部仍没有眼、鼻、嘴等五官。
-- 环境为 `17,786` 三角面，人物为 `794` 三角面。
-
-Blender 可以实现这类效果，但 Freestyle、Grease Pencil、Shader to RGB 和合成器效果不会随 GLB 自动进入 Three.js。因此本项目把可移植的颜色、几何和结构边固化到 GLB，在 Three.js 中重建色调映射和人物 Toon 光照。V3 是原创视觉方案，不包含或复刻商业游戏、动画的模型、贴图或角色资产。
-
-## 玩法空间契约
-
-所有咖啡厅室内版本（含 V4 木屋）必须保留：
-
-- `ROOT_Cafe`
-- `GROUND_CafeFloor`
-- `ANCHOR_PlayerSpawn`
-- `INTERACT_CentralTable`
-- `TABLE_Central6`
-- `TABLE_2_01..02`
-- `TABLE_4_01..02`
-- 18 个原名 `SEAT_*` 节点
-
-场地仍按 `12m x 10m` 的主要游玩范围布置，地面高度为 `0`，座高为 `0.46m`，桌高为 `0.76m`。V4 的回导检查（`blender/validate_cafe_interior_v2.py`）为 18/18 座位、误差 0.0000m；Hub 环境校验见 `blender/validate_hub_town.py`。
-
-## Blender 重建
-
-在仓库根目录执行（本机 Blender 位于 `blender-4.5.12-linux-x64/blender`）：
+## 构建与验证
 
 ```bash
-./blender-4.5.12-linux-x64/blender --background --factory-startup --python blender/build_hub_town.py
-./blender-4.5.12-linux-x64/blender --background --factory-startup --python blender/validate_hub_town.py
-
-./blender-4.5.12-linux-x64/blender --background --factory-startup --python blender/build_cafe_exterior.py
-./blender-4.5.12-linux-x64/blender --background --factory-startup --python blender/build_cafe_interior_v2.py
-./blender-4.5.12-linux-x64/blender --background --factory-startup --python blender/validate_cafe_interior_v2.py
-
-./blender-4.5.12-linux-x64/blender --background --factory-startup --python blender/build_market_stall_v2.py
-./blender-4.5.12-linux-x64/blender --background --factory-startup --python blender/validate_market_stall_v2.py
+npm run build
 ```
 
-注意：`build_hub_town.py` 依赖 `blender/echo_world_cafe_exterior.blend`，需先运行 `build_cafe_exterior.py`。脚本会更新 `blender/` 中的源场景、`public/models/` 中的 Three.js 资产、`renders/` 中的预览图以及验证报告。
+浏览器至少验证以下地址：
 
-## 性能边界
-
-V3 视觉丰富版包含 `626` 个环境 Mesh 节点，适合作为黑客松桌面展示版，但移动端正式发布前应合并同材质静态网格并实例化植物。V1 和 V2 更适合当前移动端预算。V4 室内约 1.1 万三角面（0.97MB）；Hub 小镇为户外大场景，预算 10 万三角面 / 10MB（实际见验证报告）。
-
-## 变更记录
-
-- 2026-08-04 | V4 木屋室内（643e66a9 参考，契约零改动）成为默认；V2/V3 归档；大厅切换为小镇 Hub 夜集市环境（84a074 布局）+ hubDusk 视觉 + 摊位 v2 配色变体 | AI
+```text
+/?world=hall&scene=v1
+/?world=hall&scene=original
+/?world=cafe&scene=original
+/?world=cafe&scene=reference
+/?world=cafe&scene=storybook
+```

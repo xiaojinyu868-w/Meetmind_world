@@ -38,6 +38,8 @@ const ROUNDTABLE_SEATS = Object.freeze(
 const EVENT_TYPE_ALIASES = Object.freeze({
   "meeting-start": "meeting-started",
   "meeting-end": "meeting-ended",
+  "animation.cue": "animation-cue",
+  animation_cue: "animation-cue",
 });
 
 
@@ -57,12 +59,23 @@ export function normalizeEvent(rawEvent) {
   if (!rawEvent || typeof rawEvent !== "object") return null;
   const rawType = String(rawEvent.type ?? "").trim();
   if (!rawType) return null;
-  return {
+  const payload =
+    rawEvent.payload && typeof rawEvent.payload === "object" && !Array.isArray(rawEvent.payload)
+      ? rawEvent.payload
+      : {};
+  const meetingId =
+    typeof rawEvent.meeting_id === "string"
+      ? rawEvent.meeting_id
+      : (typeof rawEvent.meetingId === "string" ? rawEvent.meetingId : null);
+  const topic = typeof rawEvent.topic === "string" ? rawEvent.topic : null;
+  const normalized = {
     type: EVENT_TYPE_ALIASES[rawType] ?? rawType,
     agentId:
       typeof rawEvent.agent_id === "string"
         ? rawEvent.agent_id
-        : (typeof rawEvent.agentId === "string" ? rawEvent.agentId : null),
+        : (typeof rawEvent.agentId === "string"
+            ? rawEvent.agentId
+            : (typeof rawEvent.actor_id === "string" ? rawEvent.actor_id : null)),
     toAgentId:
       typeof rawEvent.to_agent_id === "string"
         ? rawEvent.to_agent_id
@@ -70,16 +83,28 @@ export function normalizeEvent(rawEvent) {
             ? rawEvent.toAgentId
             : (typeof rawEvent.target_id === "string" ? rawEvent.target_id : null)),
     text: typeof rawEvent.text === "string" ? rawEvent.text : "",
-    meetingId:
-      typeof rawEvent.meeting_id === "string"
-        ? rawEvent.meeting_id
-        : (typeof rawEvent.meetingId === "string" ? rawEvent.meetingId : null),
-    topic: typeof rawEvent.topic === "string" ? rawEvent.topic : null,
+    action:
+      typeof rawEvent.action === "string"
+        ? rawEvent.action
+        : (typeof payload.action === "string"
+            ? payload.action
+            : (typeof payload.animation === "string"
+                ? payload.animation
+                : (typeof payload.name === "string" ? payload.name : null))),
+    durationMs:
+      finiteNumber(rawEvent.duration_ms) ??
+      finiteNumber(rawEvent.durationMs) ??
+      finiteNumber(payload.duration_ms) ??
+      finiteNumber(payload.durationMs),
     participants: Array.isArray(rawEvent.participants)
       ? rawEvent.participants.filter((id) => typeof id === "string")
       : [],
     tick: finiteNumber(rawEvent.tick),
   };
+  // IF-6 会议事件字段只在存在时挂上，保持无会议事件的结构与上游契约一致
+  if (meetingId !== null) normalized.meetingId = meetingId;
+  if (topic !== null) normalized.topic = topic;
+  return normalized;
 }
 
 
