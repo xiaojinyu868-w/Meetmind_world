@@ -7,7 +7,7 @@ import * as THREE from "three";
  *   { id, type: "booth", person_id, position: {x, z, yaw},
  *     display: { name, headline, face_ref, photos[], tags[] } }
  *
- * 资产契约：模板 GLB（module.market-stall.v1）的展示面网格按约定命名——
+ * 资产契约：模板 GLB（module.market-stall.v2）的展示面网格按约定命名——
  *   MESH_NamePlate / MESH_Portrait / MESH_PhotoFrame_01 / MESH_PhotoFrame_02 / MESH_Backdrop
  * 克隆实例时展示面材质独立克隆再贴图（贴图经 integrations.resolveMediaUrl 映射，
  * live → 媒体路由，失败回退占位肖像）；NamePlate/Backdrop 用 CanvasTexture 绘制。
@@ -17,7 +17,7 @@ import * as THREE from "three";
  */
 
 export const BOOTH_BLOCKER_RADIUS = 0.9;
-export const BOOTH_TEMPLATE_ASSET_ID = "module.market-stall.v1";
+export const BOOTH_TEMPLATE_ASSET_ID = "module.market-stall.v2";
 
 const ENTRANCE_DURATION = 0.3;
 const PLACEHOLDER_PORTRAIT = "portraits/person-self.png";

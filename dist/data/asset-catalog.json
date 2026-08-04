@@ -52,6 +52,14 @@
       "root_node": "ROOT_MarketStall"
     },
     {
+      "asset_id": "module.market-stall.v2",
+      "kind": "environment-module",
+      "url": "models/modules/echo_world_market_stall_20260804.glb",
+      "version": 2,
+      "style": "market-street",
+      "root_node": "ROOT_MarketStall"
+    },
+    {
       "asset_id": "character.faceless-prototype.v1",
       "kind": "character",
       "url": "models/characters/echo_world_faceless_person.glb",

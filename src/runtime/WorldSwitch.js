@@ -19,7 +19,7 @@ export const HALL_LAYOUT = Object.freeze({
     Object.freeze({ x: 2.55, z: 8.3, yaw: Math.PI }),
   ]),
   environmentAssetId: "environment.market-street.v1",
-  boothTemplateAssetId: "module.market-stall.v1",
+  boothTemplateAssetId: "module.market-stall.v2",
   // 大厅静止陈列，快照轮询低频即可；咖啡厅维持 2s 实时感
   snapshotPollMs: 10000,
   snapshotUrl: `${import.meta.env.BASE_URL}api/v0/world/snapshot?world=hall`,
