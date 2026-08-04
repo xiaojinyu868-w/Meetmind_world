@@ -16,7 +16,7 @@ const SPLAT_FLIP_QUATERNION = new THREE.Quaternion(1, 0, 0, 0);
 // 对齐目标：可行走区域（朝上三角面的 XZ 分布）映射到这个尺度（~1/4 米制，
 // 既保留景观纵深又不过度压缩——270m 世界压到 18m 会把丘陵压成泥浆）；
 // Marble 世界的包围盒常含天空/地裙，bbox 定中会把内容甩到远处（2026-08-04 教训）
-const WALK_TARGET_EXTENT_METERS = 60;
+const WALK_TARGET_EXTENT_METERS = 45;
 const FIT_CLAMP = { min: 0.05, max: 40 };
 const UP_NORMAL_MIN = 0.85;
 const LOAD_TIMEOUT_MS = 90000;
