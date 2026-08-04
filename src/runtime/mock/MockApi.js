@@ -34,18 +34,35 @@ const PIPELINE_SCENARIO_FILES = Object.freeze({
 });
 
 /**
- * 当前 API 模式："mock" | "live"。模块加载时由 URL 参数 `?api=live` 决定一次，
- * 之后不变（刷新页面才能切换），避免会话中途数据源混用。
+ * 当前 API 模式："live" | "mock" | "auto"（默认）。`?api=live`/`?api=mock` 显式指定；
+ * 默认 auto：启动时探测一次后端（/world/brief），可达即 live、不可达回退 mock——
+ * 部署态默认吃到真实后端，纯静态演示（无后端）自动走本地 mock，会话内不混用。
  */
 export const API_MODE = (() => {
   if (typeof window === "undefined" || !window.location) return "mock";
   const params = new URLSearchParams(window.location.search);
-  return params.get("api") === "live" ? "live" : "mock";
+  const value = params.get("api");
+  if (value === "live" || value === "mock") return value;
+  return "auto";
 })();
 
-/** @returns {boolean} 当前是否连真实后端（`/api/v0`）。 */
+let liveResolved = API_MODE === "live";
+let liveProbePromise = null;
+
+/** auto 模式下探测一次后端可用性（结果会话内缓存）；显式 live/mock 直接返回。 */
+export function useLiveMode() {
+  if (API_MODE !== "auto") return Promise.resolve(API_MODE === "live");
+  if (!liveProbePromise) {
+    liveProbePromise = fetchJson(`${LIVE_BASE_URL}/world/brief`)
+      .then(() => { liveResolved = true; return true; })
+      .catch(() => { liveResolved = false; return false; });
+  }
+  return liveProbePromise;
+}
+
+/** @returns {boolean} 当前是否连真实后端（`/api/v0`）。auto 模式在探测完成后才为 true。 */
 export function isLiveMode() {
-  return API_MODE === "live";
+  return API_MODE === "live" || (API_MODE === "auto" && liveResolved);
 }
 
 function mockUrl(fileName) {
@@ -247,7 +264,7 @@ export async function ingest(files, meta = {}) {
   if (!meta.captured_at || !meta.device) {
     throw new Error("IF-1 ingest: meta.captured_at 与 meta.device 必填");
   }
-  if (isLiveMode()) {
+  if (await useLiveMode()) {
     const form = new FormData();
     for (const file of files) form.append("media", file);
     form.append("captured_at", meta.captured_at);
@@ -279,7 +296,7 @@ export async function ingest(files, meta = {}) {
  * @returns {Promise<object>} encounter_draft（echo-package.v0 结构，`identity.confirmed` 恒为 false）
  */
 export async function pipelineStream(inputId, onProgress, options = {}) {
-  if (isLiveMode()) {
+  if (await useLiveMode()) {
     const response = await fetch(`${LIVE_BASE_URL}/pipeline`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
@@ -340,7 +357,7 @@ export async function confirm(draft, identity, privacy = "self-only") {
   if (!identity || typeof identity !== "object") {
     throw new Error("IF-3 confirm: identity 必填");
   }
-  if (isLiveMode()) {
+  if (await useLiveMode()) {
     return postJson("/confirm", {
       encounter_draft: draft,
       identity: { name: identity.name ?? null, match_person_id: identity.match_person_id ?? null },
@@ -363,7 +380,7 @@ export async function confirm(draft, identity, privacy = "self-only") {
  * @returns {Promise<object[]>} echo-package.v0 资料包数组
  */
 export async function getPackages() {
-  if (isLiveMode()) {
+  if (await useLiveMode()) {
     return normalizePackageList(await fetchJson(`${LIVE_BASE_URL}/packages`));
   }
   return normalizePackageList(await fetchJson(mockUrl("packages.demo.json")));
@@ -376,7 +393,7 @@ export async function getPackages() {
  * @returns {Promise<object>} echo-package.v0 资料包；不存在时抛错（对应 404）
  */
 export async function getPackage(personId) {
-  if (isLiveMode()) {
+  if (await useLiveMode()) {
     return fetchJson(`${LIVE_BASE_URL}/packages/${encodeURIComponent(personId)}`);
   }
   const packages = await getPackages();
@@ -443,7 +460,7 @@ function mockFieldFromPackage(pkg) {
 
 /** FR-2.11：读取/生成个人关系场域。 */
 export async function getField(personId) {
-  if (isLiveMode()) {
+  if (await useLiveMode()) {
     return fetchJson(`${LIVE_BASE_URL}/fields/${encodeURIComponent(personId)}`);
   }
   return mockFieldFromPackage(await getPackage(personId));
@@ -451,7 +468,7 @@ export async function getField(personId) {
 
 /** FR-2.11：重算可删除的场域推断，不修改事实层。 */
 export async function regenerateField(personId) {
-  if (isLiveMode()) {
+  if (await useLiveMode()) {
     return postJson(`/fields/${encodeURIComponent(personId)}/regenerate`, {});
   }
   return getField(personId);
@@ -470,7 +487,7 @@ function readMockWorldEvents() {
 
 /** FR-2.9：读取近期世界事件。 */
 export async function getWorldEvents(limit = 20) {
-  if (isLiveMode()) {
+  if (await useLiveMode()) {
     return fetchJson(`${LIVE_BASE_URL}/world/events?limit=${Math.max(1, Math.min(100, limit))}`);
   }
   return { events: readMockWorldEvents().slice(0, limit) };
@@ -478,7 +495,7 @@ export async function getWorldEvents(limit = 20) {
 
 /** FR-2.9：进入世界时的晨报摘要。 */
 export async function getWorldBrief() {
-  if (isLiveMode()) return fetchJson(`${LIVE_BASE_URL}/world/brief`);
+  if (await useLiveMode()) return fetchJson(`${LIVE_BASE_URL}/world/brief`);
   const events = readMockWorldEvents().slice(0, 6);
   return {
     schema: "echo-world-brief.v1",
@@ -494,7 +511,7 @@ export async function getWorldBrief() {
 
 /** FR-2.8/2.9：把空间互动追加为世界事件。 */
 export async function recordWorldInteraction(payload) {
-  if (isLiveMode()) return postJson("/world/interactions", payload);
+  if (await useLiveMode()) return postJson("/world/interactions", payload);
   const events = readMockWorldEvents();
   const event = {
     schema: "echo-world-event.v1",
@@ -523,7 +540,7 @@ export async function recordWorldInteraction(payload) {
  * @returns {Promise<{person_id: string, reply: string, cited_facts: string[], suggestions: string[], generated_by: string}>}
  */
 export async function chatWithAgent(personId, message, history = []) {
-  if (isLiveMode()) {
+  if (await useLiveMode()) {
     return postJson(`/agents/${encodeURIComponent(personId)}/chat`, { message, history });
   }
   await delay(randomStepDelay());
@@ -582,7 +599,7 @@ function mockAgentChatReply(pkg, message, history) {
  * @returns {Promise<{inference_ref: string, note: object}>}
  */
 export async function saveChatNote(personId, text) {
-  if (isLiveMode()) {
+  if (await useLiveMode()) {
     return postJson(`/agents/${encodeURIComponent(personId)}/chat/save-note`, {
       text,
       source: "player-chat",
@@ -612,7 +629,7 @@ export async function saveChatNote(personId, text) {
  *   duration_ticks: number, state: string}>}
  */
 export async function startMeeting(participantIds, topic = null) {
-  if (isLiveMode()) {
+  if (await useLiveMode()) {
     return postJsonWithDetail("/agents/meeting", {
       participant_ids: participantIds,
       topic: topic ?? null,
@@ -637,7 +654,7 @@ export async function startMeeting(participantIds, topic = null) {
  * @returns {Promise<{meeting_id: string, accepted: boolean}>}
  */
 export async function postMeetingMessage(text) {
-  if (isLiveMode()) {
+  if (await useLiveMode()) {
     return postJsonWithDetail("/agents/meeting/current/message", { text });
   }
   await delay(120);
@@ -652,7 +669,7 @@ export async function postMeetingMessage(text) {
  * @returns {Promise<{meeting_id: string, ended: boolean}>}
  */
 export async function endMeeting() {
-  if (isLiveMode()) {
+  if (await useLiveMode()) {
     return postJsonWithDetail("/agents/meeting/current/end", {});
   }
   await delay(120);
@@ -689,7 +706,7 @@ export async function search(request) {
   if (!request || typeof request !== "object") {
     throw new Error("IF-5 search: request 必填");
   }
-  if (isLiveMode()) {
+  if (await useLiveMode()) {
     return postJson("/search", request);
   }
   const { results } = await fetchJson(mockUrl("search.demo.json"));
@@ -734,7 +751,7 @@ export async function groupOnboardingDetect(photo, { expectedCount = 0 } = {}) {
   if (!photo) {
     throw new Error("合照入场 detect: photo 必填");
   }
-  if (isLiveMode()) {
+  if (await useLiveMode()) {
     const form = new FormData();
     form.append("photo", photo);
     form.append("expected_count", String(expectedCount));
@@ -768,7 +785,7 @@ export async function groupOnboardingConfirm(groupId, assignments) {
   if (!Array.isArray(assignments) || assignments.length === 0) {
     throw new Error("合照入场 confirm: assignments 至少包含一位人物");
   }
-  if (isLiveMode()) {
+  if (await useLiveMode()) {
     return postV1Json("/group-onboarding/confirm", { group_id: groupId, assignments });
   }
   const template = await fetchJson(mockUrl("group-onboarding.register.demo.json"));
@@ -795,7 +812,7 @@ export async function groupOnboardingConfirm(groupId, assignments) {
  * @returns {Promise<object>} echo-snapshot.v1 快照
  */
 export async function fetchSnapshot() {
-  if (isLiveMode()) {
+  if (await useLiveMode()) {
     return validateSnapshot(await fetchJson(`${LIVE_BASE_URL}/world/snapshot`));
   }
   try {

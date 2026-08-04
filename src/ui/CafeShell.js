@@ -1153,6 +1153,11 @@ export function createCafeShell({
       // cafe-roundtable（E/F 情境菜单）完全取代，避免两套提示并存造成的重叠。
       // 方法保留为空操作，兼容既有调用点。
     },
+    setMeetingLive(value) {
+      // 后端可达性在 boot() 异步探测后回填（auto 模式），会议台词因此能
+      // 在探测完成后再决定走真实后端还是本地演示轮播。
+      meetingLive = Boolean(value);
+    },
     openMeeting(personIds = []) {
       if (meetingActive || meetingSheetOpen || world !== "cafe") return false;
       meetingSheetOpen = true;

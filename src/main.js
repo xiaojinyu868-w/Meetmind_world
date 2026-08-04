@@ -29,7 +29,7 @@ import {
   sceneVariantFromLocation,
 } from "./runtime/SceneVariants.js";
 import { adaptSnapshot, normalizeEvent } from "./runtime/SnapshotAdapter.js";
-import { API_MODE } from "./runtime/mock/MockApi.js";
+import { useLiveMode } from "./runtime/mock/MockApi.js";
 import { slideStepAroundBlockers } from "./runtime/WalkSlide.js";
 import {
   CAFE_WORLD,
@@ -188,10 +188,10 @@ const onPersonSelected =
         if (personId) integrations.panel.openPerson(personId);
       };
 const liveEnabled = runtimeOptions.live !== false && !isFieldWorld;
-// 用户发起的圆桌会议由真实后端承载（IF-6）：仅 ?api=live 且 live 快照开启时；
-// 其余（静态 mock / 注入 api）保持本地轮播台词的演示行为
-const meetingBackendLive = liveEnabled && API_MODE === "live" &&
-  typeof api.startMeeting === "function" && typeof api.postMeetingMessage === "function";
+// 用户发起的圆桌会议由真实后端承载（IF-6）：live 快照开启且后端可达（auto 探测/live）
+// 且有 IF-6 方法时；其余（纯静态 mock / 注入 api）保持本地轮播台词的演示行为。
+// 后端探测是异步的：先按 false 初始化，boot() 探测完成后回填并通知 appShell。
+let meetingBackendLive = false;
 const snapshotPollMs =
   Number.isFinite(runtimeOptions.snapshotPollMs) && runtimeOptions.snapshotPollMs >= 250
     ? runtimeOptions.snapshotPollMs
@@ -2224,6 +2224,10 @@ function buildFallbackEnvironment() {
 
 async function boot() {
   setProgress(0.04, `正在读取${worldTitle}`);
+  // 先探测后端可达性（auto 模式）：决定会议/场域/播报等走真实后端还是本地 mock
+  meetingBackendLive = liveEnabled && await useLiveMode() &&
+    typeof api.startMeeting === "function" && typeof api.postMeetingMessage === "function";
+  appShell.setMeetingLive?.(meetingBackendLive);
   // 人名映射只拉一次：气泡与 Toast 优先使用资料包里的名字（与 integrations 共享 getPackages 缓存）
   api.getPackages().then(fillPackageNames).catch((error) => {
     console.warn("[EchoWorld] api.getPackages() 失败，气泡人名回退为本地数据", error);
