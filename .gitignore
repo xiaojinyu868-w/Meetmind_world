@@ -5,6 +5,7 @@ blender-4.5.12-linux-x64/
 EchoWorld-threejs-frontend-20260803.zip
 
 # 后端（backend/）
+backend/.venv
 backend/.venv/
 backend/.env
 backend/__pycache__/
