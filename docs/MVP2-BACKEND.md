@@ -114,8 +114,42 @@ generation ID。合成的 1x1 测试图没有人脸，因此 `group_photo_status
   presence/pub-sub/分片锁适配器。
 - 房间尚未接登录体系；正式对外前必须由登录身份签发短期 room token，禁止客户端
   自报 `actor_id`。
-- 当前 Three.js 仍主要消费 v0 快照；v1 房间/WebSocket 已可用，但多人控制 UI、
-  E/F 命令和重连客户端需要在前端后续接线。
 - OpenCV 是可选本地检测器，不等于稳定身份识别；唯一 person_id 的最终绑定仍要求
   现场人工确认。人脸 embedding 去重和专用分割模型仍是算法迭代项。
 - Field 当前生成版本化环境参数 JSON，尚未生成最终 3D 场景资产。
+
+## 前端接线状态（2026-08-04，ROADMAP 2.H.3 升级）
+
+上一节的"v1 房间/WebSocket 已可用，但多人控制 UI、E/F 命令和重连客户端需要在前端
+后续接线"已落地：
+
+- `src/runtime/RoomClient.js`：v1 房间客户端。REST 负责 join/commands/snapshot；
+  WS `stream?after_sequence=N` 负责有序事件流；断线指数退避重连并按 cursor 补拉；
+  事件按 sequence 去重，发现空洞先走 HTTP replay 补齐再投递；所有帧校验
+  `meetmind.rooms.v1` / `meetmind.event.v1` / `meetmind.room-snapshot.v1`，未知
+  schema 丢弃并 warn，不抛穿。WS 握手失败/超时自动降级为 events 端点轮询
+  （约 1s 节拍，功能等价），并周期性尝试升级回 WS。
+- `src/ui/group/RoomPanel.js`：v1 联机面板（房间创建/加入、名册与在线、
+  meeting.invite/respond/start/end、有序事件条）。功能探测
+  `GET /api/v1/scenes/modules` 失败时面板隐藏，v0 GroupPlay（含"谁写的？"游戏）
+  完全不受影响；两条线并存。
+- 位置同步：本地 `member.move` 约 4.5Hz 上报（command_id 为 uuid，幂等）；
+  远端成员位置映射为与 v0 相同的 participants 形状，复用 main.js 的
+  `groupPresenceOverrides` 插值渲染通道；名册里的新面孔现场克隆实体。
+- 大屏只读（TBD-H1 已决）：`?role=screen&room=<roomId>`（或 `groupScreen=1`），
+  readOnly 客户端（不 join、不上报位置），镜头绕场缓慢环视，左上角状态角标。
+- E/F 场景热点到 `hotspot.interact` 命令的接线留给场景交互层（RoomClient 已暴露
+  `interactHotspot(hotspotId, action)`）。
+- 纯逻辑自测：`node scripts/room-client.test.mjs`（13 项：帧解析、schema 校验、
+  cursor 去重/空洞补拉、退避、断线重连、降级轮询、命令幂等形状、只读模式）。
+
+## 部署注意（nginx WebSocket）
+
+线上 `location ^~ /echoworld/api/` 缺 `Upgrade`/`Connection upgrade` 头，WS 握手
+会被代理吃掉；前端会自动降级轮询，不阻塞上线。补齐方法见
+`docs/deploy/nginx-echoworld-api-websocket.conf`（含验证 curl），由人工执行，
+代理不 reload nginx。
+
+## 变更记录
+
+- 2026-08-04 | 前端 v1 房间接线（TBD-ARCH-4 现场档目标形态）：RoomClient（WS 有序事件流 + cursor 重放 + 降级轮询）、RoomPanel（v1 联机面板，功能探测失败时回落 v0 GroupPlay）、大屏只读视角（?role=screen）；nginx WS 反代补丁备档 docs/deploy/ | AI（实现）

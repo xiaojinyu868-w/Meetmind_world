@@ -70,6 +70,10 @@ src/runtime/
   RelationshipFieldSystem.js  `echo-field.v1` 关系场域程序化地形、实体、热点与动画
   WorldModuleRegistry.js    `echo-world-modules.v1` 挂载契约加载和严格校验
   WorldBroadcastSystem.js   咖啡厅 3D 播报屏与 DOM 晨报摘要
+  RoomClient.js             v1 现场房间客户端（docs/MVP2-BACKEND.md）：REST join/commands/snapshot +
+                            WS 有序事件流（after_sequence cursor 重放、sequence 去重/空洞 HTTP 补拉、
+                            指数退避重连），WS 不可用自动降级 events 轮询；member.move 约 4.5Hz 幂等上报；
+                            纯逻辑可在 node 下自测（scripts/room-client.test.mjs）
   mock/MockApi.js           API v0 契约客户端（IF-1~IF-6 含会议端点），`?api=live` 切真实后端
 src/bootstrap/
   integrations.js           统一集成层：MockApi → 各 UI 模块的 api 适配（getPackages 缓存 + confirm 失效）、
@@ -84,6 +88,9 @@ src/ui/
   pipeline/PipelineFlow.js  相遇「录入 → 处理 → 确认」三屏流程（IF-1/2/3，自带 pipeline.css）
   onboarding/OnboardingFlow.js  合照入场三屏流程（FR-2.12，/api/v1/group-onboarding 两段式，自带 onboarding.css）
   package-panel/            资料包面板 + 顶部检索条（IF-5，自带 panel.css）
+  group/GroupPlay.js        v0 现场房间（700ms 轮询试点 + “谁写的？”游戏，echo-group-room.v1）
+  group/RoomPanel.js        v1 联机房间面板（RoomClient 驱动：创建/加入、名册、meeting.* 命令、
+                            有序事件条；探测 /api/v1/scenes/modules 失败时隐藏并回落 v0；自带 room.css）
   AppShell.js               ⚠ 未被任何文件引用（历史遗留，疑似 CafeShell 的早期版本），改动前先确认
 src/cafe.css                当前使用的样式（由 main.js import）
 src/style.css               ⚠ 未被引用（index.html 无 link、无 import），改动前先确认
@@ -94,6 +101,8 @@ public/
   data/asset-catalog.json   环境/人物/资料资产白名单
   data/people/              人物 profile.json
 dist/                       构建产物（已提交 Git）
+scripts/                    node 自测与冒烟：room-client.test.mjs（RoomClient 纯逻辑/状态机）、
+                            smoke-room-client.mjs（真实后端双端 WS 冒烟，自动拉起本地 uvicorn）
 ```
 
 ### 数据流
