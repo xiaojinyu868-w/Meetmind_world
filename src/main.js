@@ -47,6 +47,7 @@ import {
 import { loadWorldSpec, publicUrl } from "./runtime/WorldSpec.js";
 import { createCafeShell } from "./ui/CafeShell.js";
 import { mountSceneInteraction } from "./ui/SceneInteraction.js";
+import { mountRoomPanel } from "./ui/group/RoomPanel.js";
 import { mountIntegrations, resolveMediaUrl } from "./bootstrap/integrations.js";
 import "./cafe.css";
 
@@ -82,6 +83,12 @@ const isFieldWorld = activeWorld.id === "field";
 const fieldTargetPersonId = fieldPersonFromLocation() ?? people[0].id;
 const fieldTargetPerson = people.find((person) => person.id === fieldTargetPersonId) ?? people[0];
 const invitedPersonId = new URLSearchParams(window.location.search).get("invite");
+// 大屏只读视角（TBD-H1 已决：大屏只读）：?role=screen 或 ?groupScreen=1，
+// 无本地玩家、镜头绕场环视，远端成员由 v1 房间事件流驱动
+const screenUrlParams = new URLSearchParams(window.location.search);
+const screenMode =
+  screenUrlParams.get("role") === "screen" || screenUrlParams.get("groupScreen") === "1";
+const screenRoomId = screenUrlParams.get("room");
 // 大厅暂只用 v1 视觉配置（专属 profile 后续）；环境资产/布局/出生点按世界选择
 const activeVisualProfile = isHallWorld || isFieldWorld
   ? sceneVariantById("v1").visualProfile
@@ -157,6 +164,19 @@ const integrations = mountIntegrations({
   onGroupPresenceHook: (participants, viewerId) => applyGroupPresence(participants, viewerId),
 });
 const api = integrations.api;
+// v1 现场房间（ROADMAP 2.H.3 升级，docs/MVP2-BACKEND.md）：WS 有序事件流 + cursor
+// 重放 + 降级轮询；远端位置复用 v0 的 groupPresenceOverrides 渲染通道。
+// 后端无 v1（/api/v1/scenes/modules 不可达）时面板自动隐藏，v0 GroupPlay 不受影响
+const roomPanel = mountRoomPanel(document.body, {
+  baseUrl: `${import.meta.env.BASE_URL}api/v1`,
+  currentUser,
+  screenMode,
+  screenRoomId,
+  getLocalPresence: () => readGroupPresence(),
+  onRemotePresence: (participants, viewerId) => applyRoomPresence(participants, viewerId),
+  onToast: (message) => pushLiveToast(message),
+});
+void roomPanel; // 句柄保留给诊断/未来场景交互层接线
 // 点击世界中的小人：保留现有侧栏行为，资料包面板浮于其上（外部可用 onPersonSelected 覆盖）
 const onPersonSelected =
   typeof runtimeOptions.onPersonSelected === "function"
@@ -573,6 +593,14 @@ async function configureWorld(root) {
   setProgress(1, `${worldTitle} 已准备好`);
   appShell.setWorldReady(true);
   startLiveWorld();
+  if (screenMode) {
+    // 大屏只读：跳过标题页直接进场，隐藏本地玩家与触屏控件（远端成员由 v1 事件流驱动）
+    appShell.setView("cafe");
+    if (player) player.visible = false;
+    if (playerMarker) playerMarker.visible = false;
+    document.body.classList.add("screen-mode");
+    canvas.dataset.screenMode = "true";
+  }
   requestAnimationFrame(() => loading.classList.add("is-hidden"));
 }
 
@@ -1621,6 +1649,31 @@ function applyGroupPresence(participants, viewerId) {
 }
 
 
+// v1 房间远端成员（RoomClient → 同一渲染通道）：名册里的新面孔先现场克隆实体，
+// 再交给 v0 的 groupPresenceOverrides 做插值；人名写入 packageNames 供气泡/Toast 使用
+function applyRoomPresence(participants, viewerId) {
+  for (const participant of Array.isArray(participants) ? participants : []) {
+    if (!participant?.person_id || participant.person_id === viewerId) continue;
+    if (participant.display_name && !personLikeFor(participant.person_id)) {
+      packageNames.set(participant.person_id, participant.display_name);
+    }
+    if (npcSystem && !npcSystem.getEntity(participant.person_id)) {
+      void ensureAgentEntity({
+        id: participant.person_id,
+        position: participant.presence
+          ? {
+              x: participant.presence.x,
+              z: participant.presence.z,
+              yaw: participant.presence.yaw ?? 0,
+            }
+          : null,
+      });
+    }
+  }
+  applyGroupPresence(participants, viewerId);
+}
+
+
 function startLiveWorld() {
   if (!liveEnabled || liveWorld) return;
   liveWorld = new LiveWorld({
@@ -1792,6 +1845,23 @@ function updateCinematicCamera(delta) {
 }
 
 
+// 大屏只读（?role=screen）：绕场地中心缓慢环视，覆盖整条街道/咖啡厅
+const SCREEN_ORBIT_RADIUS = isHallWorld ? 11.5 : 7.5;
+const SCREEN_ORBIT_HEIGHT = isHallWorld ? 7.4 : 5.6;
+function updateScreenCamera(delta) {
+  const orbit = elapsed * 0.08;
+  desiredCameraPosition.set(
+    Math.sin(orbit) * SCREEN_ORBIT_RADIUS,
+    SCREEN_ORBIT_HEIGHT,
+    Math.cos(orbit) * SCREEN_ORBIT_RADIUS,
+  );
+  desiredLookTarget.set(0, 0.7, 0);
+  camera.position.lerp(desiredCameraPosition, 1 - Math.exp(-2.2 * delta));
+  lookTarget.lerp(desiredLookTarget, 1 - Math.exp(-3 * delta));
+  camera.lookAt(lookTarget);
+}
+
+
 function updatePlayerLabel() {
   if (experienceMode !== "cafe" || meetingMode) {
     playerLabel.style.opacity = "0";
@@ -1901,13 +1971,15 @@ function animate(timestamp) {
     if (liveEnabled) updateLiveAgents(delta);
     else npcSystem.update(delta, elapsed);
     heartSignalSystem.update(elapsed);
-    if (experienceMode === "cafe") {
+    if (experienceMode === "cafe" && !screenMode) {
       updatePlayer(delta);
       if (meetingMode) updateMeetingCamera(delta);
       else updateFollowCamera(delta);
       updatePlayerLabel();
       updateRoundtablePrompt();
       updateSceneInteraction();
+    } else if (screenMode) {
+      updateScreenCamera(delta);
     } else {
       updateCinematicCamera(delta);
     }
@@ -1980,7 +2052,7 @@ canvas.addEventListener("pointerleave", () => {
 });
 
 canvas.addEventListener("pointerup", (event) => {
-  if (!worldReady || experienceMode !== "cafe" || meetingMode) return;
+  if (!worldReady || experienceMode !== "cafe" || meetingMode || screenMode) return;
   if (pointerStart.distanceTo(new THREE.Vector2(event.clientX, event.clientY)) > 8) return;
   const bounds = canvas.getBoundingClientRect();
   pointerNdc.set(
@@ -2005,7 +2077,7 @@ canvas.addEventListener("pointerup", (event) => {
 
 
 window.addEventListener("keydown", (event) => {
-  if (experienceMode === "cafe" && sceneInteraction.handleKey(event)) {
+  if (experienceMode === "cafe" && !screenMode && sceneInteraction.handleKey(event)) {
     event.preventDefault();
     return;
   }

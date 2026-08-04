@@ -1,0 +1,215 @@
+/* v1 联机房间面板（RoomPanel.js）——与 v0 group.css 并存，互不影响 */
+
+.room-fab {
+  position: fixed;
+  right: max(20px, env(safe-area-inset-right));
+  bottom: calc(max(20px, env(safe-area-inset-bottom)) + 64px);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #fff;
+  background: rgb(38 63 96 / 92%);
+  box-shadow: 0 12px 30px rgb(18 33 45 / 25%);
+}
+
+.room-fab svg { color: #8fd3ff; }
+.room-fab span { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.2; }
+.room-fab small { color: rgb(255 255 255 / 68%); font-size: 10px; }
+.room-fab strong { font-size: 13px; }
+
+@media (max-width: 640px) {
+  .room-fab { width: 46px; height: 46px; padding: 0; justify-content: center; }
+  .room-fab span { display: none; }
+}
+
+.room-overlay {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  width: min(400px, 100vw);
+  display: flex;
+  flex-direction: column;
+  background: rgb(250 248 243 / 97%);
+  box-shadow: -18px 0 48px rgb(24 38 52 / 22%);
+  transform: translateX(105%);
+  transition: transform 0.24s ease;
+}
+
+.room-overlay.is-open { transform: translateX(0); }
+.room-overlay.is-busy { pointer-events: none; opacity: 0.72; }
+
+.room-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgb(24 38 52 / 10%);
+}
+
+.room-brand { display: flex; align-items: center; gap: 8px; }
+.room-brand svg { color: #2b5f8f; }
+.room-version { font-size: 11px; color: rgb(24 38 52 / 55%); }
+.room-meta { flex: 1; display: flex; align-items: center; gap: 8px; justify-content: flex-end; font-size: 12px; color: rgb(24 38 52 / 75%); }
+
+.room-state { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
+.room-state i { width: 8px; height: 8px; border-radius: 50%; background: #c8a24a; }
+.room-state.is-live i { background: #3d9d6c; }
+
+.room-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  background: rgb(24 38 52 / 7%);
+  color: #24384c;
+}
+
+.room-main { flex: 1; overflow-y: auto; padding: 18px 16px 26px; }
+
+.room-kicker { font-size: 11px; letter-spacing: 0.14em; color: #2b5f8f; font-weight: 600; }
+.room-lobby h1 { margin: 6px 0 10px; font-size: 22px; color: #1d2f42; }
+.room-hint { font-size: 12.5px; line-height: 1.7; color: rgb(24 38 52 / 68%); }
+
+.room-form { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.room-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: rgb(24 38 52 / 70%); }
+.room-field input {
+  padding: 9px 11px;
+  border: 1px solid rgb(24 38 52 / 18%);
+  border-radius: 6px;
+  font-size: 14px;
+  background: #fff;
+}
+
+.room-join-band { margin-top: 18px; padding-top: 14px; border-top: 1px dashed rgb(24 38 52 / 16%); }
+
+.room-primary,
+.room-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13.5px;
+}
+
+.room-primary { background: #2b5f8f; color: #fff; }
+.room-secondary { background: rgb(43 95 143 / 10%); color: #2b5f8f; }
+
+.room-section-label { font-size: 11px; letter-spacing: 0.12em; color: rgb(24 38 52 / 55%); margin-bottom: 8px; }
+
+.room-roster { display: flex; flex-direction: column; gap: 6px; }
+.room-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgb(24 38 52 / 5%);
+}
+.room-person.is-viewer { background: rgb(43 95 143 / 12%); }
+.room-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #2b5f8f;
+  color: #fff;
+  font-size: 12px;
+}
+.room-person-copy { flex: 1; display: flex; flex-direction: column; line-height: 1.25; }
+.room-person-copy small { color: rgb(24 38 52 / 55%); font-size: 11px; }
+.room-online-dot { width: 8px; height: 8px; border-radius: 50%; background: #3d9d6c; }
+
+.room-code-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: rgb(24 38 52 / 6%);
+}
+.room-code-row small { display: block; font-size: 10px; color: rgb(24 38 52 / 55%); }
+.room-code-row strong { font-size: 14px; letter-spacing: 0.04em; }
+
+.room-meeting { margin-top: 18px; }
+.room-meeting p { margin: 0 0 8px; font-size: 13px; }
+.room-invitation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  background: rgb(201 162 74 / 12%);
+  font-size: 12.5px;
+}
+.room-invitation small { display: block; color: rgb(24 38 52 / 55%); }
+.room-invitation-actions { display: inline-flex; gap: 6px; }
+.room-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+  background: #2b5f8f;
+  color: #fff;
+}
+.room-mini.is-quiet { background: rgb(24 38 52 / 12%); color: #24384c; }
+
+.room-events { margin-top: 18px; }
+.room-event {
+  display: flex;
+  gap: 8px;
+  padding: 6px 2px;
+  font-size: 12.5px;
+  color: rgb(24 38 52 / 82%);
+  border-bottom: 1px solid rgb(24 38 52 / 6%);
+}
+.room-event em { font-style: normal; color: rgb(24 38 52 / 45%); font-variant-numeric: tabular-nums; }
+.room-quiet { font-size: 12.5px; color: rgb(24 38 52 / 55%); }
+.room-leave { width: 100%; margin-top: 20px; }
+
+/* 大屏只读角标 */
+.room-screen-chip {
+  position: fixed;
+  top: max(14px, env(safe-area-inset-top));
+  left: max(14px, env(safe-area-inset-left));
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 13px;
+  border-radius: 8px;
+  color: #fff;
+  background: rgb(20 32 46 / 78%);
+  backdrop-filter: blur(6px);
+  font-size: 12px;
+}
+.room-screen-chip svg { color: #8fd3ff; }
+.room-screen-chip span { display: flex; flex-direction: column; line-height: 1.3; }
+.room-screen-chip small { color: rgb(255 255 255 / 66%); }
+
+/* 大屏模式隐藏本地玩家相关 UI */
+.screen-mode #touch-stick,
+.screen-mode #player-label { display: none !important; }
