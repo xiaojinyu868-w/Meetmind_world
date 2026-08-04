@@ -1,6 +1,8 @@
 # EchoWorld 技术架构
 
-对应 PRD.md 的 MVP 1.0–3.0。本文只描述**目标架构**；现有仓库是 three.js 前端原型（见根目录 AGENTS.md），将逐步演进进 `frontend/`。
+对应 PRD.md 的 MVP 1.0–3.0。本文描述分层原则与目标架构；当前可信单机的真实
+组件、K3 输入和数据接通状态以
+[`REAL-DATA-WORLD-ARCHITECTURE.md`](./REAL-DATA-WORLD-ARCHITECTURE.md) 为准。
 
 ## 1. 分层职责（不可逾越的边界）
 
@@ -149,10 +151,14 @@ MVP2（2026-08-03 重设后）增加三条线：场景语言（点位交互/播�
 | `texture_gen.py` | `generate(photos, person_id) -> TextureSet`（头部五面 + 身体 atlas + 四表情） | ✅ 已落地（2026-08-04 改 i2i 直出）：真实人脸裁剪作参考图，gpt-image-2 i2i 按"视角+像素风+纯色背景"提示词直出头部五面 16x16 瓦片（背景检测/内容裁剪/BOX 重采样/定色量化/色度键控/最近邻填充，无半透明渗色）；CharacterSpec 由照片像素采样（肤色/发色/服装主色），只承担元数据/调色板/兜底；降级链 i2i → 文本 t2i → 程序化；确定性合成器拼 128x128 固定 UV atlas（身体区域纯调色板驱动）；表情 atlas 程序化像素编辑派生 |
 | `voxel_gen.py` | `generate(textures, style) -> Path(glb)`（体素组装） | ✅ 已落地：Blender 无头模板 `templates/voxel_person.py`（固定体素身体 + VOXEL_REGIONS UV + Closest 采样 + ROOT_PhotoCharacter/-Y/脚底原点/1.65m 契约）；`validate_glb` 硬校验根节点/包围盒/贴图/NEAREST 采样器；Blender 失败显式报错；胸像走 Cycles CPU（headless 无 EGL） |
 | `person_builder.py` | `build(person_id, photos) -> avatar + asset_entry + manifest` | ✅ 已落地：编排贴图→GLB→胸像；源照片写事实层（内容哈希命名，重跑幂等）；avatar `voxel-textured.v1` 登记派生指针；manifest 带 sha256/模型/时间戳；产物落 `data/derived/voxel-pipeline/` 暂存，评审后才发布进 public/ 白名单；CLI `scripts/build_person_from_photo.py` |
+| `pipelines/physical_ai_enrichment/avatar.py` | `generate(person_id, image_bytes, source_ref) -> CharacterAsset` | 已实现：安全可见特征/规则配色 → 128 atlas + 四表情 + 固定身体 GLB，版本化写入 `derived/` |
+| `physical_ai/service.py` | `agent-package -> session facts + PersonPackage[]` | 已实现：共享事实只存一次，专属媒体按 `person_id` 分区，未确认与 unassigned 不误归人 |
+| `pipelines/physical_ai_enrichment/service.py` | `person evidence -> summary/memory/relations` | 已实现：结构化 LLM + 规则降级，推断全部带事实指针 |
+| `signals/service.py` | `wearer physiology -> person-signal.v1` | 已实现会话后聚合；原始 Ring 样本不进入浏览器 |
 | `app/fields/generator.py` | `generate_field(package, inferences, relations_md) -> echo-field.v1`（关系场域，FR-2.11） | 确定性艺术参数 + 4 类互动实体；产物标注生成物、来源素材指针、可重算（P-3） |
 | `app/fields/world_gen.py` | `MarbleWorldGen`（generate/poll/download）+ `request_field_world(store, person_id) -> (world 块, HTTP 状态)`（场域 splat 世界，FR-2.11 升级，2026-08-04） | ✅ 已落地：LLM 艺术层输出（metaphor/weather/调色板/氛围数值）组装纯视觉 scene prompt（P-8 禁名拒发）→ World Labs Marble `worlds:generate`（marble-1.1）→ 后台轮询落库 100k/500k spz + collider GLB + pano 到 `derived/field-world-{person_id}/`；`echo-field.v1` 加性 `world` 块（none/queued/ready/failed + source_prompt_hash）；一人一次守卫（409）、5xx 重试、审计留痕（不含 key）；未配置 WORLDLABS_API_KEY 走 mock 确定性 pending→none。前端 `FieldSplatWorld.js` 用 Spark（@sparkjsdev/spark）渲染 splat（metric_scale_factor/ground_plane_offset 换算 + 绕 X 轴 180° 轴系转换 + 定中放大到可行走尺度），collider GLB 作地面/行走射线目标，4 类互动实体与同伴 NPC 按参数坐标叠加；splat 缺失/失败回退程序化场域。特性备忘：单次生成约 5 分钟、按次消耗 API credits（与 Marble app 额度不通用），splat 世界为"微缩立体模型"气质，与故事书画风兼容但非体素硬边 |
 
-注：`three_view.py` / `blender_gen.py`（三视图/lowpoly 遗留实现）已于 2026-08-04 随体素管线落地删除，语义由上表三个模块承接。风格规范（体素分辨率、贴图生成 prompt 模板、调色板提取）由美术在 ART-BRIEF.md 定义，管线读取，不硬编码。
+注：`three_view.py` / `blender_gen.py`（三视图/lowpoly 遗留实现）已于 2026-08-04 随体素管线落地删除，语义由上表三个模块承接。风格规范（体素分辨率、贴图生成 prompt 模板、调色板提取）由美术在 ART-BRIEF.md 定义，管线读取，不硬编码。 K3 真实入口使用 `physical_ai_enrichment`（不等 per-person Blender 作业）；旧三视图/lowpoly 路径已随体素管线删除，不再保留兼容。
 
 Agent 行为按场景半规则驱动（走动/访问/圆桌），由 Agent Runtime 发事件改变世界状态，前端只渲染快照（ADR-1）；世界的动态演化只允许 Agent 通过事件完成（见 §5 权限矩阵）。
 
@@ -181,7 +187,7 @@ Agent 行为按场景半规则驱动（走动/访问/圆桌），由 Agent Runti
 - TBD-ARCH-1：前端是否/何时迁移 TypeScript。
 - TBD-ARCH-2：人物数据何时从文件迁移到数据库（触发条件：单人 Package 数 > 500 或多人协作写入冲突出现）。
 - TBD-ARCH-3 已决（2026-08-04）：v0 世界快照维持纯读轮询；v1 现场房间使用 WebSocket + sequence cursor replay。
-- TBD-ARCH-4（2026-08-04 现场档双线落地）：**现场联机**（FR-2.14）现有两条实现——v0 `echo-group-room.v1`（内存权威状态 + 约 700ms 轮询 + 单调 `seq`，服务当前前端 GroupPlay，同场试点）与 v1 `rooms`（SQLite 持久化 + WebSocket 有序事件 + Intent/Command 架构，目标形态，前端接线中）；硬件形态与大屏只读视角仍见 TBD-H1。**云端联机**（FR-3.6，远期）仍须重新评审：PostgreSQL 事务/outbox、Redis presence/pub-sub/分片锁、登录与 room token 鉴权，禁止直接扩展进程内或单节点实现。
+- TBD-ARCH-4（2026-08-04 现场档双线落地）：**现场联机**（FR-2.14）现有两条实现——v0 `echo-group-room.v1`（内存权威状态 + 约 700ms 轮询 + 单调 `seq`，服务 GroupPlay 同场试点）与 v1 `rooms`（SQLite 持久化 + WebSocket 有序事件 + Intent/Command 架构，已接 Three.js 咖啡厅）；硬件形态与大屏只读视角仍见 TBD-H1。**云端联机**（FR-3.6，远期）仍须重新评审：PostgreSQL 事务/outbox、Redis presence/pub-sub/分片锁、登录与 room token 鉴权，禁止直接扩展进程内或单节点实现。
 
 ## 变更记录
 
@@ -197,3 +203,5 @@ Agent 行为按场景半规则驱动（走动/访问/圆桌），由 Agent Runti
 - 2026-08-04 | §5a 人物生成线落地（ROADMAP 1.C.3，FR-1.5/P-6）：新增 image 角色 provider `commonstack.py`（CommonStack 网关 gpt-image，chat 兼容端点内联取图，data-URL/b64/url 防御解析，mock 确定性降级）；`texture_gen.py`（CharacterSpec 校验 + AI 像素瓦片 + 固定 UV atlas 合成 + 程序化表情派生）、`voxel_gen.py`（Blender 无头装配 + GLB 契约校验）、`person_builder.py` 重写（事实/派生分离 + manifest）；`three_view.py`/`blender_gen.py` 遗留实现删除 | AI（实现）
 - 2026-08-04 | §5a 人物贴图改 i2i 图生图直出（产品决策：放弃"vision 提特征 → 纯文本生图"两步路径）：CommonStack gpt-image-2 实测支持 content 数组图片输入；`generate_image` 扩展参考图参数；头部五面 i2i 直出 + 色度键控/最近邻填充；CharacterSpec 改照片像素采样（元数据/调色板/兜底定位）；缓存键含参考图哈希 | 人（决策）+ AI（实现）
 - 2026-08-04 | §5a 场域生成线升级（FR-2.11 / ROADMAP 2.G）：新增 `world_gen.py`（Marble 世界生成 provider + 编排）——艺术层 scene prompt → Marble splat 世界（.spz）+ collider GLB 落 derived 派生存储，前端 Spark 渲染、程序化场域兜底；媒体白名单加 spz/glb；契约见 API.md v0.9 | AI（实现）
+- 2026-08-04 | v1 Room 接入 Three.js 咖啡厅；新增可信单机真实数据现状图索引 | AI
+- 2026-08-04 | K3 package 下游生成线落地：会话/人物事实扇出、深度记忆/关系、动态体素资产、PersonSignal 与显式 Agent 授权 | AI

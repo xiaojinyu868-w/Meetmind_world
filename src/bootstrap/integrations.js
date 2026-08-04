@@ -197,6 +197,13 @@ export function createUnifiedApi(base = MockApi) {
         ? base.endMeeting()
         : Promise.resolve({ meeting_id: null, ended: true });
     },
+    // K3 线：相遇隐私级别切换（L1/L2）与生理信号聚合查询
+    setEncounterPrivacy(personId, encounterId, privacy) {
+      return base.setEncounterPrivacy(personId, encounterId, privacy);
+    },
+    getPersonSignal(personId) {
+      return base.getPersonSignal(personId);
+    },
     getField(personId) {
       return base.getField(personId);
     },

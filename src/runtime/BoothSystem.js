@@ -126,7 +126,8 @@ function normalizeBoothModule(raw) {
 
 function normalizeDisplay(display, personId) {
   // Hall displays are an avatar surface, not a raw-media viewer. Resolve from
-  // the current voxel family so stale package refs cannot restore old renders.
+  // the current voxel family by person id so stale package refs cannot bring
+  // legacy renders (including facts/seed/* images) back into the scene.
   const portraitRef = VOXEL_PORTRAITS[personId] ?? PLACEHOLDER_PORTRAIT;
   return {
     name: typeof display.name === "string" && display.name.trim() ? display.name : personId,
@@ -223,8 +224,9 @@ function makeCanvasForMesh(mesh) {
 }
 
 
-// Render one visitor-facing plane. Duplicate coplanar back faces caused
-// mirrored text, upside-down UVs and z-fighting.
+// The booth contract has one visitor-facing side. Turn imported display planes
+// toward that side once and render FrontSide only; duplicate coplanar back faces
+// caused mirrored text, upside-down UVs and z-fighting.
 function orientDisplayTowardVisitor(mesh) {
   mesh.material.side = THREE.FrontSide;
   mesh.material.needsUpdate = true;
@@ -476,7 +478,10 @@ export class BoothSystem {
   #retexture(record, meshName, ref) {
     const mesh = record.root.getObjectByName(meshName);
     if (!mesh) return;
-    this.#loadTexture(ref || this.placeholderRef, (texture) => this.#setDisplayTexture(mesh, texture));
+    const sourceRef = ref || this.placeholderRef;
+    this.#loadTexture(sourceRef, (texture) => {
+      this.#setDisplayTexture(mesh, texture);
+    });
   }
 
   #loadTexture(ref, onReady, isFallback = false) {

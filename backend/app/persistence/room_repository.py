@@ -35,6 +35,9 @@ class SQLiteRoomRepository:
             "active_meeting": room.active_meeting,
             "icebreaker": room.icebreaker,
             "bulletins": room.bulletins,
+            "conversations": room.conversations,
+            "relationships": room.relationships,
+            "agent_runtime": room.agent_runtime,
             "sequence": room.sequence,
             "command_receipts": room.command_receipts,
         }
@@ -65,6 +68,9 @@ class SQLiteRoomRepository:
             active_meeting=payload.get("active_meeting"),
             icebreaker=payload.get("icebreaker"),
             bulletins=payload.get("bulletins") or [],
+            conversations=payload.get("conversations") or {},
+            relationships=payload.get("relationships") or {},
+            agent_runtime=payload.get("agent_runtime") or {},
             sequence=int(payload.get("sequence") or 0),
             command_receipts=payload.get("command_receipts") or {},
         )

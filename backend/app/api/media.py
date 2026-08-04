@@ -27,6 +27,7 @@ _CONTENT_TYPES = {
     "m4a": "audio/mp4",
     "wav": "audio/wav",
     "mp3": "audio/mpeg",
+    "glb": "model/gltf-binary",
     "md": "text/markdown; charset=utf-8",
     # 场域世界生成物（FR-2.11）：Marble 高斯泼溅 + 碰撞网格
     "spz": "application/octet-stream",

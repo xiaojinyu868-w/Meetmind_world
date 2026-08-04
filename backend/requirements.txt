@@ -6,3 +6,5 @@ httpx==0.28.1
 python-multipart==0.0.32
 pyyaml==6.0.3
 websockets==17.0.1
+jsonschema==4.26.0
+pillow==12.3.0

@@ -428,7 +428,7 @@ export function createCafeShell({
   onLocatePerson = () => {},
   onMeetingStart = async () => {},
   onMeetingEnd = async () => {},
-  onMeetingMessage = async () => {},
+  onMeetingMessage = async () => null,
   meetingLive = false,
   resolveMediaUrl = (ref) => ref,
   world = "cafe",
@@ -908,7 +908,7 @@ export function createCafeShell({
     if (meetingMessages.length > 80) meetingMessages.splice(0, meetingMessages.length - 80);
   }
 
-  function submitMeetingMessage(message) {
+  async function submitMeetingMessage(message) {
     const text = String(message).trim();
     if (!text || !meetingActive) return;
     pushMeetingMessage({ personId: currentUser.id, text });
@@ -1083,7 +1083,7 @@ export function createCafeShell({
       return;
     }
     if (target.dataset.meetingTopic) {
-      submitMeetingMessage(target.dataset.meetingTopic);
+      void submitMeetingMessage(target.dataset.meetingTopic);
     }
   });
 
@@ -1110,7 +1110,7 @@ export function createCafeShell({
     if (!form) return;
     event.preventDefault();
     const input = form.elements.message;
-    submitMeetingMessage(input.value);
+    void submitMeetingMessage(input.value);
     input.value = "";
   });
 

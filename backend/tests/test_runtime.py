@@ -155,14 +155,13 @@ def _make_secret_setup(tmp_path):
     return world, bus, store, memory
 
 
-def test_authorized_view_full_first_version(tmp_path):
-    # 首版不过滤（TBD-P3）：self-only 内容同样进入上下文视图
+def test_authorized_view_excludes_self_only(tmp_path):
     _, _, _, memory = _make_secret_setup(tmp_path)
     view = memory.authorized_agent_view("agent-a")
     assert "公开标签PUBLIC" in view["tags"]
-    assert "秘密标签SECRET" in view["tags"]  # 全量视图（授权机制重议后恢复过滤）
-    assert "秘密地点" in view["places"]
-    assert any("秘密记忆" in line for line in view["memory_lines"])
+    assert "秘密标签SECRET" not in view["tags"]
+    assert "秘密地点" not in view["places"]
+    assert not any("秘密记忆" in line for line in view["memory_lines"])
     assert any("公开记忆" in line for line in view["memory_lines"])
 
 
@@ -181,7 +180,7 @@ def test_authorized_view_none_when_unconfirmed(tmp_path):
     assert memory.authorized_agent_view("agent-u") is None
 
 
-def test_dialogue_prompt_carries_full_view_first_version(tmp_path):
+def test_dialogue_prompt_carries_only_authorized_view(tmp_path):
     world, bus, _, memory = _make_secret_setup(tmp_path)
     fake = FakeChatProvider([
         '{"actions": [{"agent_id": "agent-a", "action": "talk", "target": "agent-b"}]}',
@@ -190,11 +189,10 @@ def test_dialogue_prompt_carries_full_view_first_version(tmp_path):
     ])
     runtime = AgentRuntime(bus, rng=random.Random(4), chat_provider=fake, memory=memory)
     runtime.tick(world.snapshot())
-    # 首版不过滤（TBD-P3）：prompt 携带全量视图，公开与曾经的 self-only 都在
     dialogue_prompt = str(fake.calls[1])
     assert "公开标签PUBLIC" in dialogue_prompt
-    assert "秘密标签SECRET" in dialogue_prompt
-    assert "秘密记忆" in dialogue_prompt
+    assert "秘密标签SECRET" not in dialogue_prompt
+    assert "秘密记忆" not in dialogue_prompt
     # agent-talk 事件进世界缓冲
     events = world.snapshot()["events"]
     talks = [e for e in events if e["type"] == "agent-talk"]
@@ -203,7 +201,7 @@ def test_dialogue_prompt_carries_full_view_first_version(tmp_path):
     validate_snapshot(world.snapshot())
 
 
-def test_dialogue_rule_fallback_uses_full_view(tmp_path):
+def test_dialogue_rule_fallback_uses_authorized_view(tmp_path):
     world, bus, _, memory = _make_secret_setup(tmp_path)
     runtime = AgentRuntime(bus, rng=random.Random(5), chat_provider=None, memory=memory)
     runtime._talk(10, world.snapshot()["agents"][0], world.snapshot()["agents"][1])

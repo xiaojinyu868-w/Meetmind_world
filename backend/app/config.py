@@ -174,3 +174,14 @@ def get_world_heartbeat_seconds() -> float:
     except ValueError:
         return 15.0
     return max(0.25, value)
+
+
+def get_physical_ai_token() -> str:
+    """K3 Context Hub 接收接口使用的 Bearer token。"""
+    return os.environ.get("PHYSICAL_AI_AGENT_TOKEN", "").strip()
+
+
+def get_physical_ai_package_schema() -> Path | None:
+    """返回联调负责人提供的 agent-package JSON Schema 路径（可选）。"""
+    raw = os.environ.get("PHYSICAL_AI_PACKAGE_SCHEMA", "").strip()
+    return Path(raw) if raw else None

@@ -42,6 +42,7 @@ class AgentCoordinator:
                     child = EventEnvelope(
                         event_id=raw["event_id"], type=raw["type"],
                         room_id=raw["room_id"], actor_id=raw.get("actor_id"),
+                        subject_id=raw.get("subject_id"),
                         payload=raw.get("payload") or {}, sequence=raw["sequence"],
                         causation_id=current.event_id,
                         correlation_id=current.correlation_id or current.event_id,

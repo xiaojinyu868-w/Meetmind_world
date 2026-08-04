@@ -8,6 +8,7 @@
 |---|---|---|
 | [PRD.md](./PRD.md) | 产品定义、设计原则、对象模型、MVP 1.0/2.0/3.0 功能需求与验收标准 | 所有人 + AI |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 总体架构：Agent / World Service / Three.js 分层、目录结构、自进化权限矩阵 | 工程 + AI |
+| [REAL-DATA-WORLD-ARCHITECTURE.md](./REAL-DATA-WORLD-ARCHITECTURE.md) | K3 真实输入 -> 事实/推断 -> v1 Agent Runtime -> Three.js 的可信单机现状架构图 | 产品 + 工程 + AI |
 | [CONTEXT-AND-MEMORY.md](./CONTEXT-AND-MEMORY.md) | 上下文、记忆与 Package 架构：事实/推断分离、隐私权限圈层、防上下文腐烂 | 工程 + AI |
 | [ROADMAP.md](./ROADMAP.md) | 分阶段、分模块的 TODO 清单（打勾制），唯一进度看板 | 所有人 + AI |
 | [ART-BRIEF.md](./ART-BRIEF.md) | 美术协作提示词：画面/风格负责人的资产交付契约（自包含，可直接转发） | 美术协作者 |
@@ -36,3 +37,4 @@
 - 2026-08-03 | 依 8-03 晚会议纪要：双模式（单人+联机）确立为产品一级结构并补数据飞轮；场域生成逻辑细化（多模态情感→艺术化环境参数）；新增 TBD-G1/F2/F3/H1/3D2/S1/P3 | 人（会议纪要）+ AI（记录）
 - 2026-08-03 | 决策落档：TBD-F2 已决（场域 = "我与 TA 的关系"）、TBD-S1 已决（三类场景同期制作、分步交付）、TBD-P3 已决（首版不做隐私授权/修改流程，privacy 默认 L1） | 人（决策）+ AI（记录）
 - 2026-08-04 | 新增 UPSTREAM-CONTRACT.md（上游算法组输入 DTO 契约）并接入文档地图 | 人（输入）+ AI（成文）
+- 2026-08-04 | 新增真实数据到数字世界的可信单机现状架构图与两张资料卡/v1 概念映射 | AI

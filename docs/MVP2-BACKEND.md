@@ -30,7 +30,11 @@ HTTP/WS command
 - 破冰请求、Host Agent、提交/结束状态机、互动数据回流和播报。
 - 可重算、带来源和模型元数据的 `meetmind-field.v1` 场域参数。
 - 市集、摊位、咖啡厅、关系场域的 `meetmind.scene-module.v1` 挂载契约。
-- 服务端稀疏 heartbeat；v0 快照默认纯读，`advance=1` 仅保留兼容。
+- 服务端稀疏 heartbeat；v0 快照默认纯读，`advance=1` 仅保留兼容；创建
+  `echoworld-cafe` v1 房间后停止重复推进旧 v0 咖啡厅，大厅心跳继续兼容。
+- PersonAgent 多轮对话（最近 40 条持久化、最近 8 轮进 prompt）、关系互动/共同会议投影。
+- v1 房间稀疏自主行为：服务端 heartbeat 激活 NPC 靠近和对话；PersonAgent 自主响应圆桌邀请。
+- Agent 上下文恢复 L2 及以上过滤；PersonAgent 不再直接持有 MemoryStore。
 
 `harness` 和自进化没有接入 v2。现有旧版 `harness/` 只服务 v0 兼容 runtime；
 v2 权限统一位于 `security/policy.py`，Agent 无权修改 Skill、Tool、Policy 或代码。
@@ -57,12 +61,14 @@ v2 权限统一位于 `security/policy.py`，Agent 无权修改 Skill、Tool、P
 member.move              hotspot.interact
 meeting.invite           meeting.respond
 meeting.start            meeting.end
+person.message
 icebreaker.request       icebreaker.submit
 icebreaker.finish
 ```
 
-`roundtable.propose-topic`、`bulletin.publish` 和 Agent 触发的
-`icebreaker.start` 是服务端系统命令，不由普通前端直接决定业务结果。
+`agent.visit`、`agent.talk`、`roundtable.propose-topic`、`bulletin.publish` 和 Agent
+触发的 `meeting.respond` / `icebreaker.start` 是服务端决策产生的命令，不由前端
+替 NPC 决定业务结果。
 
 ## 自动验收
 
@@ -114,6 +120,8 @@ generation ID。合成的 1x1 测试图没有人脸，因此 `group_photo_status
   presence/pub-sub/分片锁适配器。
 - 房间尚未接登录体系；正式对外前必须由登录身份签发短期 room token，禁止客户端
   自报 `actor_id`。
+- Three.js 前端已接线 v1 房间（RoomClient：WebSocket 有序事件流 + cursor 断线重放 +
+  降级轮询 + 位置命令 + 大屏只读）；v0 group 快照链路保留兼容，「谁写的？」游戏仍走 v0。
 - OpenCV 是可选本地检测器，不等于稳定身份识别；唯一 person_id 的最终绑定仍要求
   现场人工确认。人脸 embedding 去重和专用分割模型仍是算法迭代项。
 - Field 当前生成版本化环境参数 JSON，尚未生成最终 3D 场景资产。

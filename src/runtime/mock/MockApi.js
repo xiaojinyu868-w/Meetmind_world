@@ -5,10 +5,10 @@
  * / IF-6 agents/chat（玩家与 Agent 单聊 + 手动沉淀）。
  * （见 docs/API.md；快照 schema 见 docs/ARCHITECTURE.md §4。）
  *
- * mock / live 切换（前后端联调的唯一开关，全部逻辑集中在本文件）：
- * - 默认 mock：从 `public/data/mock/` 读取静态文件（经 publicUrl() 处理 BASE_URL）。
- * - URL 加 `?api=live`：改向真实后端 `baseURL = /api/v0` 发请求，mock 数据完全不加载。
- * - 用法：`http://127.0.0.1:5173/?api=live`；去掉参数即回到 mock。
+ * live / mock 切换（全部逻辑集中在本文件）：
+ * - 默认 auto：启动探测一次后端（/world/brief），可达即 live——部署态/K3 链路默认真实数据；
+ *   不可达回退 mock，纯静态演示（无后端）开箱可用。探测结果会话内缓存，不混用。
+ * - URL 显式指定：`?api=live` 强制真实后端；`?api=mock` 强制静态演示数据。
  *
  * mock 数据约定（docs/API.md「前端 mock 约定」）：
  * - `pipeline.stream.jsonl`：黑客松展位（新人，`match_person_id: null`）。
@@ -39,7 +39,7 @@ const PIPELINE_SCENARIO_FILES = Object.freeze({
  * 部署态默认吃到真实后端，纯静态演示（无后端）自动走本地 mock，会话内不混用。
  */
 export const API_MODE = (() => {
-  if (typeof window === "undefined" || !window.location) return "mock";
+  if (typeof window === "undefined" || !window.location) return "live";
   const params = new URLSearchParams(window.location.search);
   const value = params.get("api");
   if (value === "live" || value === "mock") return value;
@@ -137,6 +137,18 @@ async function postJsonWithDetail(path, body) {
     const error = new Error(detail || `POST ${path} failed: HTTP ${response.status}`);
     error.status = response.status;
     throw error;
+  }
+  return response.json();
+}
+
+async function patchJson(path, body) {
+  const response = await fetch(`${LIVE_BASE_URL}${path}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new Error(`PATCH ${path} failed: HTTP ${response.status}`);
   }
   return response.json();
 }
@@ -402,6 +414,25 @@ export async function getPackage(personId) {
     throw new Error(`IF-5 getPackage: 资料包不存在（404）：${personId}`);
   }
   return pkg;
+}
+
+export async function setEncounterPrivacy(personId, encounterId, privacy) {
+  if (!isLiveMode()) {
+    throw new Error("mock 资料包不支持修改授权");
+  }
+  return patchJson(
+    `/packages/${encodeURIComponent(personId)}/encounters/${encodeURIComponent(encounterId)}/privacy`,
+    { privacy },
+  );
+}
+
+export async function getPersonSignal(personId) {
+  if (!isLiveMode()) return null;
+  const url = `${LIVE_BASE_URL}/people/${encodeURIComponent(personId)}/signal`;
+  const response = await fetch(url);
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`GET ${url} failed: HTTP ${response.status}`);
+  return response.json();
 }
 
 function mockFieldFromPackage(pkg) {

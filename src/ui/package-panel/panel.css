@@ -310,6 +310,70 @@
   font-weight: 800;
 }
 
+.pp-agent-toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: max-content;
+  margin: 11px 0 0 38px;
+  color: var(--ink-muted, #61756e);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.pp-agent-toggle > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.pp-agent-toggle svg {
+  width: 12px;
+  height: 12px;
+}
+
+.pp-agent-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pp-agent-toggle > i {
+  position: relative;
+  width: 28px;
+  height: 16px;
+  border-radius: 8px;
+  background: rgb(25 61 54 / 18%);
+  transition: background 160ms ease;
+}
+
+.pp-agent-toggle > i::after {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(18 45 39 / 20%);
+  content: "";
+  transition: transform 160ms ease;
+}
+
+.pp-agent-toggle input:checked + i {
+  background: var(--green, #1f6a59);
+}
+
+.pp-agent-toggle input:checked + i::after {
+  transform: translateX(12px);
+}
+
+.pp-agent-toggle input:focus-visible + i {
+  outline: 2px solid var(--gold, #e5b451);
+  outline-offset: 2px;
+}
+
 .pp-photos {
   display: flex;
   gap: 8px;
@@ -369,6 +433,64 @@
   margin-top: 12px;
   padding-top: 11px;
   border-top: 1px solid var(--line, rgb(25 61 54 / 13%));
+}
+
+.pp-evidence-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 11px 0 0 38px;
+}
+
+.pp-evidence-summary > div {
+  padding: 7px 9px;
+  border: 1px solid rgb(25 61 54 / 9%);
+  border-radius: 8px;
+  background: rgb(31 106 89 / 5%);
+}
+
+.pp-evidence-summary dt {
+  color: var(--ink-muted, #61756e);
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.pp-evidence-summary dd {
+  margin: 2px 0 0;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.pp-audio {
+  width: 100%;
+  margin: 0;
+}
+
+.pp-audio figcaption {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+  color: var(--ink-muted, #61756e);
+  font-size: 8.5px;
+  font-weight: 750;
+}
+
+.pp-audio figcaption svg {
+  width: 12px;
+  height: 12px;
+}
+
+.pp-audio audio,
+.pp-video {
+  width: 100%;
+  min-height: 34px;
+}
+
+.pp-video {
+  max-height: 220px;
+  border-radius: 6px;
+  background: #17231f;
 }
 
 .pp-media-button {

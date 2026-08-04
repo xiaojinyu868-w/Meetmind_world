@@ -60,11 +60,13 @@ class AgentRouter:
         context_builder: AgentContextBuilder,
         *,
         limits: AgentRuntimeLimits | None = None,
+        agent_factory=None,
     ) -> None:
         self._context_builder = context_builder
         self._limits = limits or AgentRuntimeLimits()
         self._agents: list[BaseAgent] = []
         self._agent_ids: set[str] = set()
+        self._agent_factory = agent_factory
 
     def register(self, agent: BaseAgent) -> None:
         agent_id = getattr(agent, "agent_id", None)
@@ -116,6 +118,11 @@ class AgentRouter:
             for agent in self._agents
             if any(_matches(item, event.type) for item in agent.subscriptions)
         ]
+        if self._agent_factory is not None:
+            dynamic = await _maybe_await(self._agent_factory(event))
+            for agent in dynamic or ():
+                if any(_matches(item, event.type) for item in agent.subscriptions):
+                    candidates.append(agent)
         if not candidates:
             return RouteResult(event_id=event.event_id, skipped_reason="no_subscribers")
 
