@@ -146,12 +146,12 @@ MVP2（2026-08-03 重设后）增加三条线：场景语言（点位交互/播�
 
 | 模块 | 接口 | MVP 实现 |
 |---|---|---|
-| `texture_gen.py` | `generate(photos: list[Path]) -> TextureSet`（头部五面 + 身体 atlas） | mock：占位贴图 |
-| `voxel_gen.py` | `generate(textures: TextureSet, style: StyleSpec) -> Path(glb)`（体素组装） | 固定体素身体 + 贴图；产物必须过 ART-BRIEF 契约（贴图槽位/根节点/朝向/身高） |
-| `person_builder.py` | `build(encounter_facts) -> avatar + asset_entry` | 编排上述两步并登记白名单（全流程 mock 可跑通） |
+| `texture_gen.py` | `generate(photos, person_id) -> TextureSet`（头部五面 + 身体 atlas + 四表情） | ✅ 已落地：qwen-vl 总结可见特征 → 受校验 CharacterSpec（设计补全不猜敏感属性）；gpt-image（CommonStack，image 角色）生成头正面/背面 16x16 像素瓦片（PIL BOX 重采样 + 定色量化锁像素风）；确定性合成器拼 128x128 固定 UV atlas（身体区域纯调色板驱动）；表情 atlas 由程序化像素编辑派生（锚点检测 + 参考 delta 复刻）；全链降级 mock 不抛异常 |
+| `voxel_gen.py` | `generate(textures, style) -> Path(glb)`（体素组装） | ✅ 已落地：Blender 无头模板 `templates/voxel_person.py`（固定体素身体 + VOXEL_REGIONS UV + Closest 采样 + ROOT_PhotoCharacter/-Y/脚底原点/1.65m 契约）；`validate_glb` 硬校验根节点/包围盒/贴图/NEAREST 采样器；Blender 失败显式报错；胸像走 Cycles CPU（headless 无 EGL） |
+| `person_builder.py` | `build(person_id, photos) -> avatar + asset_entry + manifest` | ✅ 已落地：编排贴图→GLB→胸像；源照片写事实层（内容哈希命名，重跑幂等）；avatar `voxel-textured.v1` 登记派生指针；manifest 带 sha256/模型/时间戳；产物落 `data/derived/voxel-pipeline/` 暂存，评审后才发布进 public/ 白名单；CLI `scripts/build_person_from_photo.py` |
 | `app/fields/generator.py` | `generate_field(package, inferences, relations_md) -> echo-field.v1`（关系场域，FR-2.11） | 确定性艺术参数 + 4 类互动实体；产物标注生成物、来源素材指针、可重算（P-3） |
 
-注：现有 `three_view.py` / `blender_gen.py` 将随代码同步改语义/重命名为上表形态（文档为准，同步前视为遗留实现）。风格规范（体素分辨率、贴图生成 prompt 模板、调色板提取）由美术在 ART-BRIEF.md 定义，管线读取，不硬编码。
+注：`three_view.py` / `blender_gen.py`（三视图/lowpoly 遗留实现）已于 2026-08-04 随体素管线落地删除，语义由上表三个模块承接。风格规范（体素分辨率、贴图生成 prompt 模板、调色板提取）由美术在 ART-BRIEF.md 定义，管线读取，不硬编码。
 
 Agent 行为按场景半规则驱动（走动/访问/圆桌），由 Agent Runtime 发事件改变世界状态，前端只渲染快照（ADR-1）；世界的动态演化只允许 Agent 通过事件完成（见 §5 权限矩阵）。
 
@@ -193,3 +193,4 @@ Agent 行为按场景半规则驱动（走动/访问/圆桌），由 Agent Runti
 - 2026-08-04 | ADR-8 落档：版本化世界模块挂载清单、关系场域推断管线与 append-only 世界事件/晨报接入；视觉和音视频语义继续由上游提供 | AI
 - 2026-08-03 | MVP2 后端框架落地：Intent-only Agent、Policy/Command、SQLite EventStore、房间 WebSocket、圆桌/破冰、群体入场与 Field 工作流；现场单节点可验收 | AI
 - 2026-08-04 | 合并 codex/agent 两线：ADR-9 落档（Intent-only Agent 架构）；TBD-ARCH-3 已决、TBD-ARCH-4 现场档双线记录（v0 轮询试点 + v1 WS 目标形态）；v0 快照改纯读、tick 由服务端 scheduler 心跳推进 | AI
+- 2026-08-04 | §5a 人物生成线落地（ROADMAP 1.C.3，FR-1.5/P-6）：新增 image 角色 provider `commonstack.py`（CommonStack 网关 gpt-image，chat 兼容端点内联取图，data-URL/b64/url 防御解析，mock 确定性降级）；`texture_gen.py`（CharacterSpec 校验 + AI 像素瓦片 + 固定 UV atlas 合成 + 程序化表情派生）、`voxel_gen.py`（Blender 无头装配 + GLB 契约校验）、`person_builder.py` 重写（事实/派生分离 + manifest）；`three_view.py`/`blender_gen.py` 遗留实现删除 | AI（实现）

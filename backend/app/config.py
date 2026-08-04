@@ -25,6 +25,8 @@ DEFAULT_CHAT_MODEL = "deepseek-chat"
 DEFAULT_CHAT_API_BASE = "https://api.deepseek.com"
 DEFAULT_VISION_MODEL = "qwen-vl-plus"
 DEFAULT_VISION_API_BASE = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+DEFAULT_IMAGE_MODEL = "openai/gpt-image-2"
+DEFAULT_IMAGE_API_BASE = "https://api.commonstack.ai/v1"
 
 # 角色 → 环境变量映射：第一个非空的生效。CHAT_*/VISION_* 为本后端约定名，
 # DEEPSEEK_*/DASHSCOPE_* 为根 .env 的实际命名（以其为准做映射）。
@@ -42,6 +44,15 @@ _ROLE_ENV_MAP = {
         "model": ("VISION_MODEL",),
         "default_base": DEFAULT_VISION_API_BASE,
         "default_model": DEFAULT_VISION_MODEL,
+    },
+    "image": {
+        "api_base": ("IMAGE_API_BASE", "COMMONSTACK_ECHO_BASE_URL"),
+        "api_key": ("IMAGE_API_KEY", "COMMONSTACK_ECHO_API_KEY"),
+        # 注意：COMMONSTACK_ECHO_MODEL 是聊天模型，生图模型独立用
+        # COMMONSTACK_ECHO_IMAGE_MODEL 登记，缺省 openai/gpt-image-2。
+        "model": ("IMAGE_MODEL", "COMMONSTACK_ECHO_IMAGE_MODEL"),
+        "default_base": DEFAULT_IMAGE_API_BASE,
+        "default_model": DEFAULT_IMAGE_MODEL,
     },
 }
 
@@ -108,7 +119,15 @@ def get_llm_config() -> dict:
 
 
 def get_blender_path() -> str:
-    return os.environ.get("BLENDER_PATH", DEFAULT_BLENDER_PATH).strip() or DEFAULT_BLENDER_PATH
+    """Blender 无头二进制：BLENDER_PATH 显式指定优先；否则优先仓库自带的
+    blender-4.5.12（worktree/软链场景也能命中），最后回退历史默认绝对路径。"""
+    override = os.environ.get("BLENDER_PATH", "").strip()
+    if override:
+        return override
+    local = REPO_ROOT / "blender-4.5.12-linux-x64" / "blender"
+    if local.exists():
+        return str(local)
+    return DEFAULT_BLENDER_PATH
 
 
 def get_data_dir() -> Path:
