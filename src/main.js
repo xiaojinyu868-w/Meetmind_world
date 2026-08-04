@@ -27,7 +27,7 @@ import { colliderShellFor } from "./runtime/ColliderRegistry.js";
 import { createEntrySpawnScatter } from "./runtime/EntrySpawnScatter.js";
 import { HeartSignalSystem } from "./runtime/HeartSignalSystem.js";
 import { createHubBlockoutEnvironment } from "./runtime/HubBlockout.js";
-import { LiveWorld } from "./runtime/LiveWorld.js";
+import { FALLBACK_SNAPSHOT, LiveWorld } from "./runtime/LiveWorld.js";
 import { NpcAgentSystem } from "./runtime/NpcAgentSystem.js";
 import { PersonSignalStore } from "./runtime/PersonSignalStore.js";
 import { RelationshipFieldSystem } from "./runtime/RelationshipFieldSystem.js";
