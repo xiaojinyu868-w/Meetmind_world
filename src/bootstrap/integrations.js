@@ -1,9 +1,10 @@
-import { CloudUpload, Coffee, Store, createIcons } from "lucide";
+import { CloudUpload, Coffee, Store, Users, createIcons } from "lucide";
 import * as MockApi from "../runtime/mock/MockApi.js";
 import { publicUrl } from "../runtime/WorldSpec.js";
 import { navigateToWorld } from "../runtime/WorldSwitch.js";
 import { mountPackagePanel } from "../ui/package-panel/PackagePanel.js";
 import { mountPipelineFlow } from "../ui/pipeline/PipelineFlow.js";
+import { mountGroupPlay } from "../ui/group/GroupPlay.js";
 
 /**
  * integrations —— 咖啡厅/大厅视图的统一集成层。
@@ -18,7 +19,7 @@ import { mountPipelineFlow } from "../ui/pipeline/PipelineFlow.js";
  * z-index 分层：世界气泡(7) < 检索条(22) < 入口按钮(30) < 资料包面板(40) < 事件 Toast(60) < pipeline 浮层(80)。
  */
 
-const INTEGRATIONS_ICONS = { CloudUpload, Coffee, Store };
+const INTEGRATIONS_ICONS = { CloudUpload, Coffee, Store, Users };
 
 const INTEGRATION_STYLES = `
 .echo-integrations .record-fab {
@@ -56,11 +57,34 @@ const INTEGRATION_STYLES = `
   text-transform: uppercase;
 }
 .echo-integrations .record-fab strong { font-size: 12px; font-weight: 800; }
+.echo-integrations .record-fab[hidden] { display: none !important; }
 body[data-view="cafe"] .echo-integrations .record-fab { display: flex; }
 
 /* 世界切换导航：叠放在「记录相遇」之上，两个世界各显示对应的出口 */
 .echo-integrations .nav-world-fab {
   bottom: max(160px, calc(env(safe-area-inset-bottom) + 140px));
+}
+
+.echo-integrations .group-fab {
+  right: max(20px, env(safe-area-inset-right));
+  left: auto;
+  display: flex;
+  border-radius: 6px;
+  color: #fff;
+  background: rgb(28 75 65 / 90%);
+}
+.echo-integrations .group-fab svg { color: #efc76f; }
+.echo-integrations .group-fab small { color: rgb(255 255 255 / 68%); }
+.echo-integrations.has-group-room .group-fab { display: none; }
+
+@media (max-width: 640px) {
+  .echo-integrations .group-fab {
+    width: 46px;
+    height: 46px;
+    padding: 0;
+    justify-content: center;
+  }
+  .echo-integrations .group-fab span { display: none; }
 }
 
 .echo-integrations-toast {
@@ -132,6 +156,21 @@ export function createUnifiedApi(base = MockApi) {
     getPackage(personId) {
       return base.getPackage(personId);
     },
+    getField(personId) {
+      return base.getField(personId);
+    },
+    regenerateField(personId) {
+      return base.regenerateField(personId);
+    },
+    getWorldEvents(limit) {
+      return base.getWorldEvents(limit);
+    },
+    getWorldBrief() {
+      return base.getWorldBrief();
+    },
+    recordWorldInteraction(payload) {
+      return base.recordWorldInteraction(payload);
+    },
     search(request) {
       return base.search(request);
     },
@@ -182,6 +221,9 @@ function fallbackToast(message) {
  * @param {(message: string) => void} [options.onToastHook] Toast 输出（缺省用内置小 Toast）
  * @param {(personId: string) => { status?: string, state?: string } | null} [options.presenceProvider]
  *   在场状态提供者（LiveWorld 快照缓存），注入资料包面板的头部状态行
+ * @param {object[]} [options.groupParticipants] 上游已完成建档的现场参与者 DTO
+ * @param {() => {x:number,z:number,yaw:number}|null} [options.groupPresenceProvider]
+ * @param {(participants: object[], viewerId: string) => void} [options.onGroupPresenceHook]
  * @returns {{ api: object, flow: object, panel: object, searchBar: null,
  *   openPipeline(): void, refreshPackages(): Promise<object[]> }}
  *   （searchBar 已下线置 null，SearchBar.js 能力保留在 src/ui/package-panel/ 备用）
@@ -192,6 +234,9 @@ export function mountIntegrations({
   onPackagesChangedHook = null,
   onToastHook = null,
   presenceProvider = null,
+  groupParticipants = [],
+  groupPresenceProvider = null,
+  onGroupPresenceHook = null,
 } = {}) {
   const unifiedApi = api ?? createUnifiedApi();
   const notifyToast = typeof onToastHook === "function" ? onToastHook : fallbackToast;
@@ -234,6 +279,13 @@ export function mountIntegrations({
   });
   flow.close();
 
+  const groupPlay = mountGroupPlay(mountRoot, {
+    participants: groupParticipants,
+    getLocalPresence: groupPresenceProvider,
+    onPresence: onGroupPresenceHook,
+    onToast: notifyToast,
+  });
+
   function refreshPackages() {
     return unifiedApi.getPackages().then((packages) => {
       pipelinePeople.length = 0;
@@ -262,8 +314,11 @@ export function mountIntegrations({
   mountRoot.append(fab);
 
   // 世界切换导航：大厅 →「去咖啡厅坐坐」，咖啡厅 →「回到我的集市」（body.dataset.world 由 main.js 写入）
-  const currentWorld = document.body.dataset.world === "cafe" ? "cafe" : "hall";
-  const navToCafe = currentWorld === "hall";
+  const currentWorld = ["hall", "cafe", "field"].includes(document.body.dataset.world)
+    ? document.body.dataset.world
+    : "hall";
+  const navTarget = currentWorld === "hall" ? "cafe" : "hall";
+  const navToCafe = navTarget === "cafe";
   const navFab = document.createElement("button");
   navFab.className = "record-fab nav-world-fab";
   navFab.type = "button";
@@ -272,15 +327,33 @@ export function mountIntegrations({
     `<i data-lucide="${navToCafe ? "coffee" : "store"}"></i>` +
     `<span><small>${navToCafe ? "Echo Cafe" : "Expo Hall"}</small>` +
     `<strong>${navToCafe ? "去咖啡厅坐坐" : "回到我的集市"}</strong></span>`;
-  navFab.addEventListener("click", () => navigateToWorld(navToCafe ? "cafe" : "hall"));
+  navFab.addEventListener("click", () => navigateToWorld(navTarget));
   mountRoot.append(navFab);
-  createIcons({ icons: INTEGRATIONS_ICONS, root: mountRoot, attrs: { "stroke-width": 1.8 } });
+
+  const groupFab = document.createElement("button");
+  groupFab.className = "record-fab group-fab";
+  groupFab.type = "button";
+  groupFab.setAttribute("aria-label", "进入现场房间");
+  groupFab.title = "进入现场房间";
+  groupFab.innerHTML =
+    `<i data-lucide="users"></i>` +
+    `<span><small>Group Session</small><strong>现场一起玩</strong></span>`;
+  groupFab.addEventListener("click", () => groupPlay.open());
+  mountRoot.append(groupFab);
+  if (currentWorld === "field") {
+    fab.hidden = true;
+    groupFab.hidden = true;
+  }
+  for (const button of [fab, navFab, groupFab]) {
+    createIcons({ icons: INTEGRATIONS_ICONS, root: button, attrs: { "stroke-width": 1.8 } });
+  }
 
   return {
     api: unifiedApi,
     flow,
     panel,
     searchBar,
+    groupPlay,
     openPipeline: () => flow.open(),
     refreshPackages,
   };

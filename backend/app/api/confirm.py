@@ -27,6 +27,7 @@ from app.schemas.package_schema import (
     validate_encounter_draft,
 )
 from app.world.hall import build_display_from_package
+from app.fields import ensure_field
 
 router = APIRouter(prefix="/api/v0", tags=["confirm"])
 
@@ -90,10 +91,14 @@ def confirm(request: Request, body: ConfirmRequest):
         booth = hall.register_person(person_id, build_display_from_package(package, store))
         booth_id = booth["id"]
 
+    # 场域属于可重算推断层；确认后立即生成，让新人进入世界时入口已经可用。
+    field = ensure_field(store, person_id, regenerate=True)
+
     return {
         "person_id": person_id,
         "encounter_id": encounter["encounter_id"],
         "package_ref": f"people/{person_id}/profile.json",
         "avatar_status": avatar_status,
         "booth_id": booth_id,
+        "field_status": field["status"],
     }

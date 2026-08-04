@@ -17,13 +17,15 @@ from app.agents.llm import get_provider
 from app.agents.memory.store import MemoryStore
 from app.agents.runtime import AgentRuntime, EventBus
 from app.api import confirm as confirm_api
-from app.api import admin, ingest, media, packages, pipeline, search as search_api
+from app.api import admin, experience, group, ingest, media, packages, pipeline, search as search_api
 from app.api import world as world_api
+from app.group.service import GroupSessionService
 from app.harness.permissions.guard import DEFAULT_GUARD, PermissionDenied
 from app.packages.store import PackageStore
 from app.world.hall import HALL_BOUNDS, build_display_from_package
 from app.world.seed import SEED_AGENTS, seed_demo_packages, seed_world
 from app.world.service import WorldService
+from app.world.event_store import WorldEventStore
 
 
 def create_app() -> FastAPI:
@@ -38,16 +40,25 @@ def create_app() -> FastAPI:
     memory = MemoryStore(store, guard=DEFAULT_GUARD)
 
     # 展位大厅（MVP1.5 两级世界）：静态陈列实例 + 稀疏串门调度器；
-    # 启动时把 seed 6 人全部注册（display 从各自 Package 组装，首版全量上墙）
+    # 启动时先按固定顺序恢复 seed 6 人，再从持久化 Package 追加真实新人。
+    # 这样既保持演示展位坐标稳定，也保证服务重启后 confirm 产生的展位不丢失。
     hall_world = WorldService({
         "agents": [],
         "modules": [{"id": "expo-hall", "type": "hall",
                      "position": {"x": 0.0, "z": 0.0, "yaw": 0.0}}],
     }, blockers=(), bounds=HALL_BOUNDS)  # 展位不是阻挡体；大厅边界 x∈[-7,7] z∈[-5,5]
+    registered_people = set()
     for agent_seed in SEED_AGENTS:
-        package = store.load_package(agent_seed["id"])
-        hall_world.register_person(agent_seed["id"],
-                                   build_display_from_package(package, store))
+        person_id = agent_seed["id"]
+        package = store.load_package(person_id)
+        hall_world.register_person(person_id, build_display_from_package(package, store))
+        registered_people.add(person_id)
+    for summary in store.list_packages():
+        person_id = summary["person_id"]
+        if person_id in registered_people or not summary["confirmed"]:
+            continue
+        package = store.load_package(person_id)
+        hall_world.register_person(person_id, build_display_from_package(package, store))
     hall_bus = EventBus()
     hall_bus.subscribe(hall_world.apply_event)
 
@@ -66,6 +77,8 @@ def create_app() -> FastAPI:
     )
     app.state.store = store
     app.state.memory = memory
+    app.state.group_sessions = GroupSessionService(store)
+    app.state.world_events = WorldEventStore(store.root / "world-events.v1.jsonl")
 
     # 自进化写入越权 → 403（ADR-4：权限失控是最大的产品风险）
     @app.exception_handler(PermissionDenied)
@@ -85,6 +98,8 @@ def create_app() -> FastAPI:
     app.include_router(world_api.router)
     app.include_router(media.router)
     app.include_router(admin.router)
+    app.include_router(group.router)
+    app.include_router(experience.router)
     return app
 
 

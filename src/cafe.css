@@ -2482,7 +2482,7 @@ body:not([data-view="cafe"]) .touch-stick {
   .map-pulse::after { inset: -108px; }
 
   .world-speech-bubble {
-    width: min(190px, 52vw);
+    display: none;
   }
 
   body[data-view="cafe"] .touch-stick {

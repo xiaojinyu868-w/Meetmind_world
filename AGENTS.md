@@ -4,7 +4,7 @@
 
 ## 项目概述
 
-EchoWorld Three.js 咖啡厅原型（包名 `echoworld-lowpoly-walk`）：一个纯前端的三维"关系咖啡厅"演示。玩家在 3D 咖啡厅中用 `W/A/S/D`（桌面）或虚拟摇杆（触屏）走动，观察 6 个 NPC Agent 在普通桌随机入座、同桌交谈；可以点选人物查看资料、靠近中央六人圆桌发起会议、并切换到关系 Map 视图。
+EchoWorld Three.js 关系世界原型（包名 `echoworld-lowpoly-walk`）：包含关系集市、熟人咖啡厅与“我和 TA”的关系场域。玩家用 `W/A/S/D`（桌面）或虚拟摇杆（触屏）走动，使用 E/F 或点击提示进入情境菜单；可查看资料包、邀请熟人、发起圆桌并让事件进入世界播报。
 
 体验闭环：标题页 → 3D Echo Cafe → Agent 自主交谈 → 点选人物看资料 → 圆桌会议 → 关系 Map → 从节点返回咖啡厅定位人物。
 
@@ -55,16 +55,20 @@ src/runtime/
   WalkSlide.js              live 插值轻量避障：位移将进入阻挡圆时投影到切线滑动（纯函数，圆键 r/radius 兼容）
   ColliderRegistry.js       环境静态碰撞壳注册表（按环境资产 id 返回 bounds + 静态圆；摊位圆由 BoothSystem
                             动态注入；NPC↔NPC 分离权威在后端；loadFromManifest 为 COLLIDER_* 导出预留桩）
-  WorldSwitch.js            两级世界切换（?world=hall|cafe，默认 hall）+ HALL_LAYOUT 大厅布局常量
+  WorldSwitch.js            三级世界切换（?world=hall|cafe|field，默认 hall）+ 场域 person 参数
   BoothSystem.js            展位系统：模板 GLB（module.booth-template.v1，未到货降级简易占位展位）→
                             按快照 modules 克隆、MESH_* 展示面贴图/CanvasTexture 名牌与标签、增量同步、
                             展位圆形阻挡与射线点选、0.3s 缩放入场
+  RelationshipFieldSystem.js  `echo-field.v1` 关系场域程序化地形、实体、热点与动画
+  WorldModuleRegistry.js    `echo-world-modules.v1` 挂载契约加载和严格校验
+  WorldBroadcastSystem.js   咖啡厅 3D 播报屏与 DOM 晨报摘要
   mock/MockApi.js           API v0 契约客户端（IF-1~IF-5），`?api=live` 切真实后端
 src/bootstrap/
   integrations.js           统一集成层：MockApi → 各 UI 模块的 api 适配（getPackages 缓存 + confirm 失效）、
                             挂载 PipelineFlow/PackagePanel/SearchBar、「记录相遇」入口按钮、模块联动
 src/ui/
   CafeShell.js              当前使用的 UI 壳：intro -> cafe -> map 流程、人物侧栏、圆桌会议 UI
+  SceneInteraction.js       统一 E/F 与触屏情境菜单（摊位/桌位/吧台/圆桌/场域）
   RelationshipGraph.js      关系 Map：7 个节点 + 12 条边的 SVG/DOM 渲染
   pipeline/PipelineFlow.js  相遇「录入 → 处理 → 确认」三屏流程（IF-1/2/3，自带 pipeline.css）
   package-panel/            资料包面板 + 顶部检索条（IF-5，自带 panel.css）
@@ -86,7 +90,7 @@ dist/                       构建产物（已提交 Git）
 
 人物动态默认由世界快照驱动（ROADMAP 1.C.2）：`LiveWorld` 轮询 `/api/v0/world/snapshot?advance=1`（契约见 docs/API.md IF-4、docs/ARCHITECTURE.md §4，schema `echo-snapshot.v1`），经 `SnapshotAdapter` 映射后由 main.js 插值渲染；后端不可用时自动降级 `data/mock/snapshot.demo.json` → 内置兜底快照（本地演化保持世界运转）。`window.__ECHOWORLD_OPTIONS__ = { api, onPersonSelected, live, snapshotPollMs }` 可注入真实 api、选人回调或关回 NpcAgentSystem 本地调度（`live: false`）。
 
-两级世界（MVP1.5）：`?world=hall`（默认，展位大厅）陈列每个 Package 一个展位、人物 at-booth 站位不走动、气泡/Toast/tick 静默、轮询 10s、展位即点击入口开资料包；`?world=cafe` 为现有活的世界（2s 轮询、对话气泡、圆桌会议）。切换经 `navigateToWorld()` 改 URL 整页刷新；大厅环境资产 `environment.expo-hall.v1`、展位模板 `module.booth-template.v1`，未到货时前端自动降级占位场地/占位展位。
+三级世界：`?world=hall`（默认）陈列每个 Package 的展位；`?world=cafe` 承载桌边交流、圆桌和世界播报；`?world=field&person=<id>` 消费后端 `echo-field.v1` 表达“我与 TA 的关系”。切换经 `navigateToWorld()` / `navigateToField()` 改 URL 整页刷新；场所入口清单位于 `public/data/world-modules.json`。
 
 ### 不纳入版本控制的本地内容
 
