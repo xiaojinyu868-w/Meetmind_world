@@ -13,6 +13,7 @@
 | [ART-BRIEF.md](./ART-BRIEF.md) | 美术协作提示词：画面/风格负责人的资产交付契约（自包含，可直接转发） | 美术协作者 |
 | [API.md](./API.md) | 对外接口契约：IF-1~IF-8 全量接口地图，前后端唯一契约，先前端 mock 后后端实现 | 工程 + AI |
 | [INTERACTION-DESIGN.md](./INTERACTION-DESIGN.md) | Agent 交互逻辑优化策划草案（事件驱动调度/玩家单聊/对话质量，**待评审**） | 产品 + 工程 |
+| [UPSTREAM-CONTRACT.md](./UPSTREAM-CONTRACT.md) | 上游算法组输入契约：人脸分割/声纹/带时间戳 ASR/图片+caption 的 DTO 定义 | 工程 + AI + 上游 |
 | ../AGENTS.md | 现有前端仓库（three.js 原型）的工程约定 | AI |
 
 推荐阅读顺序：PRD → ARCHITECTURE → CONTEXT-AND-MEMORY → ROADMAP。
@@ -34,3 +35,4 @@
 - 2026-08-03 | 依 8-03 晚讨论重设：P-5 取消玩法限制、P-6 改为 MC 体素+AI 贴图、MVP2 重设为"场景、互动与群体冷启动"（原 MVP2/3 暂缓）、新增场域/市集/场景语言概念、联机登记远期方向；PRD/ROADMAP/CONTEXT-AND-MEMORY/ARCHITECTURE/ART-BRIEF 同步更新 | 人（决策）+ AI（记录）
 - 2026-08-03 | 依 8-03 晚会议纪要：双模式（单人+联机）确立为产品一级结构并补数据飞轮；场域生成逻辑细化（多模态情感→艺术化环境参数）；新增 TBD-G1/F2/F3/H1/3D2/S1/P3 | 人（会议纪要）+ AI（记录）
 - 2026-08-03 | 决策落档：TBD-F2 已决（场域 = "我与 TA 的关系"）、TBD-S1 已决（三类场景同期制作、分步交付）、TBD-P3 已决（首版不做隐私授权/修改流程，privacy 默认 L1） | 人（决策）+ AI（记录）
+- 2026-08-04 | 新增 UPSTREAM-CONTRACT.md（上游算法组输入 DTO 契约）并接入文档地图 | 人（输入）+ AI（成文）
