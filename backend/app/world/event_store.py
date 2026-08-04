@@ -117,10 +117,15 @@ class WorldEventStore:
         return events
 
     def morning_brief(self, extra_events: list[dict] | None = None) -> dict:
-        """今日播报：持久化世界事件（用户互动）合并 agent 自主事件
-        （runtime 滚动缓冲，经 runtime_event_entry 归一后传入），
-        按 created_at 倒序、event_id 去重、封顶 6 条。"""
-        events = merge_brief_events(self.list_recent(6), list(extra_events or ()), limit=6)
+        """今日播报：持久化世界事件（用户互动）优先占位，agent 自主事件
+        （runtime 滚动缓冲，经 runtime_event_entry 归一后传入）补充剩余空位；
+        event_id 跨源去重、各源内按 created_at 倒序、封顶 6 条。
+        用户真实的互动永远比 agent 闲聊更接近头条。"""
+        persisted = merge_brief_events(self.list_recent(6), limit=6)
+        runtime = merge_brief_events(list(extra_events or ()), limit=6)
+        seen = {event.get("event_id") for event in persisted}
+        events = persisted + [event for event in runtime if event.get("event_id") not in seen]
+        events = events[:6]
         if events:
             headline = events[0]["summary"]
             summary = "；".join(event["summary"] for event in events[:3])
