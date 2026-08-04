@@ -109,6 +109,10 @@ class MarbleWorldGen:
         payload = {
             "display_name": display_name[:64],
             "model": self.model,
+            # 生成即公开：Marble 网页预览链接默认可打开（产品内渲染不依赖它，
+            # 但现场演示/协作查看方便；不开放 id 枚举访问）
+            "permission": {"public": True, "allow_id_access": False,
+                           "allowed_readers": [], "allowed_writers": []},
             "world_prompt": {"type": "text", "text_prompt": prompt},
         }
         data = self._request("POST", "/worlds:generate", json=payload)
