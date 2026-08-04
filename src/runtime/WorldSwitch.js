@@ -10,14 +10,7 @@ export const DEFAULT_WORLD_ID = "hall";
 export const HALL_LAYOUT = Object.freeze({
   bounds: Object.freeze({ minX: -5.5, maxX: 5.5, minZ: -10, maxZ: 10 }),
   playerSpawn: Object.freeze({ x: 0, z: 9, yaw: Math.PI }),
-  npcEntrySpawns: Object.freeze([
-    Object.freeze({ x: -2.55, z: 8.3, yaw: Math.PI }),
-    Object.freeze({ x: -1.55, z: 8.5, yaw: Math.PI }),
-    Object.freeze({ x: -0.55, z: 8.3, yaw: Math.PI }),
-    Object.freeze({ x: 0.55, z: 8.3, yaw: Math.PI }),
-    Object.freeze({ x: 1.55, z: 8.5, yaw: Math.PI }),
-    Object.freeze({ x: 2.55, z: 8.3, yaw: Math.PI }),
-  ]),
+  // NPC 出生点不再用门口一排：出生即站在各自展位前（见 BoothSystem.fallbackBoothAnchor）
   environmentAssetId: "environment.market-street.v1",
   boothTemplateAssetId: "module.market-stall.v2",
   // 大厅静止陈列，快照轮询低频即可；咖啡厅维持 2s 实时感

@@ -53,6 +53,33 @@ from app.world.service import WorldService
 from app.world.event_store import WorldEventStore
 
 
+WARM_TICKS_CAFE = 36
+WARM_TICKS_HALL = 3
+
+
+def _warm_start_worlds(cafe, hall, bus, hall_bus, memory) -> None:
+    """启动预热：纯规则节拍把咖啡厅/集市推进到"生活中"的状态。
+
+    服务重启后的第一张快照不应是"所有人刚站在出生点"；预热使用
+    chat_provider=None 的一次性 runtime（规则驱动，不调 LLM），秒级完成，
+    事件经同一条 EventBus 进入世界状态与滚动缓冲。
+    """
+    warm_cafe = AgentRuntime(
+        bus, rng=random.Random(20260804),
+        chat_provider=None, memory=memory, guard=DEFAULT_GUARD,
+    )
+    for _ in range(WARM_TICKS_CAFE):
+        warm_cafe.tick(cafe.snapshot())
+        cafe.step()
+    warm_hall = HallRuntime(
+        hall_bus, rng=random.Random(20260805),
+        chat_provider=None, memory=memory, guard=DEFAULT_GUARD,
+    )
+    for _ in range(WARM_TICKS_HALL):
+        warm_hall.tick(hall.snapshot())
+        hall.step()
+
+
 def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI):
@@ -114,6 +141,7 @@ def create_app() -> FastAPI:
     app.state.memory = memory
     app.state.group_sessions = GroupSessionService(store)
     app.state.world_events = WorldEventStore(store.root / "world-events.v1.jsonl")
+    _warm_start_worlds(world_service, hall_world, bus, hall_bus, memory)
 
     # MVP2 typed runtime infrastructure. The local adapters are intentionally
     # dependency-free; PostgreSQL/Redis implementations can replace these ports.

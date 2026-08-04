@@ -3,13 +3,13 @@ import { currentUser, people, relationships } from "./data/demoPeople.js";
 import { personSignals } from "./data/demoSignals.js";
 import { AssetCatalog } from "./runtime/AssetCatalog.js";
 import { AssetStore } from "./runtime/AssetStore.js";
-import { BoothSystem, buildFallbackBooths } from "./runtime/BoothSystem.js";
+import { BoothSystem, buildFallbackBooths, fallbackBoothAnchor } from "./runtime/BoothSystem.js";
 import { CAFE_LAYOUT, tableById } from "./runtime/CafeLayout.js";
 import { CharacterExpressionSystem } from "./runtime/CharacterExpressionSystem.js";
 import { CharacterSystem } from "./runtime/CharacterSystem.js";
 import { colliderShellFor } from "./runtime/ColliderRegistry.js";
 import { HeartSignalSystem } from "./runtime/HeartSignalSystem.js";
-import { LiveWorld } from "./runtime/LiveWorld.js";
+import { FALLBACK_SNAPSHOT, LiveWorld } from "./runtime/LiveWorld.js";
 import { NpcAgentSystem } from "./runtime/NpcAgentSystem.js";
 import { PersonSignalStore } from "./runtime/PersonSignalStore.js";
 import { RelationshipFieldSystem } from "./runtime/RelationshipFieldSystem.js";
@@ -107,6 +107,8 @@ const SEATED_SCALE_Y = 0.82;
 const SEATED_ROOT_Y = 0.025;
 const MODEL_FORWARD = new THREE.Vector3(0, 0, 1);
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
+// 咖啡厅 NPC 出生的最后兜底（优先用 LiveWorld.FALLBACK_SNAPSHOT 的生活化座位/站位，
+// 避免快照到达前所有人在门口站成一排）
 const NPC_ENTRY_SPAWNS = Object.freeze([
   { x: -2.55, z: 4.05, yaw: Math.PI },
   { x: -1.75, z: 4.25, yaw: Math.PI },
@@ -464,18 +466,23 @@ async function spawnCharacters() {
   });
 
   const fieldCompanion = relationshipField?.scene?.companion ?? { x: 0, z: -1.1, yaw: 0 };
-  const npcEntrySpawns = isHallWorld
-    ? HALL_LAYOUT.npcEntrySpawns
-    : isFieldWorld
-      ? [fieldCompanion]
-      : NPC_ENTRY_SPAWNS;
+  // 出生即"生活化"：快照到达前 NPC 也不能在门口站成一排——
+  // 集市直接站在各自展位前（与 buildFallbackBooths 同序），咖啡厅落在兜底快照的座位/站位上
+  const fallbackSnapshotSpawn = new Map(
+    FALLBACK_SNAPSHOT.agents.map((agent) => [agent.id, agent.position]),
+  );
+  const npcSpawnFor = (person, index) => {
+    if (isHallWorld) return fallbackBoothAnchor(index);
+    if (isFieldWorld) return fieldCompanion;
+    return fallbackSnapshotSpawn.get(person.id) ?? NPC_ENTRY_SPAWNS[index];
+  };
   for (let index = 0; index < visiblePeople.length; index += 1) {
     setProgress(0.76 + index * 0.03, `正在载入 ${visiblePeople[index].name} 的人物模型`);
     const entity = await characterSystem.spawn(
       characterSpec(
         visiblePeople[index],
         `agent-${visiblePeople[index].id}`,
-        npcEntrySpawns[index],
+        npcSpawnFor(visiblePeople[index], index),
       ),
     );
     expressionSystem.register(entity, visiblePeople[index].id, activeCharacterVariant.id);

@@ -40,6 +40,16 @@ const FALLBACK_BOOTH_POSITIONS = Object.freeze([
 const PERSON_ANCHOR_OFFSET = 0.85;
 
 
+// 出生即站在自己的展位前：与 buildFallbackBooths 的人↔展位顺序同构
+export function fallbackBoothAnchor(index) {
+  const position = FALLBACK_BOOTH_POSITIONS[index % FALLBACK_BOOTH_POSITIONS.length];
+  return {
+    x: position.x + Math.sin(position.yaw) * PERSON_ANCHOR_OFFSET,
+    z: position.z + Math.cos(position.yaw) * PERSON_ANCHOR_OFFSET,
+    yaw: position.yaw,
+  };
+}
+
 // 用现有 6 人构造演示展位（契约同构的 modules 条目）
 export function buildFallbackBooths(people) {
   return (Array.isArray(people) ? people : []).map((person, index) => {
