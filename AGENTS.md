@@ -64,7 +64,7 @@ src/runtime/
   ColliderRegistry.js       环境静态碰撞壳注册表（按环境资产 id 返回 bounds + 静态圆；摊位圆由 BoothSystem
                             动态注入；NPC↔NPC 分离权威在后端；loadFromManifest 为 COLLIDER_* 导出预留桩）
   WorldSwitch.js            三级世界切换（?world=hall|cafe|field，默认 hall）+ 场域 person 参数
-  BoothSystem.js            展位系统：模板 GLB（module.booth-template.v1，未到货降级简易占位展位）→
+  BoothSystem.js            展位系统：模板 GLB（module.market-stall.v2 商人推车，未到货降级简易占位展位）→
                             按快照 modules 克隆、MESH_* 展示面贴图/CanvasTexture 名牌与标签、增量同步、
                             展位圆形阻挡与射线点选、0.3s 缩放入场
   RelationshipFieldSystem.js  `echo-field.v1` 关系场域程序化地形、实体、热点与动画

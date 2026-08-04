@@ -1,0 +1,65 @@
+{
+  "schema_version": "echo-market-stall.v2",
+  "name": "EchoWorld Market Stall Template v2 (Traveling Merchant Cart)",
+  "style": "storybook hand-painted merchant cart; terracotta/cream striped awning with scalloped edge, blue cloth counter with chevron trim, wagon wheels, lantern, book basket barrel",
+  "reference_image": "docs/9f93aac8ae425a272ffd2a2f859bf6a9.jpg",
+  "generator": "blender/build_market_stall_v2.py",
+  "seed": 26080504,
+  "blend": "blender/echo_world_market_stall_v2.blend",
+  "glb": "public/models/modules/echo_world_market_stall_20260804.glb",
+  "preview": "renders/echo_world_market_stall_v2_preview.png",
+  "root_node": "ROOT_MarketStall",
+  "stand_anchor": "ANCHOR_PersonStand",
+  "display_surfaces": {
+    "MESH_NamePlate": {
+      "width_m": 1.2,
+      "height_m": 0.3,
+      "kind": "name_plate",
+      "material": "MAT_Display_NamePlate"
+    },
+    "MESH_Portrait": {
+      "width_m": 0.7,
+      "height_m": 0.9,
+      "kind": "portrait",
+      "material": "MAT_Display_Portrait"
+    },
+    "MESH_PhotoFrame_01": {
+      "width_m": 0.6,
+      "height_m": 0.45,
+      "kind": "photo_frame",
+      "material": "MAT_Display_PhotoFrame_01"
+    },
+    "MESH_PhotoFrame_02": {
+      "width_m": 0.6,
+      "height_m": 0.45,
+      "kind": "photo_frame",
+      "material": "MAT_Display_PhotoFrame_02"
+    },
+    "MESH_Backdrop": {
+      "width_m": 1.6,
+      "height_m": 0.24,
+      "kind": "tag_strip",
+      "material": "MAT_Display_Backdrop"
+    }
+  },
+  "scale_contract": {
+    "unit": "meter",
+    "footprint_m": [
+      2.75,
+      2.1
+    ],
+    "awning_peak_z_m": 2.72,
+    "counter_top_z_m": 0.87
+  },
+  "coordinate_contract": {
+    "origin": "stall center on ground",
+    "front_side": "-Y in Blender, +Z after glTF export",
+    "up_axis_export": "+Y via glTF"
+  },
+  "export_excludes": [
+    "MARKET_StallPreviewOnly collection",
+    "preview camera",
+    "preview lights",
+    "preview ground card"
+  ]
+}
