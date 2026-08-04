@@ -496,7 +496,7 @@ export function createCafeShell({
             <span><strong>EchoWorld</strong><small>AGENT RELATIONSHIP CAFE</small></span>
           </div>
           <div class="intro-actions">
-            ${activeSceneVariant && activeCharacterVariant ? variantControlsMarkup({
+            ${activeSceneVariant && activeCharacterVariant && world !== "field" ? variantControlsMarkup({
               sceneVariants,
               activeSceneVariant,
               characterVariants,
@@ -539,7 +539,7 @@ export function createCafeShell({
           </button>
         </header>
 
-        ${activeSceneVariant && activeCharacterVariant ? variantControlsMarkup({
+        ${activeSceneVariant && activeCharacterVariant && world !== "field" ? variantControlsMarkup({
           sceneVariants,
           activeSceneVariant,
           characterVariants,

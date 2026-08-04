@@ -13,7 +13,7 @@ import { FALLBACK_SNAPSHOT, LiveWorld } from "./runtime/LiveWorld.js";
 import { NpcAgentSystem } from "./runtime/NpcAgentSystem.js";
 import { PersonSignalStore } from "./runtime/PersonSignalStore.js";
 import { RelationshipFieldSystem } from "./runtime/RelationshipFieldSystem.js";
-import { tryLoadFieldSplatWorld } from "./runtime/FieldSplatWorld.js";
+import { tryLoadFieldSplatWorld, snapObjectToFieldGround } from "./runtime/FieldSplatWorld.js";
 import { RoomClient } from "./runtime/CafeRoomClient.js";
 import { WorldBroadcastSystem } from "./runtime/WorldBroadcastSystem.js";
 import { WorldModuleRegistry } from "./runtime/WorldModuleRegistry.js";
@@ -105,7 +105,8 @@ const environmentAssetId = isHallWorld
 // 静态碰撞壳（边界 + 静态圆）统一从注册表取数；大厅动态摊位圆由 BoothSystem 注入
 const worldShell = colliderShellFor(environmentAssetId);
 const worldBounds = worldShell.bounds;
-const worldPlayerSpawn = isHallWorld
+// splat 场域会在加载后按可行走面实测改写出生点（spawnHint），故用 let
+let worldPlayerSpawn = isHallWorld
   ? HALL_LAYOUT.playerSpawn
   : isFieldWorld
     ? FIELD_WORLD.playerSpawn
@@ -2565,6 +2566,26 @@ async function boot() {
     });
     relationshipFieldSystem.applyAtmosphere(scene, { fog: !fieldSplatWorld });
     if (fieldSplatWorld) {
+      // 出生点落在实测可行走面上；互动实体/同伴底座射线贴地，贴不上的隐藏
+      if (fieldSplatWorld.spawnHint) {
+        worldPlayerSpawn = fieldSplatWorld.spawnHint;
+      }
+      const groundedHotspots = [];
+      for (const object of relationshipFieldSystem.root.children) {
+        const isEntity = object.isGroup && object.userData?.fieldEntityId;
+        const isFieldMesh = object.isMesh && object.name?.startsWith("FIELD_");
+        if (!isEntity && !isFieldMesh) continue;
+        if (snapObjectToFieldGround(object, fieldSplatWorld.groundGroup)) {
+          if (isEntity) {
+            const hotspot = relationshipFieldSystem.hotspots
+              .find((item) => item.id === `field-${object.userData.fieldEntityId}`);
+            if (hotspot) groundedHotspots.push(hotspot);
+          }
+        } else {
+          object.visible = false; // 该处没有地面，不悬浮
+        }
+      }
+      if (groundedHotspots.length) relationshipFieldSystem.hotspots = groundedHotspots;
       environment = new THREE.Group();
       environment.name = "ROOT_FieldWorld";
       environment.add(fieldSplatWorld.root);

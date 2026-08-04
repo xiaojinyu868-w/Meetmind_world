@@ -386,7 +386,7 @@ export function mountIntegrations({
   navFab.setAttribute("aria-label", navToCafe ? "去咖啡厅坐坐" : "回到我的集市");
   navFab.innerHTML =
     `<i data-lucide="${navToCafe ? "coffee" : "store"}"></i>` +
-    `<span><small>${navToCafe ? "Echo Cafe" : "Expo Hall"}</small>` +
+    `<span><small>${navToCafe ? "Echo Cafe" : "Echo 集市"}</small>` +
     `<strong>${navToCafe ? "去咖啡厅坐坐" : "回到我的集市"}</strong></span>`;
   navFab.addEventListener("click", () => navigateToWorld(navTarget));
   mountRoot.append(navFab);
