@@ -807,6 +807,7 @@ export function createCafeShell({
         <button type="button" data-action="start-meeting" ${invitedIds.size === 0 ? "disabled" : ""}>邀请 ${invitedIds.size} 人入座</button>
       </footer>`;
     meetingSheet.setAttribute("aria-hidden", "false");
+    notifyMeetingPanelFocus();
     hydrateIcons(meetingSheet);
   }
 
@@ -855,6 +856,7 @@ export function createCafeShell({
         <button type="submit" class="glass-icon-button" title="发送" aria-label="发送消息">${icon("send")}</button>
       </form>`;
     meetingSheet.setAttribute("aria-hidden", "false");
+    notifyMeetingPanelFocus();
     hydrateIcons(meetingSheet);
     scrollMeetingThread();
   }
@@ -879,6 +881,7 @@ export function createCafeShell({
         <button type="button" data-action="close-meeting">收起会议记录</button>
       </footer>`;
     meetingSheet.setAttribute("aria-hidden", "false");
+    notifyMeetingPanelFocus();
     hydrateIcons(meetingSheet);
     scrollMeetingThread();
   }
@@ -890,6 +893,15 @@ export function createCafeShell({
     meetingSheet.setAttribute("aria-hidden", "true");
     shell.classList.remove("has-meeting-sheet");
   }
+
+  // 面板互斥：会议 sheet 打开时广播；资料包等其他面板打开时自动收起（仅隐藏，不结束会议）。
+  const PANEL_FOCUS_EVENT = "echoworld:panel-focus";
+  function notifyMeetingPanelFocus() {
+    window.dispatchEvent(new CustomEvent(PANEL_FOCUS_EVENT, { detail: { id: "meeting" } }));
+  }
+  window.addEventListener(PANEL_FOCUS_EVENT, (event) => {
+    if (event.detail?.id !== "meeting" && meetingSheetOpen) closeMeetingSheet();
+  });
 
   // 结束/离开会议的统一出口：setup 阶段直接关 sheet；会议进行中走 onMeetingEnd
   // （live 模式下由后端立即散场，meeting-ended 进今日播报）

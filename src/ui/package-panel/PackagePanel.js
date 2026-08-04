@@ -588,6 +588,8 @@ export function mountPackagePanel(container, api) {
     layer.setAttribute("aria-hidden", "false");
     panel.focus({ preventScroll: true });
     startPresenceTimer();
+    // 面板互斥：广播资料包已获得焦点，其他面板（会议 sheet 等）收到后自动收起。
+    window.dispatchEvent(new CustomEvent(PANEL_FOCUS_EVENT, { detail: { id: "package" } }));
   }
 
   function close() {
@@ -599,6 +601,11 @@ export function mountPackagePanel(container, api) {
     stopPresenceTimer();
     layer.setAttribute("aria-hidden", "true");
   }
+
+  const PANEL_FOCUS_EVENT = "echoworld:panel-focus";
+  window.addEventListener(PANEL_FOCUS_EVENT, (event) => {
+    if (event.detail?.id !== "package") close();
+  });
 
   // 打开并定位到「和 TA 聊聊」：展开对话框、滚动到位并聚焦输入框
   function focusChatSection() {

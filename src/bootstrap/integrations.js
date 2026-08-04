@@ -420,7 +420,7 @@ export function mountIntegrations({
   groupFab.title = "进入现场房间";
   groupFab.innerHTML =
     `<i data-lucide="users"></i>` +
-    `<span><small>Group Session</small><strong>现场一起玩</strong></span>`;
+    `<span><small>第一印象 · 猜作者</small><strong>现场一起玩</strong></span>`;
   groupFab.addEventListener("click", () => groupPlay.open());
   mountRoot.append(groupFab);
   // 大厅把草地中央的实体篝火作为现场一起玩的唯一世界入口；房间建立后

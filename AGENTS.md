@@ -97,9 +97,11 @@ src/bootstrap/
 src/ui/
   CafeShell.js              当前使用的 UI 壳：intro -> cafe -> map 流程、人物侧栏、圆桌会议 UI
                             （live 模式会议线程消费快照 agent-talk[meeting_id]，玩家发言 POST 后端；
-                            旧的 #roundtable-prompt 悬浮入口已退役，圆桌统一走 SceneInteraction 热点）
-  SceneInteraction.js       统一 E/F 与触屏情境互动（INTERACTION-DESIGN §6：一键一动作，E 主/F 次即时触发；
-                            唯一模态层为横向人物 chip 选人条；叙事走瞬态 toast，不锁移动）
+                            旧的 #roundtable-prompt 悬浮入口已退役，圆桌统一走 SceneInteraction 热点；
+                            大面板互斥：会议 sheet 与资料包经 echoworld:panel-focus 事件互关，同屏只开一个）
+  SceneInteraction.js       统一 E/F 与触屏情境互动（一键一动作，E 主/F 次即时触发；
+                            模态 sheet 为右下单例卡片，JS 与 scene-interaction.css 类名必须成套对齐——
+                            2026-08-05 曾因 JS/CSS 分属两套设计导致 sheet 裸奔堆叠，改一侧必须同步另一侧）
   RelationshipGraph.js      关系 Map：7 个节点 + 12 条边的 SVG/DOM 渲染
   pipeline/PipelineFlow.js  相遇「录入 → 处理 → 确认」三屏流程（IF-1/2/3，自带 pipeline.css）
   onboarding/OnboardingFlow.js  合照入场三屏流程（FR-2.12，/api/v1/group-onboarding 两段式，自带 onboarding.css）

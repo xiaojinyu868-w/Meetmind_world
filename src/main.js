@@ -338,8 +338,9 @@ let elapsed = 0;
 let diagnosticFrame = 0;
 const expressionSystem = new CharacterExpressionSystem();
 const heartSignalSystem = new HeartSignalSystem();
-const useDemoSignals = new URLSearchParams(window.location.search).get("api") === "mock";
-const personSignalStore = new PersonSignalStore(useDemoSignals ? personSignals : []);
+// demo 信号兜底播种：保证 demo 人物名牌/侧栏始终有心动值；
+// live 模式下 K3 真实数据到达后经 upsert 自然覆盖（见 hydratePersonSignalIfLive）。
+const personSignalStore = new PersonSignalStore(personSignals);
 heartSignalSystem.setVisible(false);
 
 const packageNames = new Map();
@@ -437,9 +438,13 @@ async function hydratePersonSignal(personId) {
   }
 }
 
-if (!useDemoSignals) {
-  for (const person of people) void hydratePersonSignal(person.id);
+// live 探测是异步的，启动时 isLiveMode() 尚未就绪；
+// 一律等 useLiveMode() resolve 后再决定是否拉取，避免误吞成 null 且不重试。
+async function hydratePersonSignalIfLive(personId) {
+  if (await useLiveMode()) void hydratePersonSignal(personId);
 }
+
+for (const person of people) void hydratePersonSignalIfLive(person.id);
 
 canvas.dataset.ready = "false";
 canvas.dataset.appView = experienceMode;
@@ -2173,7 +2178,7 @@ async function ensureAgentEntity(agent) {
       agent.id,
       personSignalStore.getSnapshot(agent.id),
     );
-    if (!useDemoSignals) void hydratePersonSignal(agent.id);
+    void hydratePersonSignalIfLive(agent.id);
     npcSystem.register(personLike, entity);
     if (roomClient) rebuildSceneHotspots();
     canvas.dataset.npcCount = String(npcSystem.agents.size);

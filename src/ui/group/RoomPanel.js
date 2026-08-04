@@ -186,7 +186,7 @@ export function mountRoomPanel(root, {
   fab.hidden = true;
   fab.setAttribute("aria-label", "进入 v1 联机房间");
   fab.title = "进入 v1 联机房间";
-  fab.innerHTML = `<i data-lucide="radio"></i><span><small>Rooms v1</small><strong>联机房间</strong></span>`;
+  fab.innerHTML = `<i data-lucide="radio"></i><span><small>跨设备实时</small><strong>联机房间</strong></span>`;
   root.append(fab);
 
   const overlay = document.createElement("section");
