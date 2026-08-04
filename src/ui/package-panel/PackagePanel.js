@@ -1,10 +1,14 @@
 import {
+  BookmarkPlus,
   Clock3,
   Film,
   Info,
   Lightbulb,
   MapPin,
+  MessageCircle,
   Mic,
+  Quote,
+  Send,
   ShieldCheck,
   Sparkles,
   Tag,
@@ -16,14 +20,19 @@ import "./panel.css";
 
 // 资料包面板：IF-5「GET /api/v0/packages/{person_id}」的消费端。
 // 事实层（相遇时间线）与推断层（系统认知）在视觉上严格区隔（PRD P-3）。
+// IF-6：面板内「和 TA 聊聊」单聊对话框（INTERACTION-DESIGN.md §2，M1.3）。
 
 const ICONS = {
+  BookmarkPlus,
   Clock3,
   Film,
   Info,
   Lightbulb,
   MapPin,
+  MessageCircle,
   Mic,
+  Quote,
+  Send,
   ShieldCheck,
   Sparkles,
   Tag,
@@ -108,6 +117,9 @@ function mediaFileName(ref) {
  *   - api.getPackage(personId) => Promise<echo-package.v0>  单个资料包（事实指针 + 推断视图）
  *   - api.resolveMediaUrl?(ref) => string  可选，把事实层指针解析为可展示的 URL；
  *     缺省时原样使用 ref（mock 阶段可直接给静态路径）
+ *   - api.chatWithAgent?(personId, message, history) => Promise<IF-6 chat 响应>  可选；
+ *     缺省时「和 TA 聊聊」区不渲染
+ *   - api.saveChatNote?(personId, text) => Promise<{inference_ref, note}>  可选（IF-6 手动沉淀）
  * @returns {{ openPerson(personId: string): Promise<void>, close(): void, isOpen: boolean }}
  */
 export function mountPackagePanel(container, api) {
@@ -132,6 +144,12 @@ export function mountPackagePanel(container, api) {
   let requestSeq = 0;
   let toastTimer = null;
   const cache = new Map();
+
+  // IF-6 单聊状态：对话仅存内存（玩家对话不自动入库），按人物分线程
+  const CHAT_HISTORY_TURNS = 10;
+  const chatThreads = new Map();
+  let chatOpen = false;
+  let chatPending = false;
 
   // 在场状态（LiveWorld 快照注入）：setPresenceProvider 由 integrations 接线，不改对外签名
   const PRESENCE_LABELS = {
@@ -323,6 +341,151 @@ export function mountPackagePanel(container, api) {
       </section>`;
   }
 
+  // ---------- IF-6 单聊（面板内对话框，不新开浮层） ----------
+
+  function chatSupported() {
+    return typeof api?.chatWithAgent === "function";
+  }
+
+  function getThread(personId) {
+    if (!chatThreads.has(personId)) chatThreads.set(personId, []);
+    return chatThreads.get(personId);
+  }
+
+  // 3D 形象表情联动（main.js 诊断导出）：可达则触发，不可达静默降级
+  function triggerExpression(personId, expression) {
+    try {
+      window.__echoWorld?.setExpression?.(personId, expression);
+    } catch {
+      /* 3D 世界不可达时忽略 */
+    }
+  }
+
+  function chatMessageMarkup(message, index) {
+    if (message.role === "user") {
+      return `<div class="pp-chat-msg is-user"><p>${escapeHtml(message.content)}</p></div>`;
+    }
+    const cited = (Array.isArray(message.cited_facts) ? message.cited_facts : [])
+      .filter(Boolean);
+    return `
+      <div class="pp-chat-msg is-assistant">
+        <p>${escapeHtml(message.content)}</p>
+        <div class="pp-chat-msg-foot">
+          ${
+            cited.length
+              ? `<span class="pp-chat-source" tabindex="0" title="来源：${escapeHtml(cited.join("\n"))}">${icon("quote")}来源 ${cited.length}</span>`
+              : ""
+          }
+          <button type="button" class="pp-chat-save" data-pp-chat-save="${index}" title="把这条记进 TA 的资料包（标注：来自玩家转述）">${icon("bookmark-plus")}<span>记进资料包</span></button>
+        </div>
+      </div>`;
+  }
+
+  function chatInnerMarkup() {
+    if (!chatOpen) {
+      return `<button type="button" class="pp-chat-open" data-pp-chat-open>${icon("message-circle")}<span>和 TA 聊聊</span></button>`;
+    }
+    const thread = getThread(activePersonId);
+    const lastAssistant = [...thread].reverse().find((msg) => msg.role === "assistant");
+    const suggestions = chatPending ? [] : (lastAssistant?.suggestions ?? []);
+    return `
+      <div class="pp-chat-thread" data-pp-chat-thread aria-live="polite">
+        ${
+          thread.length
+            ? thread.map(chatMessageMarkup).join("")
+            : `<p class="pp-chat-hint">挑一条下面的开场，或直接输入。</p>`
+        }
+        ${
+          chatPending
+            ? `<div class="pp-chat-msg is-assistant is-pending"><span class="pp-chat-dots" aria-hidden="true"><i></i><i></i><i></i></span><small>TA 正在想…</small></div>`
+            : ""
+        }
+      </div>
+      ${
+        suggestions.length
+          ? `<div class="pp-chat-suggestions">${suggestions
+              .map((item) => `<button type="button" data-pp-chat-suggestion>${escapeHtml(item)}</button>`)
+              .join("")}</div>`
+          : ""
+      }
+      <form class="pp-chat-form" data-pp-chat-form>
+        <input type="text" name="message" maxlength="500" placeholder="和 TA 说点什么…"
+          autocomplete="off" ${chatPending ? "disabled" : ""} />
+        <button type="submit" aria-label="发送" title="发送" ${chatPending ? "disabled" : ""}>${icon("send")}</button>
+      </form>`;
+  }
+
+  function renderChat() {
+    const container = body.querySelector("[data-pp-chat]");
+    if (!container) return;
+    container.innerHTML = chatInnerMarkup();
+    hydrateIcons();
+    const thread = container.querySelector("[data-pp-chat-thread]");
+    if (thread) thread.scrollTop = thread.scrollHeight;
+  }
+
+  async function sendChat(text) {
+    const personId = activePersonId;
+    const content = String(text ?? "").trim();
+    if (!personId || !content || chatPending) return;
+    const thread = getThread(personId);
+    const history = thread
+      .slice(-CHAT_HISTORY_TURNS)
+      .map((msg) => ({ role: msg.role, content: msg.content }));
+    thread.push({ role: "user", content });
+    chatPending = true;
+    triggerExpression(personId, "thinking");
+    renderChat();
+    try {
+      const result = await api.chatWithAgent(personId, content, history);
+      thread.push({
+        role: "assistant",
+        content: String(result?.reply ?? "").trim() || "……",
+        cited_facts: Array.isArray(result?.cited_facts) ? result.cited_facts : [],
+        suggestions: Array.isArray(result?.suggestions) ? result.suggestions : [],
+      });
+      triggerExpression(personId, "happy");
+    } catch (error) {
+      console.error("[package-panel] 单聊失败", error);
+      if (activePersonId === personId) showToast("对话暂时连不上，稍后再试");
+    } finally {
+      chatPending = false;
+      if (activePersonId === personId && open) renderChat();
+    }
+  }
+
+  async function saveChatMessage(index) {
+    const personId = activePersonId;
+    const message = getThread(personId)[index];
+    if (!message || message.role !== "assistant") return;
+    if (typeof api?.saveChatNote !== "function") {
+      showToast("当前数据源不支持沉淀");
+      return;
+    }
+    try {
+      await api.saveChatNote(personId, message.content);
+      // 推断层多了一条 player-note：资料包缓存失效，下次打开「系统认知」可见
+      cache.delete(personId);
+      showToast("已记进资料包 · 标注：来自玩家转述");
+    } catch (error) {
+      console.error("[package-panel] 沉淀失败", error);
+      showToast("没存进去，稍后再试");
+    }
+  }
+
+  function chatSectionMarkup() {
+    if (!chatSupported()) return "";
+    return `
+      <section class="pp-section pp-chat-section" aria-label="和 TA 聊聊">
+        <div class="pp-section-head">
+          <h3>${icon("message-circle")}和 TA 聊聊</h3>
+          <span class="pp-section-tag pp-section-tag-ai">模拟分身 · 非真人</span>
+        </div>
+        <p class="pp-chat-note">${icon("info")}<span>基于 TA 授权信息的模拟，不是真人；对话不会自动写入资料包，值得留的可以手动「记进资料包」。</span></p>
+        <div class="pp-chat" data-pp-chat></div>
+      </section>`;
+  }
+
   function packageMarkup(pkg) {
     const identity = pkg.identity ?? {};
     const encounters = (Array.isArray(pkg.encounters) ? [...pkg.encounters] : []).sort(
@@ -388,7 +551,8 @@ export function mountPackagePanel(container, api) {
             : `<p class="pp-empty">还没有相遇记录。</p>`
         }
       </section>
-      ${inferenceSectionMarkup(pkg, encounters)}`;
+      ${inferenceSectionMarkup(pkg, encounters)}
+      ${chatSectionMarkup()}`;
   }
 
   function render(pkg) {
@@ -396,6 +560,7 @@ export function mountPackagePanel(container, api) {
     body.scrollTop = 0;
     hydrateIcons();
     refreshPresence();
+    renderChat();
   }
 
   function openPanel() {
@@ -410,6 +575,7 @@ export function mountPackagePanel(container, api) {
     open = false;
     activePersonId = null;
     requestSeq += 1;
+    chatPending = false;
     stopPresenceTimer();
     layer.setAttribute("aria-hidden", "true");
   }
@@ -447,10 +613,38 @@ export function mountPackagePanel(container, api) {
       showToast("原始音视频回放将在正式版本开放");
       return;
     }
+    if (event.target.closest("[data-pp-chat-open]")) {
+      chatOpen = true;
+      renderChat();
+      body.querySelector("[data-pp-chat]")?.scrollIntoView({ block: "nearest" });
+      body.querySelector(".pp-chat-form input")?.focus({ preventScroll: true });
+      return;
+    }
+    const suggestion = event.target.closest("[data-pp-chat-suggestion]");
+    if (suggestion) {
+      sendChat(suggestion.textContent);
+      return;
+    }
+    const saveButton = event.target.closest("[data-pp-chat-save]");
+    if (saveButton) {
+      saveChatMessage(Number(saveButton.dataset.ppChatSave));
+      return;
+    }
     if (event.target.closest("[data-pp-retry]") && activePersonId) {
       cache.delete(activePersonId);
       openPerson(activePersonId);
     }
+  });
+
+  // 单聊输入框提交（Enter / 发送按钮）；body 随渲染重建，走事件委托
+  layer.addEventListener("submit", (event) => {
+    const form = event.target.closest("[data-pp-chat-form]");
+    if (!form) return;
+    event.preventDefault();
+    const input = form.elements.message;
+    const value = input.value;
+    input.value = "";
+    sendChat(value);
   });
 
   document.addEventListener("keydown", (event) => {

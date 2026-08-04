@@ -1,7 +1,8 @@
 /**
  * MockApi —— API v0 契约客户端（先前端阶段的唯一数据入口）。
  *
- * 覆盖契约：IF-1 ingest / IF-2 pipeline / IF-3 confirm / IF-4 world/snapshot / IF-5 packages+search。
+ * 覆盖契约：IF-1 ingest / IF-2 pipeline / IF-3 confirm / IF-4 world/snapshot / IF-5 packages+search
+ * / IF-6 agents/chat（玩家与 Agent 单聊 + 手动沉淀）。
  * （见 docs/API.md；快照 schema 见 docs/ARCHITECTURE.md §4。）
  *
  * mock / live 切换（前后端联调的唯一开关，全部逻辑集中在本文件）：
@@ -487,6 +488,96 @@ export async function recordWorldInteraction(payload) {
   events.unshift(event);
   localStorage.setItem(MOCK_WORLD_EVENTS_KEY, JSON.stringify(events.slice(0, 100)));
   return event;
+}
+
+/**
+ * IF-6 玩家与 Agent 单聊：`POST /api/v0/agents/{person_id}/chat`。
+ *
+ * mock 模式：基于资料包内容合成"package-aware"的演示回复（generated_by="mock"），
+ * 命中授权标签时围绕它回应并给出真实推断来源指针；首轮给结构化开场建议。
+ * @contract IF-6
+ * @param {string} personId
+ * @param {string} message 玩家消息（1..500 字）
+ * @param {Array<{role: "user"|"assistant", content: string}>} [history] 客户端回显的最近 ≤10 轮
+ * @returns {Promise<{person_id: string, reply: string, cited_facts: string[], suggestions: string[], generated_by: string}>}
+ */
+export async function chatWithAgent(personId, message, history = []) {
+  if (isLiveMode()) {
+    return postJson(`/agents/${encodeURIComponent(personId)}/chat`, { message, history });
+  }
+  await delay(randomStepDelay());
+  const pkg = await getPackage(personId);
+  return mockAgentChatReply(pkg, message, history);
+}
+
+function mockAgentChatReply(pkg, message, history) {
+  const name = pkg.identity?.name ?? "TA";
+  const encounters = pkg.encounters ?? [];
+  const inferences = encounters.flatMap((encounter) =>
+    (encounter.inferences ?? [])
+      .filter((inf) => inf?.value)
+      .map((inf) => ({ ...inf, encounter_id: encounter.encounter_id })),
+  );
+  const flatTags = inferences
+    .flatMap((inf) => String(inf.value).split(/[、，,\s/；;]+/))
+    .map((tag) => tag.trim())
+    .filter((tag) => tag && tag.length <= 12);
+  const places = encounters.map((encounter) => encounter.place).filter(Boolean);
+  const text = String(message ?? "");
+  const hit = flatTags.find((tag) => text.includes(tag));
+
+  let reply;
+  let citedFacts = [];
+  if (hit) {
+    const source = inferences.find((inf) => String(inf.value).includes(hit));
+    citedFacts = [].concat(source?.source_facts ?? source?.source ?? []).filter(Boolean).slice(0, 1);
+    reply = `${hit}这个我记得一些——档案里留着的片段是：「${String(source?.value ?? hit).slice(0, 60)}」。更多的你得问 ${name} 本人，我只是守着授权资料的分身（演示模式）。`;
+  } else if (flatTags.length) {
+    reply = `我是 ${name} 的数字分身（演示模式，未接真实模型）。我能聊的只有授权资料里这些线索：${flatTags.slice(0, 3).join("、")}。想从哪一条开始？`;
+  } else {
+    reply = `我是 ${name} 的数字分身（演示模式）。资料还很少，你可以多告诉我一些，等正式接入后我会记住的。`;
+  }
+
+  const suggestions = [];
+  for (const tag of flatTags.slice(0, 2)) suggestions.push(`最近还在忙${tag}的事吗？`);
+  if (places[0]) suggestions.push(`还记得${String(places[0]).split("·").pop().trim()}那次吗？`);
+  if (!suggestions.length) suggestions.push("我们是怎么认识的来着？", "跟我讲讲你最近在忙什么。");
+
+  return {
+    person_id: pkg.person_id,
+    reply,
+    cited_facts: citedFacts,
+    suggestions: suggestions.slice(0, 3),
+    generated_by: "mock",
+  };
+}
+
+/**
+ * IF-6 手动沉淀：`POST /api/v0/agents/{person_id}/chat/save-note`。
+ * mock 模式不持久化，按契约合成推断指针返回（演示 toast 流程）。
+ * @contract IF-6
+ * @param {string} personId
+ * @param {string} text 用户选中的对话要点
+ * @returns {Promise<{inference_ref: string, note: object}>}
+ */
+export async function saveChatNote(personId, text) {
+  if (isLiveMode()) {
+    return postJson(`/agents/${encodeURIComponent(personId)}/chat/save-note`, {
+      text,
+      source: "player-chat",
+    });
+  }
+  await delay(240);
+  const note = {
+    id: `mock${Date.now().toString(36)}`,
+    type: "player-note",
+    author: "来自玩家转述",
+    value: String(text ?? "").trim(),
+    confidence: 1.0,
+    source: { type: "player-chat" },
+    created_at: new Date().toISOString(),
+  };
+  return { inference_ref: `inferences/${personId}/player-note-${note.id}.json`, note };
 }
 
 /** 收集资料包内可检索文本（mock keyword 检索用）。 */
