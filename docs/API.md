@@ -15,7 +15,7 @@
 | IF-3 | `POST /api/v0/confirm` | MVP1 | 确认：用户确认人物身份绑定（FR-1.3） |
 | IF-4 | `GET /api/v0/world/snapshot` | MVP1 | 世界：快照 `echo-snapshot.v1`，前端唯一渲染数据源 |
 | IF-5 | `GET /api/v0/packages/...` `POST /api/v0/search` | MVP1 | 资料包查看 + 人脸/姓名/关键词检索（FR-1.8/1.9） |
-| IF-6 | `POST /api/v0/agents/{id}/chat`（+`/chat/save-note`）`POST /api/v0/agents/meeting`（+`/meeting/current/message`）；`/api/v1/rooms/...` | MVP2 | 互动：玩家与 Agent 单聊（M1.3 已落地）、用户发起的圆桌会议（v0.7 已落地）、Agent 事件流；v1 现场房间、热点、破冰、有序事件/WebSocket（目标架构，docs/MVP2-BACKEND.md） |
+| IF-6 | `POST /api/v0/agents/{id}/chat`（+`/chat/save-note`）`POST /api/v0/agents/meeting`（+`/meeting/current/message`、`/meeting/current/end`）；`/api/v1/rooms/...` | MVP2 | 互动：玩家与 Agent 单聊（M1.3 已落地）、用户发起的圆桌会议（v0.7 已落地，v0.8 支持提前结束）、Agent 事件流；v1 现场房间、热点、破冰、有序事件/WebSocket（目标架构，docs/MVP2-BACKEND.md） |
 | IF-7 | `GET /api/v0/notifications` `POST /api/v0/feedback` `POST /api/v0/refill`（预留）；`/api/v1/group-onboarding` `/impressions` `/fields/generations` | MVP2 | 推送与回填（暂缓）；v1 群体冷启动、数据回流、关系场域生成 |
 | IF-8 | `/api/v0/group/sessions/...` | MVP2 | 现场房间 v0 过渡实现：位置同步、第一印象互写、"谁写的？"破冰游戏（服务当前前端，v1 成熟后迁移） |
 | IF-9 | `/api/v0/fields/...` `/api/v0/world/events` | MVP2 | 关系场域 `echo-field.v1`、空间互动事件与世界晨报 |
@@ -230,6 +230,17 @@ booth module 结构（快照 modules 内，`type: "booth"`）：
   （消费后转入会议 transcript，后续轮次仍可见）。
 - 409：当前没有进行中的用户会议。玩家发言不写入任何 Package。
 
+```jsonc
+// POST /api/v0/agents/meeting/current/end   （无 body）
+
+// 响应 200
+{"meeting_id": "user_meeting_42", "ended": true}
+```
+
+- 发起人提前结束当前圆桌会议：runtime 立即发 `meeting-end`（不等倒数），世界侧
+  同步散场，`meeting-ended` 照常进事件流/晨报。
+- 409：当前没有进行中的圆桌会议。
+
 ### 现场房间（MVP2 `/api/v1`）
 
 - `POST /api/v1/rooms`：创建房间和热点。
@@ -417,3 +428,4 @@ actor_id / command_id / payload / occurred_at / correlation_id / causation_id`�
 - 2026-08-04 | 行为变更（契约不变）：IF-9 关系场域生成升级为 LLM 艺术化映射（chat provider 把关系材料译为诗意空间参数，model 记为实际模型名）；provider 未配置或输出不合规时回退确定性规则模板（model="relationship-field-rules.v1"），echo-field.v1 schema 与缓存/regenerate 语义不变 | AI
 - 2026-08-04 | v0.6（加性）：IF-6 首个 v0 落地——玩家与 Agent 单聊 `POST /api/v0/agents/{id}/chat`（reply + cited_facts 来源指针 + suggestions 开场建议，generated_by 标记 mock/模型）与手动沉淀 `POST /api/v0/agents/{id}/chat/save-note`（player-note 推断，标注"来自玩家转述"）；对话不自动入库 | AI
 - 2026-08-04 | v0.7（加性）：IF-6 用户发起的圆桌会议落地——`POST /api/v0/agents/meeting`（2..5 人 + 可选议题，409/404/422 语义）与 `POST /api/v0/agents/meeting/current/message`（玩家发言注入下一轮会议 prompt）；会议 `agent-talk`/`meeting-started` 事件带 `meeting_id`（+`topic`），快照 `meeting` 字段带 `topic`；`GET /api/v0/world/brief` 增加 `generated_by`，headline/summary 可经 LLM 润色（按分钟缓存，失败回退模板） | AI
+- 2026-08-04 | v0.8（加性）：IF-6 新增 `POST /api/v0/agents/meeting/current/end`——发起人提前结束当前圆桌会议（runtime 立即发 meeting-end，不等倒数；无会议 409）；配套交互收敛（INTERACTION-DESIGN §6），会议 sheet「结束会议」在 live 模式走该端点 | AI

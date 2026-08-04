@@ -644,6 +644,21 @@ export async function postMeetingMessage(text) {
   return { meeting_id: "mock_meeting", accepted: true };
 }
 
+/**
+ * IF-6 发起人提前结束会议：`POST /api/v0/agents/meeting/current/end`。
+ *
+ * mock 模式：直接受理（本地会议本就由前端轮播管理，仅保持契约形状）。
+ * @contract IF-6
+ * @returns {Promise<{meeting_id: string, ended: boolean}>}
+ */
+export async function endMeeting() {
+  if (isLiveMode()) {
+    return postJsonWithDetail("/agents/meeting/current/end", {});
+  }
+  await delay(120);
+  return { meeting_id: "mock_meeting", ended: true };
+}
+
 /** 收集资料包内可检索文本（mock keyword 检索用）。 */
 function collectPackageText(pkg) {
   const parts = [pkg.identity?.name, pkg.identity?.role, pkg.identity?.city];

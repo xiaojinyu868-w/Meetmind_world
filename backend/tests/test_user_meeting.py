@@ -225,6 +225,35 @@ def test_meeting_endpoint_409_when_participant_in_meeting(tmp_path, monkeypatch)
     assert overlap.status_code == 409  # lin-che 已在会上（且圆桌占用先触发）
 
 
+def test_meeting_end_endpoint_early_end_and_409(tmp_path, monkeypatch):
+    monkeypatch.setattr(runtime_mod, "USER_MEETING_DURATION_TICKS", 30)
+    client = _client(tmp_path, monkeypatch)
+    # 无会议进行中：提前结束 409
+    assert client.post("/api/v0/agents/meeting/current/end").status_code == 409
+
+    started = client.post("/api/v0/agents/meeting", json={
+        "participant_ids": ["lin-che", "zhou-ning"],
+    })
+    assert started.status_code == 200
+    meeting_id = started.json()["meeting_id"]
+    assert client.get("/api/v0/world/snapshot").json()["meeting"]["id"] == meeting_id
+
+    ended = client.post("/api/v0/agents/meeting/current/end")
+    assert ended.status_code == 200
+    assert ended.json() == {"meeting_id": meeting_id, "ended": True}
+    # 世界侧同步散场 + meeting-ended 事件已进流（不等 runtime 倒数）
+    snapshot = client.get("/api/v0/world/snapshot").json()
+    assert snapshot["meeting"] is None
+    assert any(e["type"] == "meeting-ended" and e["meeting_id"] == meeting_id
+               for e in snapshot["events"])
+    # 已散场：再次结束 409；可以立即发起下一场
+    assert client.post("/api/v0/agents/meeting/current/end").status_code == 409
+    again = client.post("/api/v0/agents/meeting", json={
+        "participant_ids": ["lin-che", "zhou-ning"],
+    })
+    assert again.status_code == 200
+
+
 # ---------- 晨报 LLM 润色 ----------
 
 def _brief_events(store: WorldEventStore, count: int = 2) -> list:

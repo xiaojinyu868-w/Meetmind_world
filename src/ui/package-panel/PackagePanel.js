@@ -120,7 +120,9 @@ function mediaFileName(ref) {
  *   - api.chatWithAgent?(personId, message, history) => Promise<IF-6 chat 响应>  可选；
  *     缺省时「和 TA 聊聊」区不渲染
  *   - api.saveChatNote?(personId, text) => Promise<{inference_ref, note}>  可选（IF-6 手动沉淀）
- * @returns {{ openPerson(personId: string): Promise<void>, close(): void, isOpen: boolean }}
+ * @returns {{ openPerson(personId: string, options?: { focusChat?: boolean }): Promise<void>,
+ *   close(): void, isOpen: boolean }}
+ *   （focusChat=true 时打开后直接展开并定位「和 TA 聊聊」，供场景 E 键一键开聊）
  */
 export function mountPackagePanel(container, api) {
   const layer = document.createElement("div");
@@ -580,11 +582,21 @@ export function mountPackagePanel(container, api) {
     layer.setAttribute("aria-hidden", "true");
   }
 
-  async function openPerson(personId) {
+  // 打开并定位到「和 TA 聊聊」：展开对话框、滚动到位并聚焦输入框
+  function focusChatSection() {
+    renderChat();
+    body.querySelector("[data-pp-chat]")?.scrollIntoView({ block: "nearest" });
+    body.querySelector(".pp-chat-form input")?.focus({ preventScroll: true });
+  }
+
+  async function openPerson(personId, { focusChat = false } = {}) {
     activePersonId = personId;
+    chatOpen = focusChat && chatSupported();
     openPanel();
+    const afterRender = chatOpen ? focusChatSection : null;
     if (cache.has(personId)) {
       render(cache.get(personId));
+      afterRender?.();
       return;
     }
     const seq = ++requestSeq;
@@ -596,6 +608,7 @@ export function mountPackagePanel(container, api) {
       cache.set(personId, pkg);
       if (seq !== requestSeq || activePersonId !== personId) return;
       render(pkg);
+      afterRender?.();
     } catch (error) {
       console.error("[package-panel] 加载资料包失败", error);
       if (seq !== requestSeq) return;
@@ -615,9 +628,7 @@ export function mountPackagePanel(container, api) {
     }
     if (event.target.closest("[data-pp-chat-open]")) {
       chatOpen = true;
-      renderChat();
-      body.querySelector("[data-pp-chat]")?.scrollIntoView({ block: "nearest" });
-      body.querySelector(".pp-chat-form input")?.focus({ preventScroll: true });
+      focusChatSection();
       return;
     }
     const suggestion = event.target.closest("[data-pp-chat-suggestion]");
@@ -632,7 +643,7 @@ export function mountPackagePanel(container, api) {
     }
     if (event.target.closest("[data-pp-retry]") && activePersonId) {
       cache.delete(activePersonId);
-      openPerson(activePersonId);
+      openPerson(activePersonId, { focusChat: chatOpen });
     }
   });
 

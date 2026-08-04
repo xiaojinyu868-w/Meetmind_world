@@ -138,6 +138,18 @@ class AgentRuntime:
         self._meeting = None
         return True
 
+    def end_current_meeting(self, *, tick: int = 0) -> dict | None:
+        """玩家（发起人）提前结束当前会议：立即发 meeting-end 并清账，不等倒数
+        （世界侧经事件总线同步散场，meeting-ended 进事件流）。无会议进行中返回
+        None（调用方 409）。"""
+        if self._meeting is None:
+            return None
+        meeting_id = self._meeting["id"]
+        self._emit({"type": "meeting-end", "meeting_id": meeting_id})
+        self._last_meeting_end = tick
+        self._meeting = None
+        return {"meeting_id": meeting_id, "ended": True}
+
     def post_player_message(self, text: str) -> dict | None:
         """玩家（会议发起人）向进行中的用户会议发言：存为当前讨论点，
         下一轮 Agent 发言的 prompt 必须带上并直接回应；无用户会议进行中返回 None。
