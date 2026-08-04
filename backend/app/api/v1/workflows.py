@@ -40,13 +40,8 @@ async def group_onboarding(
     expected_count: int = Form(0),
     confirm_participants: bool = Form(True),
 ):
-    if photo.content_type not in GROUP_IMAGE_TYPES:
-        raise HTTPException(status_code=415, detail="合照只支持 JPEG、PNG 或 WebP")
     content = await photo.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="合照为空")
-    if len(content) > MAX_GROUP_PHOTO_BYTES:
-        raise HTTPException(status_code=413, detail="合照超过 25MB")
+    _validate_group_photo(photo, content)
     try:
         return request.app.state.group_onboarding.run(
             content, photo.filename or "group.jpg", _parse_names(participant_names),
@@ -55,6 +50,58 @@ async def group_onboarding(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def _validate_group_photo(photo: UploadFile, content: bytes) -> None:
+    if photo.content_type not in GROUP_IMAGE_TYPES:
+        raise HTTPException(status_code=415, detail="合照只支持 JPEG、PNG 或 WebP")
+    if not content:
+        raise HTTPException(status_code=400, detail="合照为空")
+    if len(content) > MAX_GROUP_PHOTO_BYTES:
+        raise HTTPException(status_code=413, detail="合照超过 25MB")
+
+
+@router.post("/group-onboarding/detect", status_code=201)
+async def group_onboarding_detect(
+    request: Request,
+    photo: UploadFile = File(...),
+    expected_count: int = Form(0),
+):
+    """两段式第一段：合照落事实层 + 人脸候选（bbox + face_ref），不建 Package。"""
+    content = await photo.read()
+    _validate_group_photo(photo, content)
+    try:
+        return request.app.state.group_onboarding.detect(
+            content, photo.filename or "group.jpg", expected_count=expected_count,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+class GroupAssignment(BaseModel):
+    face_id: str | None = None
+    face_ref: str | None = None
+    bbox: dict | None = None
+    name: str = Field(min_length=1, max_length=80)
+    impression: str | None = Field(default=None, max_length=300)
+
+
+class GroupConfirmRequest(BaseModel):
+    group_id: str = Field(min_length=1, max_length=80)
+    assignments: list[GroupAssignment] = Field(min_length=1, max_length=50)
+
+
+@router.post("/group-onboarding/confirm", status_code=201)
+def group_onboarding_confirm(request: Request, body: GroupConfirmRequest):
+    """两段式第二段：按确认的人脸-姓名指派批量建档 + 注册展位大厅。"""
+    try:
+        return request.app.state.group_onboarding.confirm(
+            body.group_id, [item.model_dump() for item in body.assignments],
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        status = 404 if detail.startswith("未知的 group_id") else 422
+        raise HTTPException(status_code=status, detail=detail) from exc
 
 
 class ImpressionRequest(BaseModel):

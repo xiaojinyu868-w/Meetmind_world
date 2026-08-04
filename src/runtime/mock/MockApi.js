@@ -19,6 +19,7 @@
 import { publicUrl } from "../WorldSpec.js";
 
 const LIVE_BASE_URL = `${import.meta.env.BASE_URL}api/v0`;
+const LIVE_V1_BASE_URL = `${import.meta.env.BASE_URL}api/v1`;
 const MOCK_DIR = "data/mock";
 const SNAPSHOT_SCHEMA = "echo-snapshot.v1";
 
@@ -97,6 +98,18 @@ async function postJson(path, body) {
   });
   if (!response.ok) {
     throw new Error(`POST ${path} failed: HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
+async function postV1Json(path, body) {
+  const response = await fetch(`${LIVE_V1_BASE_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new Error(`POST v1 ${path} failed: HTTP ${response.status}`);
   }
   return response.json();
 }
@@ -533,6 +546,73 @@ export async function search(request) {
     return { results };
   }
   throw new Error(`IF-5 search: 不支持的检索方式 by="${request.by}"（face/name/keyword 互斥）`);
+}
+
+/**
+ * FR-2.12 合照入场 · 第一段「认脸」：`POST /api/v1/group-onboarding/detect`（multipart）。
+ * 只做人脸检测，不创建 Package；返回 group_id + 人脸候选（bbox 归一化 xywh + face_ref）。
+ *
+ * mock 模式：读取 `group-onboarding.detect.demo.json`（5 张演示人脸，face_ref 指向
+ * 现有 portraits 资产），完全离线可用。
+ * @param {File|Blob} photo 合照（JPEG/PNG/WebP，≤25MB）
+ * @param {object} [options]
+ * @param {number} [options.expectedCount=0] 预期人数（0 = 不限）
+ * @returns {Promise<{group_id: string, status: string, detector: string,
+ *   faces: Array<{face_id: string, bbox: object, face_ref: string}>, issues: string[]}>}
+ */
+export async function groupOnboardingDetect(photo, { expectedCount = 0 } = {}) {
+  if (!photo) {
+    throw new Error("合照入场 detect: photo 必填");
+  }
+  if (isLiveMode()) {
+    const form = new FormData();
+    form.append("photo", photo);
+    form.append("expected_count", String(expectedCount));
+    const response = await fetch(`${LIVE_V1_BASE_URL}/group-onboarding/detect`, {
+      method: "POST",
+      body: form,
+    });
+    if (!response.ok) {
+      throw new Error(`合照认脸失败: HTTP ${response.status}`);
+    }
+    return response.json();
+  }
+  return fetchJson(mockUrl("group-onboarding.detect.demo.json"));
+}
+
+/**
+ * FR-2.12 合照入场 · 第二段「确认入场」：`POST /api/v1/group-onboarding/confirm`。
+ * 用户逐脸确认姓名后提交；批量建档 + 注册展位大厅（下一轮快照即可见展位）。
+ *
+ * mock 模式：以 `group-onboarding.register.demo.json` 为模板，把用户确认的姓名
+ * 逐个合并进 participants（person_id 为演示占位，不持久化）。
+ * @param {string} groupId 第一段返回的 group_id
+ * @param {Array<{face_id?: string, face_ref?: string, name: string}>} assignments
+ * @returns {Promise<{status: string, participants: Array<{person_id: string, name: string,
+ *   confirmed: boolean, face_ref: string|null, booth_id: string}>}>}
+ */
+export async function groupOnboardingConfirm(groupId, assignments) {
+  if (!groupId) {
+    throw new Error("合照入场 confirm: group_id 必填");
+  }
+  if (!Array.isArray(assignments) || assignments.length === 0) {
+    throw new Error("合照入场 confirm: assignments 至少包含一位人物");
+  }
+  if (isLiveMode()) {
+    return postV1Json("/group-onboarding/confirm", { group_id: groupId, assignments });
+  }
+  const template = await fetchJson(mockUrl("group-onboarding.register.demo.json"));
+  const participants = assignments.map((assignment, index) => {
+    const slot = template.participants[index] ?? template.participants[0];
+    return {
+      ...slot,
+      person_id: `group-demo-${assignment.face_id ?? `person-${index + 1}`}`,
+      name: assignment.name,
+      face_ref: assignment.face_ref ?? slot.face_ref,
+      booth_id: `booth_group-demo-${assignment.face_id ?? `person-${index + 1}`}`,
+    };
+  });
+  return { ...template, group_id: groupId, participants };
 }
 
 /**

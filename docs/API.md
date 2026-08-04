@@ -163,6 +163,61 @@ actor_id / command_id / payload / occurred_at / correlation_id / causation_id`�
 - `POST /api/v1/fields/generations`：共同事实 + 关系备注映射为版本化、可重算 Field。
 - `GET /api/v1/scenes/modules`：市集、摊位、咖啡厅、Field 的模块挂载契约。
 
+### 合照入场两段式（FR-2.12，v1.1 加性）
+
+一次性 `POST /api/v1/group-onboarding` 保留给脚本/批处理；交互式前端走两段式：
+
+**第一段「认脸」`POST /api/v1/group-onboarding/detect`（multipart/form-data，201）**
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `photo` | file | 是 | 合照（JPEG/PNG/WebP，≤25MB），落事实层只增不改 |
+| `expected_count` | int | 否 | 预期人数（0 = 不限，仅用于提示不一致） |
+
+```jsonc
+{
+  "schema": "meetmind.group-detection.v1",
+  "group_id": "group_1735..._ab12cd",
+  "status": "ready",               // ready | needs-review（没检到人脸）
+  "source_ref": "facts/2026-08-04/group_.../group.jpg",
+  "detector": "qwen-vl",           // qwen-vl | opencv | none（降级链：qwen-vl → OpenCV → 人工）
+  "detected_count": 5,
+  "faces": [
+    { "face_id": "face_01",
+      "bbox": { "x": 0.167, "y": 0.389, "width": 0.122, "height": 0.225 },  // 归一化 xywh
+      "face_ref": "derived/group-faces/group_.../face_01.jpg" }
+  ],
+  "issues": []
+}
+```
+
+- 检测阶段**不创建任何 Package**；人脸裁剪存生成物层（derived），经 `GET /api/v0/media/{ref}` 可取。
+- 检测器只框前景主要人物：提示词约束 + 最小尺寸过滤丢弃背景路人。
+
+**第二段「确认入场」`POST /api/v1/group-onboarding/confirm`（application/json，201）**
+
+```jsonc
+// 请求
+{
+  "group_id": "group_1735..._ab12cd",
+  "assignments": [
+    { "face_id": "face_01", "name": "小满", "impression": "会先把问题问清楚" }  // impression 可选
+    // 也接受 face_ref 或 bbox（近似匹配）替代 face_id
+  ]
+}
+// 响应 201：schema meetmind.group-onboarding.v1，与一次性接口同形
+{ "status": "ready", "participants": [
+    { "person_id": "person_...", "name": "小满", "confirmed": true,
+      "face_ref": "derived/group-faces/...", "booth_id": "booth_person_...",
+      "avatar_status": "ready" } ] }
+```
+
+- 确认后才批量建档（`identity.confirmed=true`）并注册展位大厅；下一轮 `IF-4 ?world=hall`
+  快照即携带新 booth 与 `at-booth` agent，前端免刷新可见。
+- `impression` 写入第一印象推断（`human-authored.v1`，confidence 1.0，privacy self-only，
+  source 指回合照事实），同时进 inferences 目录与 encounter 推断（展位 tags 来源）。
+- 错误：`404` 未知 group_id（须先 detect）；`415/400/413/422` 同一次性接口。
+
 详细请求、测试和限制见 `MVP2-BACKEND.md`。
 
 ## IF-8 现场群体房间（MVP2）
@@ -243,7 +298,7 @@ actor_id / command_id / payload / occurred_at / correlation_id / causation_id`�
 
 ## 前端 mock 约定（先前端阶段）
 
-- mock 数据放 `public/data/mock/`：`ingest.response.json`、`pipeline.stream.jsonl`（按行模拟 SSE 事件，前端定时器逐条播放模拟流式）、`snapshot.demo.json`、`packages.demo.json`、`search.demo.json`。
+- mock 数据放 `public/data/mock/`：`ingest.response.json`、`pipeline.stream.jsonl`（按行模拟 SSE 事件，前端定时器逐条播放模拟流式）、`snapshot.demo.json`、`packages.demo.json`、`search.demo.json`、`group-onboarding.detect.demo.json` / `group-onboarding.register.demo.json`（合照入场两段式，face_ref 复用现有 portraits 资产）。
 - 前端 mock 只准消费本契约字段；对齐效果后，后端实现到"前端零改动切 baseURL 即可用"。
 - mock 场景素材两条核心路径：黑客松展位（新人，`match_person_id: null`）+ 老朋友重逢（非空）。
 
@@ -261,5 +316,6 @@ actor_id / command_id / payload / occurred_at / correlation_id / causation_id`�
 - 2026-08-04 | v0.4（加性）：原预留授权/组织接口顺延为 IF-9；IF-8 落地现场房间、第一印象与“谁写的？”协议，明确只消费上游参与者/资产 DTO，不处理视觉与音视频 | 人（边界）+ AI（实现）
 - 2026-08-04 | v0.5（加性）：授权/组织接口顺延为 IF-10；新增 IF-9 `echo-field.v1` 关系场域、持久化世界事件与晨报；confirm 响应增加 `field_status` | AI
 - 2026-08-03 | v1：现场房间、WebSocket、Agent Intent/Command、圆桌/破冰、合照入场、第一印象、Field 和场景模块契约落地 | AI
+- 2026-08-04 | v1.1（加性）：IF-7 合照入场拆为两段式 `group-onboarding/detect` + `group-onboarding/confirm`（检测不建档、确认才批量建档+注册展位，支持逐脸 impression 推断）；一次性接口保留；人脸检测器升级为 qwen-vl 优先、OpenCV 兜底 | AI
 - 2026-08-04 | 合并 codex/agent 两线：IF-6/7 同时登记 v0 预留项与 v1 rooms/group-onboarding 目标架构，IF-8 标注为 v0 过渡实现；v0 快照改为纯读（advance 默认 0，tick 由服务端 scheduler 心跳推进，advance=1 仅兼容旧客户端） | AI
 - 2026-08-04 | 行为变更（契约不变）：IF-9 关系场域生成升级为 LLM 艺术化映射（chat provider 把关系材料译为诗意空间参数，model 记为实际模型名）；provider 未配置或输出不合规时回退确定性规则模板（model="relationship-field-rules.v1"），echo-field.v1 schema 与缓存/regenerate 语义不变 | AI

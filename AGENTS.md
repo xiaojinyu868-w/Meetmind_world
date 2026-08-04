@@ -79,6 +79,7 @@ src/ui/
   SceneInteraction.js       统一 E/F 与触屏情境菜单（摊位/桌位/吧台/圆桌/场域）
   RelationshipGraph.js      关系 Map：7 个节点 + 12 条边的 SVG/DOM 渲染
   pipeline/PipelineFlow.js  相遇「录入 → 处理 → 确认」三屏流程（IF-1/2/3，自带 pipeline.css）
+  onboarding/OnboardingFlow.js  合照入场三屏流程（FR-2.12，/api/v1/group-onboarding 两段式，自带 onboarding.css）
   package-panel/            资料包面板 + 顶部检索条（IF-5，自带 panel.css）
   AppShell.js               ⚠ 未被任何文件引用（历史遗留，疑似 CafeShell 的早期版本），改动前先确认
 src/cafe.css                当前使用的样式（由 main.js import）

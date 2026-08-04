@@ -115,8 +115,10 @@ class LLMProvider(ABC):
 
     # ---------- 多模态接口（抽象占位，各自独立 provider，配置登记在 .env） ----------
 
-    def analyze_image(self, image_bytes: bytes, prompt: str, mime: str = "image/jpeg") -> LLMResponse:
-        """图像理解（关键帧分析/人脸候选/场景标签）。基类默认未接入，返回 mock。"""
+    def analyze_image(self, image_bytes: bytes, prompt: str, mime: str = "image/jpeg",
+                      model: str | None = None) -> LLMResponse:
+        """图像理解（关键帧分析/人脸候选/场景标签）。基类默认未接入，返回 mock。
+        model：单次调用覆盖默认模型（如人脸检测走 qwen-vl-max）。"""
         return LLMResponse(
             text=f"[mock:{self.model}] analyze_image 未接入 provider",
             model=self.model, mock=True,
