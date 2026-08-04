@@ -159,7 +159,9 @@ export async function tryLoadFieldSplatWorld({
   // 继承 scale/position（否则 splat 被缩放两次变成指甲盖）
   const splatGroup = new THREE.Group();
   splatGroup.name = "SPLAT_Flipped";
-  splatGroup.quaternion.copy(SPLAT_FLIP_QUATERNION); // 只有 splat 翻转
+  // 调试/回退开关：?splatflip=0 时关闭翻转（部分导出路径的 spz 已是 Y-up）
+  const flipEnabled = new URLSearchParams(window.location.search).get("splatflip") !== "0";
+  if (flipEnabled) splatGroup.quaternion.copy(SPLAT_FLIP_QUATERNION);
   let spawnHint = null;
   if (walk) {
     const scale = THREE.MathUtils.clamp(
