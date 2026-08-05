@@ -125,12 +125,22 @@ def create_app() -> FastAPI:
         package = store.load_package(person_id)
         hall_world.register_person(person_id, build_display_from_package(package, store))
         registered_people.add(person_id)
+    queued_people = []
     for summary in store.list_packages():
         person_id = summary["person_id"]
         if person_id in registered_people or not summary["confirmed"]:
             continue
         package = store.load_package(person_id)
-        hall_world.register_person(person_id, build_display_from_package(package, store))
+        try:
+            hall_world.register_person(person_id, build_display_from_package(package, store))
+        except ValueError:
+            # 展位容量满：人物仍在世界里（Package/Agent 完整），展位排队等扩容，
+            # 不能让第 13 个 confirmed 人物把后端启动打崩
+            queued_people.append(person_id)
+    if queued_people:
+        import logging
+        logging.getLogger("echoworld").warning(
+            "展位容量已满，%d 位人物展位排队中：%s", len(queued_people), ",".join(queued_people))
     hall_bus = EventBus()
     hall_bus.subscribe(hall_world.apply_event)
 
