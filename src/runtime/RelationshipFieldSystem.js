@@ -273,8 +273,9 @@ export class RelationshipFieldSystem {
   applyAtmosphere(scene, { fog = true } = {}) {
     const parameters = this.field.scene?.parameters ?? {};
     scene.background = color(parameters.sky, "#91bbb4");
-    // splat 世界自带天空与纵深，雾会把 22m 尺度的 splat 整体罩灰，只在程序化模式启用
-    if (fog) scene.fog = new THREE.Fog(color(parameters.fog, "#d6dfd2"), 8.5, 26);
+    // splat 世界自带天空与纵深，雾会把 22m 尺度的 splat 整体罩灰，只在程序化模式启用；
+    // 显式置 null 防止程序化→splat 切换时残留上一世界的雾
+    scene.fog = fog ? new THREE.Fog(color(parameters.fog, "#d6dfd2"), 8.5, 26) : null;
   }
 
   update(elapsed) {

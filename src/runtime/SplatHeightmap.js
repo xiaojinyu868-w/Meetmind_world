@@ -12,8 +12,9 @@ import * as THREE from "three";
 /** 解析 SPZ v2：16 字节头 + 每 splat 9 字节 24-bit 定点位置。 */
 export function parseSpzPositions(bytes) {
   const view = new DataView(bytes.buffer ?? bytes, bytes.byteOffset ?? 0);
-  const magic = view.getUint32(0, true);
-  if (magic !== 0x5053474e) throw new Error(`不是 SPZ 资产（magic=${magic.toString(16)}）`);
+  if (view.byteLength < 16 || view.getUint32(0, true) !== 0x5053474e) {
+    throw new Error("不是 SPZ v2 资产");
+  }
   const count = view.getUint32(8, true);
   const fracBits = view.getUint8(13);
   const scale = 1 / (1 << fracBits);
@@ -24,6 +25,7 @@ export function parseSpzPositions(bytes) {
     return ((v & 0x800000) ? v - 0x1000000 : v) * scale;
   };
   for (let i = 0; i < count; i += 1) {
+    if (offset + 8 >= view.byteLength) throw new Error("SPZ 位置数据不完整");
     positions[i * 3] = readS24(offset);
     positions[i * 3 + 1] = readS24(offset + 3);
     positions[i * 3 + 2] = readS24(offset + 6);
@@ -103,17 +105,30 @@ export function buildSplatHeightmap(metricPositions, { cellSize = 2, layerBand =
   const centroid = { x: percentile(xs, 0.5), z: percentile(zs, 0.5) };
 
   const cellMedian = new Map();
+  // 出生点格必须落在主体地形内：全局最密格可能是远离主体的离群簇（树冠/孤石），
+  // 落在那里会把玩家放到渲染世界之外（2026-08-05 lin-che 世界实测 40m 偏移）
+  const inMainBody = (cx, cz) =>
+    cx >= percentile(xs, 0.02) && cx <= percentile(xs, 0.98) &&
+    cz >= percentile(zs, 0.02) && cz <= percentile(zs, 0.98);
   let densest = null; let densestCount = 0;
+  let fallback = null; let fallbackCount = 0;
   for (const [key, list] of cells) {
     list.sort((a, b) => a - b);
     const median = list[list.length >> 1];
     cellMedian.set(key, median);
-    if (list.length > densestCount) {
+    const [gx, gz] = key.split(",").map(Number);
+    const cx = (gx + 0.5) * cellSize;
+    const cz = (gz + 0.5) * cellSize;
+    if (list.length > fallbackCount) {
+      fallbackCount = list.length;
+      fallback = { x: cx, z: cz, y: median };
+    }
+    if (inMainBody(cx, cz) && list.length > densestCount) {
       densestCount = list.length;
-      const [gx, gz] = key.split(",").map(Number);
-      densest = { x: (gx + 0.5) * cellSize, z: (gz + 0.5) * cellSize, y: median };
+      densest = { x: cx, z: cz, y: median };
     }
   }
+  if (!densest) densest = fallback;
   const globalMedian = percentile([...cellMedian.values()].sort((a, b) => a - b), 0.5);
 
   function query(x, z) {

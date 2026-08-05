@@ -49,7 +49,9 @@ node --test tests/booth-layout.test.mjs  # 展位槽位/交互半径（未挂 np
 ```
 index.html                  入口页面（#world canvas、#ui-root、加载层、虚拟摇杆、fatal-error）
 src/main.js                 应用装配：Three.js 场景/灯光/阴影、第三人称相机、WASD+触屏移动、
-                            圆形桌面碰撞（TABLE_BLOCKERS）、射线选择、会议编排（约 800 行）
+                            圆形桌面碰撞（TABLE_BLOCKERS）、射线选择、会议编排（约 800 行）；
+                            场域：splat 加载后 worldBounds/cameraBounds 重设为实测边界，field companion
+                            同伴随行（updateFieldCompanion），场域内世界快照不驱动站位也不生成新面孔
 src/data/demoPeople.js      mock 数据：currentUser、6 个 NPC（含 palette 调色板、资料、关系图坐标）、relationships
 src/runtime/
   WorldSpec.js              world-spec.json 的加载与 schema 校验（echo-world.v1）、publicUrl() 处理 BASE_URL
@@ -82,8 +84,10 @@ src/runtime/
                             每摊位按 personId 稳定配色变体（雨篷/车台布）、展位圆形阻挡与射线点选、0.3s 缩放入场
   RelationshipFieldSystem.js  `echo-field.v1` 关系场域程序化地形、实体、热点与动画（splat 模式下 decorations=false 只搭实体）
   FieldSplatWorld.js          场域 Marble splat 世界（FR-2.11 升级）：field.world.status=ready 时 Spark 渲染 .spz
-                              （metric_scale_factor/ground_plane_offset 换算 + X 轴 180° 轴系转换），collider GLB 作地面
-                              射线目标；world 缺失/加载失败返回 null，由 main.js 回退程序化场域
+                              （metric_scale_factor/ground_plane_offset 换算 + X 轴 180° 轴系转换；Spark 走动态 import 不进主包），
+                              地面用 SplatHeightmap 从 splat 位置自证（collider GLB 仅隐藏诊断）；返回实测 bounds/spawnHint
+                              供 main.js 重设活动边界与出生点；world 缺失/加载失败返回 null，回退程序化场域
+  SplatHeightmap.js           SPZ v2 位置解码 + 稀疏中值高程图（所见即所踩；buildHeightmapMesh 生成不可见地面网格）
   WorldModuleRegistry.js    `echo-world-modules.v1` 挂载契约加载和严格校验
   WorldBroadcastSystem.js   咖啡厅 3D 播报屏与 DOM 晨报摘要
   RoomClient.js             v1 现场房间客户端（docs/MVP2-BACKEND.md）：REST join/commands/snapshot +

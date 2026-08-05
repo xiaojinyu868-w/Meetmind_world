@@ -53,7 +53,7 @@ import {
 } from "./runtime/SceneVariants.js";
 import { adaptSnapshot, normalizeEvent } from "./runtime/SnapshotAdapter.js";
 import { useLiveMode } from "./runtime/mock/MockApi.js";
-import { slideCapsuleStepAroundBlockers } from "./runtime/WalkSlide.js";
+import { slideCapsuleStepAroundBlockers, slideStepAroundBlockers } from "./runtime/WalkSlide.js";
 import { CameraRelativeMovement } from "./runtime/CameraRelativeMovement.js";
 import { Input } from "./runtime/Input.js";
 import { ThirdPersonCamera } from "./runtime/ThirdPersonCamera.js";
@@ -139,7 +139,9 @@ const hallCafeDoor = environmentAssetId === "environment.village-market.v1"
   : Object.freeze({ x: -4.1, z: 0.6 });
 // 静态碰撞壳（边界 + 静态圆）统一从注册表取数；大厅动态摊位圆由 BoothSystem 注入
 const worldShell = colliderShellFor(environmentAssetId);
-const worldBounds = worldShell.bounds;
+// splat 场域加载成功后改为高程图实测的可行走范围（configureWorld 里重赋值），
+// 让玩家与同伴的活动边界跟随后生成的 Marble 世界，而不是程序化场域的小壳
+let worldBounds = worldShell.bounds;
 const worldTitle = isHallWorld
   ? activeSceneVariant.title
   : isCafeWorld
@@ -271,7 +273,8 @@ worldAudio = new WorldAudioSystem({
 void worldAudio.preload();
 // Cafe bounds are walls. Outdoor worlds get a wider shell so the camera can
 // orbit naturally at the edge of their walkable terrain.
-const cameraBounds = isCafeWorld
+// 场域 splat 加载后会按实测边界重算（configureWorld），故用 let
+let cameraBounds = isCafeWorld
   ? Object.freeze({
       ...worldBounds,
       openings: Object.freeze([
@@ -315,6 +318,16 @@ const lookTarget = new THREE.Vector3(0, 0.85, 0);
 const projected = new THREE.Vector3();
 const candidatePosition = new THREE.Vector3();
 const targetQuaternion = new THREE.Quaternion();
+// 场域同伴（field companion）：目标人物在场域里贴着玩家侧身随行
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
+const FIELD_COMPANION_SPEED = 1.8;
+const FIELD_COMPANION_SIDE_DISTANCE = 1.35;
+const FIELD_COMPANION_LEAD_DISTANCE = 0.35;
+const FIELD_COMPANION_COMPACT_SIDE_DISTANCE = 0.45;
+const FIELD_COMPANION_COMPACT_LEAD_DISTANCE = 1.65;
+const movementRight = new THREE.Vector3();
+const fieldCompanionTarget = new THREE.Vector3();
+const fieldCompanionDirection = new THREE.Vector3();
 const cinematicBasePosition = new THREE.Vector3(...(cinematicProfile?.position ?? [6.45, 4.55, 8]));
 const cinematicTarget = new THREE.Vector3(...(cinematicProfile?.target ?? [0, 0.72, -0.35]));
 const cinematicOrbit = cinematicProfile?.orbit ?? [0.45, 0.12, 0.34];
@@ -649,6 +662,31 @@ async function spawnCharacters() {
   currentHeading.copy(MODEL_FORWARD).applyQuaternion(player.quaternion).setY(0).normalize();
   syncPlayerHeading(currentHeading);
   expressionSystem.register(playerEntity, currentUser.id, activeCharacterVariant.id);
+
+  // 场域同伴出生：目标人物贴着玩家侧身落位（而非契约里的固定同伴点），
+  // 进入场域两人就在一起，之后由 updateFieldCompanion 持续随行
+  if (isFieldWorld && entrySpawns.length > 1) {
+    const spawn = entrySpawns[0];
+    const compactView = canvas.clientWidth <= 720;
+    const sideDistance = compactView
+      ? FIELD_COMPANION_COMPACT_SIDE_DISTANCE
+      : FIELD_COMPANION_SIDE_DISTANCE;
+    const leadDistance = compactView
+      ? FIELD_COMPANION_COMPACT_LEAD_DISTANCE
+      : FIELD_COMPANION_LEAD_DISTANCE;
+    movementRight.crossVectors(currentHeading, WORLD_UP).normalize();
+    const companionX = THREE.MathUtils.clamp(
+      spawn.x + currentHeading.x * leadDistance + movementRight.x * sideDistance,
+      worldBounds.minX + 0.8,
+      worldBounds.maxX - 0.8,
+    );
+    const companionZ = THREE.MathUtils.clamp(
+      spawn.z + currentHeading.z * leadDistance + movementRight.z * sideDistance,
+      worldBounds.minZ + 0.8,
+      worldBounds.maxZ - 0.8,
+    );
+    entrySpawns[1] = { x: companionX, z: companionZ, yaw: Math.atan2(spawn.x - companionX, spawn.z - companionZ) };
+  }
 
   npcSystem = new NpcAgentSystem({
     people: visiblePeople,
@@ -1843,6 +1881,8 @@ function applyLiveSnapshot(rawSnapshot) {
   }
 
   for (const agent of adapted.agents) {
+    // 场域是私密双人空间：快照不驱动站位也不生成新面孔，同伴由 updateFieldCompanion 驱动
+    if (isFieldWorld) break;
     if (agent.id === currentUser.id || liveMeetingOverrides.has(agent.id)) continue;
     const entity = npcSystem?.getEntity(agent.id);
     if (!entity) {
@@ -1976,7 +2016,8 @@ function liveSeatKey(target) {
 
 
 function updateLiveAgents(delta) {
-  if (!npcSystem) return;
+  // 场域里唯一的 Agent 是同伴，位置由 updateFieldCompanion 驱动，不走 live 站位
+  if (!npcSystem || isFieldWorld) return;
   for (const personId of new Set([
     ...liveTargets.keys(),
     ...groupPresenceOverrides.keys(),
@@ -2717,6 +2758,83 @@ function updatePlayerMarker() {
 }
 
 
+// 场域同伴随行：目标人物保持在玩家侧前方，绕障滑动、保持个人空间、
+// 贴合地形高度（坡度突变即停步），静止时转身面向玩家
+function updateFieldCompanion(delta) {
+  if (!isFieldWorld || !player || !npcSystem) return;
+  const entity = npcSystem.getEntity(fieldTargetPerson.id);
+  if (!entity) return;
+  const root = entity.root;
+  const compactView = canvas.clientWidth <= 720;
+  const sideDistance = compactView
+    ? FIELD_COMPANION_COMPACT_SIDE_DISTANCE
+    : FIELD_COMPANION_SIDE_DISTANCE;
+  const leadDistance = compactView
+    ? FIELD_COMPANION_COMPACT_LEAD_DISTANCE
+    : FIELD_COMPANION_LEAD_DISTANCE;
+  movementRight.crossVectors(currentHeading, WORLD_UP).normalize();
+  fieldCompanionTarget
+    .copy(player.position)
+    .addScaledVector(currentHeading, leadDistance)
+    .addScaledVector(movementRight, sideDistance);
+  fieldCompanionTarget.x = THREE.MathUtils.clamp(
+    fieldCompanionTarget.x,
+    worldBounds.minX + 0.45,
+    worldBounds.maxX - 0.45,
+  );
+  fieldCompanionTarget.z = THREE.MathUtils.clamp(
+    fieldCompanionTarget.z,
+    worldBounds.minZ + 0.45,
+    worldBounds.maxZ - 0.45,
+  );
+
+  fieldCompanionDirection.subVectors(fieldCompanionTarget, root.position).setY(0);
+  const distance = fieldCompanionDirection.length();
+  let moved = false;
+  if (distance > 0.35) {
+    fieldCompanionDirection.normalize();
+    const stepLength = Math.min(distance - 0.25, FIELD_COMPANION_SPEED * delta);
+    const [stepX, stepZ] = slideStepAroundBlockers(
+      root.position.x,
+      root.position.z,
+      fieldCompanionDirection.x * stepLength,
+      fieldCompanionDirection.z * stepLength,
+      currentBlockers(),
+      { moverRadius: 0.3 },
+    );
+    const nextX = root.position.x + stepX;
+    const nextZ = root.position.z + stepZ;
+    const keepsPersonalSpace = Math.hypot(nextX - player.position.x, nextZ - player.position.z) >= 0.82;
+    const nextGroundY = keepsPersonalSpace ? surfaceHeightAt(nextX, nextZ) : null;
+    if (
+      nextGroundY !== null &&
+      nextX >= worldBounds.minX && nextX <= worldBounds.maxX &&
+      nextZ >= worldBounds.minZ && nextZ <= worldBounds.maxZ &&
+      Math.abs(nextGroundY - entity.baseY) <= 0.8
+    ) {
+      root.position.x = nextX;
+      root.position.z = nextZ;
+      entity.baseY = nextGroundY;
+      moved = Math.hypot(stepX, stepZ) > 1e-5;
+    }
+  }
+
+  const groundY = surfaceHeightAt(root.position.x, root.position.z);
+  if (groundY !== null) entity.baseY = groundY;
+  root.position.y = entity.baseY + (moved ? Math.abs(Math.sin(elapsed * 8.4)) * 0.022 : 0);
+  root.scale.y += (1 - root.scale.y) * (1 - Math.exp(-7 * delta));
+  const facing = moved
+    ? fieldCompanionDirection
+    : fieldCompanionDirection.subVectors(player.position, root.position).setY(0).normalize();
+  if (facing.lengthSq() > 1e-5) {
+    targetQuaternion.setFromUnitVectors(MODEL_FORWARD, facing);
+    root.quaternion.slerp(targetQuaternion, 1 - Math.exp(-10 * delta));
+  }
+  root.userData.agentState = moved ? "walking" : "together";
+  entity.spec.behavior.idle_bob = 0;
+}
+
+
 function updateFollowCamera(delta) {
   cameraController.update(player.position, {
     delta,
@@ -2902,6 +3020,7 @@ function animate(timestamp) {
     campfireEntrance?.update(elapsed);
     if (experienceMode === "cafe") {
       updatePlayer(delta);
+      updateFieldCompanion(delta);
       syncRoomPlayerPosition();
       if (meetingMode) updateMeetingCamera(delta);
       else updateFollowCamera(delta);
@@ -3196,7 +3315,19 @@ async function boot() {
     });
     relationshipFieldSystem.applyAtmosphere(scene, { fog: !fieldSplatWorld });
     if (fieldSplatWorld) {
-      // 互动实体/同伴底座射线贴地，贴不上的隐藏；出生点由 spawnHint 供 spawnCharacters 使用
+      // 活动边界换成 Marble 世界高程图实测的可行走范围（而非程序化场域的小壳），
+      // 玩家与同伴才能真正一起探索生成的世界；出生点由 spawnHint 供 spawnCharacters 使用
+      if (fieldSplatWorld.bounds) {
+        worldBounds = fieldSplatWorld.bounds;
+        // 相机活动壳同步实测边界，否则玩家落在旧壳外时相机会被夹到头顶正上方
+        cameraBounds = Object.freeze({
+          minX: worldBounds.minX - cameraController.maxDistance,
+          maxX: worldBounds.maxX + cameraController.maxDistance,
+          minZ: worldBounds.minZ - cameraController.maxDistance,
+          maxZ: worldBounds.maxZ + cameraController.maxDistance,
+        });
+      }
+      // 互动实体/同伴底座射线贴地，贴不上的隐藏
       const groundedHotspots = [];
       for (const object of relationshipFieldSystem.root.children) {
         const isEntity = object.isGroup && object.userData?.fieldEntityId;
