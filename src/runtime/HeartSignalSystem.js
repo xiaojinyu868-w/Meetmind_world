@@ -239,6 +239,7 @@ function cloneState(record) {
     heart: { ...record.snapshot.heart },
     capturedAt: record.snapshot.capturedAt,
     status: record.snapshot.status,
+    activity: record.activity ?? null,
     animation: {
       beatBpm: record.beatBpm,
       pulse: record.pulse,
