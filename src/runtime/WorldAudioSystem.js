@@ -10,12 +10,12 @@ export const AUDIO_TRACKS = Object.freeze({
   outdoor: Object.freeze({
     id: "evening-forest",
     path: "audio/evening-forest-ambience.mp3",
-    volume: 0.16,
+    volume: 0.22,
   }),
   cafe: Object.freeze({
     id: "cafe-ambience",
     path: "audio/cafe-ambience.mp3",
-    volume: 0.12,
+    volume: 0.17,
   }),
   click: Object.freeze({
     id: "soft-button-click",

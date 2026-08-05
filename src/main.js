@@ -1574,6 +1574,47 @@ function leavePlayerSeat() {
 }
 
 
+// 集市人物动作「约到咖啡厅继续聊」：带邀请参数整页跳转，落地后由 URL 的 invite 参数
+// 恢复 pendingSceneInviteId（main.js 顶部解析），圆桌热点随即提示带 TA 入座
+function navigateToCafeWithInvite(personId) {
+  const nextUrl = new URL(window.location.href);
+  nextUrl.searchParams.set("world", "cafe");
+  nextUrl.searchParams.set("invite", personId);
+  window.location.assign(nextUrl.href);
+}
+
+
+// 「调取共同记忆」叙事：无人选时先给人物清单，点选后从资料包取第一段相遇与要点
+async function memoryNarrative(personId = null) {
+  if (!personId) {
+    return {
+      eyebrow: "共同记忆",
+      title: "想调取与谁的共同记忆？",
+      detail: "选择一位熟人，从资料包里找回你们的第一次相遇。",
+      icon: "book-open",
+      actions: people.map((person) => ({
+        id: `recall-person:${person.id}`,
+        label: person.name,
+        description: `${person.relation} · ${person.tags.slice(0, 2).join(" · ")}`,
+        icon: "book-open",
+      })),
+    };
+  }
+  const targetId = personId;
+  const pkg = await api.getPackage(targetId);
+  const encounter = pkg.encounters?.[0] ?? {};
+  const highlight = (encounter.inferences ?? []).find((item) => item.type.includes("memory"))
+    ?? encounter.inferences?.[0];
+  return {
+    eyebrow: `你与${pkg.identity?.name ?? nameOf(targetId)}的共同记忆`,
+    title: encounter.place ?? "第一次相遇",
+    detail: highlight?.value ?? `这段记录发生在 ${encounter.time ?? "一个被留下的时刻"}。`,
+    icon: "book-open",
+    actions: [{ id: `open-package:${targetId}`, label: "查看完整资料包", icon: "eye" }],
+  };
+}
+
+
 async function handleSceneInteraction(hotspot, actionId) {
   if (actionId === "enter-cafe") {
     navigateToWorld("cafe");
@@ -1594,6 +1635,20 @@ async function handleSceneInteraction(hotspot, actionId) {
   if (actionId === "chat-person") {
     // 点按看资料、E 直接开聊：资料包面板定位到「和 TA 聊聊」
     void integrations.panel.openPerson(hotspot.personId, { focusChat: true });
+    return { close: true };
+  }
+  if (actionId === "open-package" || actionId.startsWith("open-package:")) {
+    // 翻开资料包（合并时一度丢失 handler 导致按钮只变灰无响应）
+    const personId = actionId.split(":")[1] ?? hotspot.personId;
+    void integrations.panel.openPerson(personId);
+    void recordWorldEvent("booth-viewed", `你翻开了${nameOf(personId)}的资料包`, [personId]);
+    return { close: true };
+  }
+  if (actionId === "invite-cafe") {
+    // 集市人物动作：把邀请带到咖啡厅（URL invite 参数落地恢复）
+    pendingSceneInviteId = hotspot.personId;
+    await recordWorldEvent("invitation-sent", `你邀请${nameOf(hotspot.personId)}去咖啡厅继续聊`, [hotspot.personId]);
+    navigateToCafeWithInvite(hotspot.personId);
     return { close: true };
   }
   if (actionId === "exit-cafe") {
@@ -1648,9 +1703,27 @@ async function handleSceneInteraction(hotspot, actionId) {
       actions: inviteActions(),
     };
   }
+  if (actionId === "recall-memory") {
+    // 人物解析顺序：热点自带人物 → 当前选中人物 → 待赴约的邀请对象；都没有则让人选
+    const targetId = hotspot.personId ?? selectedPersonId ?? pendingSceneInviteId;
+    const narrative = await memoryNarrative(targetId);
+    if (targetId) {
+      void recordWorldEvent("memory-recalled", `你在咖啡厅调取了与${nameOf(targetId)}的共同记忆`, [targetId]);
+    }
+    return narrative;
+  }
+  if (actionId.startsWith("recall-person:")) {
+    const personId = actionId.slice("recall-person:".length);
+    const narrative = await memoryNarrative(personId);
+    void recordWorldEvent("memory-recalled", `你在咖啡厅调取了与${nameOf(personId)}的共同记忆`, [personId]);
+    return narrative;
+  }
   if (actionId.startsWith("invite-person:")) {
     const personId = actionId.slice("invite-person:".length);
     pendingSceneInviteId = personId;
+    // 被邀请的人抬手回应：邀请在世界里有看得见的反馈
+    void characterSystem?.playAction(personId, CHARACTER_ACTIONS.RAISE_RIGHT_HAND);
+    void setCharacterExpression(personId, "happy", { source: "scene-interaction" });
     await recordWorldEvent("invitation-sent", `你邀请${nameOf(personId)}在咖啡厅坐下`, [personId]);
     rebuildSceneHotspots();
     return {
