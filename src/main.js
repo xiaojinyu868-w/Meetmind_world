@@ -36,7 +36,7 @@ const FALLBACK_POSITION_BY_ID = new Map(
 import { NpcAgentSystem } from "./runtime/NpcAgentSystem.js";
 import { PersonSignalStore } from "./runtime/PersonSignalStore.js";
 import { RelationshipFieldSystem } from "./runtime/RelationshipFieldSystem.js";
-import { tryLoadFieldSplatWorld, snapObjectToFieldGround } from "./runtime/FieldSplatWorld.js";
+import { tryLoadFieldSplatWorld } from "./runtime/FieldSplatWorld.js";
 import { RoomClient } from "./runtime/CafeRoomClient.js";
 import {
   createVillageMarketEnvironment,
@@ -326,6 +326,14 @@ const targetQuaternion = new THREE.Quaternion();
 // 场域同伴（field companion）：目标人物在场域里贴着玩家侧身随行
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 const FIELD_COMPANION_SPEED = 1.8;
+// 名牌行为状态行文案（快照/本地调度 agent.state → 名牌 caption）
+const AGENT_ACTIVITY_LABELS = Object.freeze({
+  walking: "串门途中",
+  talking: "交谈中",
+  "at-booth": "守着摊位",
+  seated: "坐着休息",
+  "in-meeting": "圆桌会议中",
+});
 const FIELD_COMPANION_SIDE_DISTANCE = 1.35;
 const FIELD_COMPANION_LEAD_DISTANCE = 0.35;
 const FIELD_COMPANION_COMPACT_SIDE_DISTANCE = 0.45;
@@ -723,6 +731,8 @@ async function spawnCharacters() {
       characterSystem.setState(npcSystem?.getEntity(state.personId), state.status, {
         seated: state.status === "seated" || state.status === "in-meeting",
       });
+      // 本地调度模式（mock）同样写名牌状态行
+      heartSignalSystem.setActivity(state.personId, AGENT_ACTIVITY_LABELS[state.status] ?? null);
     },
   });
 
@@ -865,8 +875,33 @@ function setExperienceMode(mode) {
         bounds: cameraBounds,
       });
     }
+    showControlsHintOnce();
   }
   syncControlAvailability();
+}
+
+
+// 首次进入世界的一次性操作提示（指针锁定环顾/滚轮缩放/Shift 加速都可用了但用户不知道）
+let controlsHintShown = false;
+function showControlsHintOnce() {
+  if (controlsHintShown) return;
+  controlsHintShown = true;
+  if (window.matchMedia?.("(pointer: coarse)")?.matches) return; // 触屏有虚拟摇杆，无此问题
+  const hint = document.createElement("div");
+  hint.style.cssText =
+    "position:fixed;left:50%;bottom:96px;transform:translateX(-50%);z-index:30;" +
+    "padding:10px 18px;border-radius:999px;border:1px solid rgba(255,255,255,.4);" +
+    "background:rgba(21,58,50,.88);color:#fffdf4;backdrop-filter:blur(14px);" +
+    "font-size:11px;font-weight:600;letter-spacing:.05em;white-space:nowrap;" +
+    "box-shadow:0 12px 30px rgba(18,45,39,.22);opacity:0;transition:opacity .5s ease;" +
+    "pointer-events:none;";
+  hint.textContent = "WASD 走动 · 点击画面后移动鼠标环顾 · 滚轮缩放 · Shift 加速 · E 互动";
+  document.body.append(hint);
+  requestAnimationFrame(() => { hint.style.opacity = "1"; });
+  setTimeout(() => {
+    hint.style.opacity = "0";
+    setTimeout(() => hint.remove(), 700);
+  }, 9000);
 }
 
 
@@ -1256,6 +1291,26 @@ function rebuildSceneHotspots() {
         icon: hotspot.kind === "memory" ? "book-open" : "sparkles",
       }],
     }));
+    // 场域同伴可交谈：这是「我和 TA」的空间，和 TA 说话是核心互动。
+    // kind=person 的热点由 nearestSceneHotspot 每帧对齐到实体位置（同伴随行移动）
+    sceneHotspots.push({
+      id: `field-companion-${fieldTargetPerson.id}`,
+      kind: "person",
+      personId: fieldTargetPerson.id,
+      x: 0,
+      z: 0,
+      radius: 2.1,
+      eyebrow: "只有你们两个人的地方",
+      title: fieldTargetPerson.displayName ?? fieldTargetPerson.name,
+      detail: "在这片由共同记忆生成的场域里，和 TA 说说话。",
+      prompt: `和${fieldTargetPerson.displayName ?? fieldTargetPerson.name}聊聊`,
+      icon: "message-circle",
+      directActionId: "chat-person",
+      actions: [
+        { id: "chat-person", label: "和 TA 聊聊", description: "与 TA 的数字分身对话（基于授权信息）", icon: "message-circle" },
+        { id: "open-package", label: "翻开资料包", description: "回到相遇事实与现场记录", icon: "eye" },
+      ],
+    });
     return;
   }
 
@@ -1949,6 +2004,11 @@ function applyLiveSnapshot(rawSnapshot) {
   setTickBadge(adapted.tick, liveWorld?.source);
   canvas.dataset.liveSource = liveWorld?.source ?? "unknown";
   canvas.dataset.worldTick = String(adapted.tick);
+
+  // 名牌行为状态行：把 Agent 的当前意图写到世界上可读（「串门途中」「交谈中」…）
+  for (const agent of adapted.agents) {
+    heartSignalSystem.setActivity(agent.id, AGENT_ACTIVITY_LABELS[agent.state] ?? null);
+  }
 
   if (isHallWorld && boothSystem) {
     // 展位增量同步：快照有 booth 用快照；mock 快照缺 booth 时用内置 6 人演示展位
@@ -2924,6 +2984,7 @@ function updateFieldCompanion(delta) {
     root.quaternion.slerp(targetQuaternion, 1 - Math.exp(-10 * delta));
   }
   root.userData.agentState = moved ? "walking" : "together";
+  heartSignalSystem.setActivity(fieldTargetPerson.id, moved ? "陪着你走走" : "陪着你");
   entity.spec.behavior.idle_bob = 0;
 }
 
@@ -3420,23 +3481,45 @@ async function boot() {
           maxZ: worldBounds.maxZ + cameraController.maxDistance,
         });
       }
-      // 互动实体/同伴底座射线贴地，贴不上的隐藏
-      const groundedHotspots = [];
-      for (const object of relationshipFieldSystem.root.children) {
-        const isEntity = object.isGroup && object.userData?.fieldEntityId;
-        const isFieldMesh = object.isMesh && object.name?.startsWith("FIELD_");
-        if (!isEntity && !isFieldMesh) continue;
-        if (snapObjectToFieldGround(object, fieldSplatWorld.groundGroup)) {
-          if (isEntity) {
-            const hotspot = relationshipFieldSystem.hotspots
-              .find((item) => item.id === `field-${object.userData.fieldEntityId}`);
-            if (hotspot) groundedHotspots.push(hotspot);
+      // splat 世界的契约坐标与生成地形无关（实测 lin-che 世界实体离玩家 40m+）：
+      // 实体重新锚定到玩家实际活动的地形上——threshold（关系入口）落在出生点旁，
+      // 其余绕出生点黄金角环布、收进实测边界，y 用 groundQuery 贴地（所见即所踩）
+      {
+        const bounds = fieldSplatWorld.bounds;
+        const spawnSpot = fieldSplatWorld.spawnHint ?? { x: 0, z: 0 };
+        const spanX = bounds.maxX - bounds.minX;
+        const spanZ = bounds.maxZ - bounds.minZ;
+        const ring = Math.max(3, Math.min(spanX, spanZ) * 0.25);
+        let slot = 0;
+        for (const object of relationshipFieldSystem.root.children) {
+          const entityId = object.userData?.fieldEntityId;
+          if (!entityId) continue;
+          let spot;
+          if (entityId === "threshold") {
+            // 入口语义：出生点朝世界中心收 2.2m
+            const toCenter = Math.hypot(spawnSpot.x, spawnSpot.z) || 1;
+            spot = {
+              x: spawnSpot.x - (spawnSpot.x / toCenter) * 2.2,
+              z: spawnSpot.z - (spawnSpot.z / toCenter) * 2.2,
+            };
+          } else {
+            const angle = 0.9 + slot * 2.39996;  // 黄金角散布，互不重叠
+            slot += 1;
+            spot = {
+              x: THREE.MathUtils.clamp(spawnSpot.x + Math.cos(angle) * ring, bounds.minX + 1.2, bounds.maxX - 1.2),
+              z: THREE.MathUtils.clamp(spawnSpot.z + Math.sin(angle) * ring, bounds.minZ + 1.2, bounds.maxZ - 1.2),
+            };
           }
-        } else {
-          object.visible = false; // 该处没有地面，不悬浮
+          object.position.set(spot.x, fieldSplatWorld.groundQuery(spot.x, spot.z), spot.z);
+          object.visible = true;
+          const hotspot = relationshipFieldSystem.hotspots
+            .find((item) => item.id === `field-${entityId}`);
+          if (hotspot) {
+            hotspot.x = spot.x;
+            hotspot.z = spot.z;
+          }
         }
       }
-      if (groundedHotspots.length) relationshipFieldSystem.hotspots = groundedHotspots;
       environment = new THREE.Group();
       environment.name = "ROOT_FieldWorld";
       environment.add(fieldSplatWorld.root);

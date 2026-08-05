@@ -169,7 +169,7 @@ function drawMarker(record) {
   context.shadowColor = "rgba(29, 35, 42, 0.20)";
   context.shadowBlur = 14;
   context.shadowOffsetY = 5;
-  roundedRect(context, 10, 10, canvas.width - 20, canvas.height - 26, 38);
+  roundedRect(context, 10, 10, canvas.width - 20, 126, 38);
   context.fillStyle = inactive ? "rgba(245, 246, 248, 0.94)" : "rgba(255, 255, 255, 0.96)";
   context.fill();
   context.shadowColor = "transparent";
@@ -185,6 +185,17 @@ function drawMarker(record) {
   context.textAlign = "center";
   context.textBaseline = "middle";
   context.fillText(roundedScore === null ? "--" : String(roundedScore), 214, 69);
+
+  // 行为状态行（「串门途中」「交谈中」…）：让 Agent 的当前意图在世界上可读
+  if (record.activity) {
+    context.font = "600 30px system-ui, -apple-system, BlinkMacSystemFont, sans-serif";
+    context.fillStyle = "rgba(34, 37, 42, 0.82)";
+    context.shadowColor = "rgba(255, 255, 255, 0.55)";
+    context.shadowBlur = 6;
+    context.shadowOffsetY = 1;
+    context.fillText(record.activity, canvas.width / 2, 165);
+    context.shadowColor = "transparent";
+  }
   context.restore();
 
   record.texture.needsUpdate = true;
@@ -245,7 +256,7 @@ export class HeartSignalSystem {
   constructor({
     canvasFactory = defaultCanvasFactory,
     canvasWidth = 320,
-    canvasHeight = 152,
+    canvasHeight = 200,
     markerWidth = DEFAULT_MARKER_WIDTH,
     markerHeight = DEFAULT_MARKER_HEIGHT,
     anchorGap = 0.12,
@@ -333,7 +344,9 @@ export class HeartSignalSystem {
       redrawCount: 0,
       anchorHeight: modelTopInRootSpace(entity, this.fallbackAnchorHeight),
       baseWidth: this.markerWidth,
-      baseHeight: this.markerHeight,
+      // 画布加高（152→200）为状态行留位，精灵同比拉伸避免压扁心动胶囊
+      baseHeight: this.markerHeight * (this.canvasHeight / 152),
+      activity: null,
       beatBpm: beatBpmForScore(
         snapshot.heart.heartScore,
         this.minBeatBpm,
@@ -363,6 +376,20 @@ export class HeartSignalSystem {
       this.minBeatBpm,
       this.maxBeatBpm,
     );
+    this.#redrawIfNeeded(record);
+    this.#publishDiagnostics(record);
+    return true;
+  }
+
+  /** 行为状态行（「串门途中」「交谈中」…）：名牌底部 caption，null/空串清除。 */
+  setActivity(personId, activity) {
+    if (this.disposed) return false;
+    const id = String(personId ?? "").trim();
+    const record = this.records.get(id);
+    if (!record) return false;
+    const next = activity ? String(activity).slice(0, 12) : null;
+    if (next === (record.activity ?? null)) return true;
+    record.activity = next;
     this.#redrawIfNeeded(record);
     this.#publishDiagnostics(record);
     return true;
@@ -421,7 +448,7 @@ export class HeartSignalSystem {
   }
 
   #redrawIfNeeded(record) {
-    const nextKey = renderKey(record.snapshot);
+    const nextKey = `${renderKey(record.snapshot)}|${record.activity ?? ""}`;
     if (nextKey === record.renderKey) return;
     record.renderKey = nextKey;
     drawMarker(record);
