@@ -1380,3 +1380,84 @@
     animation: none;
   }
 }
+
+/* 危险区：注销人物（软删除，两步确认） */
+.pp-danger {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px dashed rgb(25 61 54 / 14%);
+}
+.pp-danger-open {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid rgb(185 80 60 / 22%);
+  border-radius: 6px;
+  color: #a34a38;
+  background: transparent;
+  font-size: 11px;
+  cursor: pointer;
+}
+.pp-danger-open:hover {
+  border-color: rgb(185 80 60 / 45%);
+  background: rgb(185 80 60 / 6%);
+}
+.pp-danger-open svg {
+  width: 15px;
+  height: 15px;
+}
+.pp-danger-open small {
+  margin-left: auto;
+  color: #b08d84;
+  font-size: 9px;
+}
+.pp-danger-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 10px;
+  color: #7a5a52;
+  font-size: 11px;
+  line-height: 1.65;
+}
+.pp-danger-note svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  margin-top: 2px;
+  color: #a34a38;
+}
+.pp-danger-actions {
+  display: flex;
+  gap: 8px;
+}
+.pp-danger-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  color: #fffaf0;
+  background: #a34a38;
+  font-size: 11px;
+  cursor: pointer;
+}
+.pp-danger-confirm:hover {
+  background: #8d3f30;
+}
+.pp-danger-confirm svg {
+  width: 14px;
+  height: 14px;
+}
+.pp-danger-cancel {
+  padding: 8px 14px;
+  border: 1px solid rgb(25 61 54 / 16%);
+  border-radius: 6px;
+  color: #52645f;
+  background: transparent;
+  font-size: 11px;
+  cursor: pointer;
+}

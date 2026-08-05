@@ -134,8 +134,18 @@ class GroupOnboardingService:
 
         participants = []
         now = datetime.now(timezone.utc).isoformat()
+        # 去重检测（同名即疑似同人）：已确认+未注销人物的名字表，本组内新名字也逐步并入，
+        # 让同组合照里重复命名的脸也能被标出；只提示不拦截（合并是显式动作，不做静默合并）
+        seen_names = {}
+        for summary in self.store.list_packages():
+            if not summary.get("confirmed"):
+                continue
+            existing_name = (summary.get("name") or "").strip()
+            if existing_name:
+                seen_names.setdefault(existing_name, summary["person_id"])
         for index, assignment in enumerate(assignments):
             name = str(assignment.get("name") or "").strip()[:80] or None
+            duplicate_of = seen_names.get(name) if name else None
             person_id = f"person_{uuid.uuid4().hex[:16]}"
             face = self._match_face(assignment, faces)
             face_ref = face["face_ref"] if face else None
@@ -194,7 +204,10 @@ class GroupOnboardingService:
                 "needs_face_review": face is None, "booth_id": booth_id,
                 "booth_status": booth_status,
                 "avatar_status": "ready" if face_ref else "procedural",
+                **({"possible_duplicate_of": duplicate_of} if duplicate_of else {}),
             })
+            if name:
+                seen_names.setdefault(name, person_id)
 
         manifest = {
             "schema": "meetmind.group-onboarding.v1", "group_id": group_id,
@@ -206,11 +219,16 @@ class GroupOnboardingService:
         )
         needs_review = any(item["needs_face_review"] for item in participants)
         queued_count = sum(1 for item in participants if item.get("booth_status") == "queued")
+        duplicate_names = [item["name"] for item in participants if item.get("possible_duplicate_of")]
         issues = []
         if needs_review:
             issues.append("部分人物未匹配到检测人脸，已生成程序化体素形象")
         if queued_count:
             issues.append(f"集市展位暂时满了，{queued_count} 位朋友的展位排队中，扩容后自动上墙")
+        if duplicate_names:
+            issues.append(
+                "疑似重复录入：{} 与世界里已有的人物同名，可在资料包里核对并注销多余的一个".format(
+                    "、".join(f"「{name}」" for name in duplicate_names)))
         return {
             **manifest,
             "status": "needs-review" if needs_review else "ready",

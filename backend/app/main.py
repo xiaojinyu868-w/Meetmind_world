@@ -48,7 +48,7 @@ from app.domain.rooms import RoomService
 from app.domain.scenes import SceneModuleRegistry, default_scene_modules
 from app.eventing import EventDispatcher, InMemoryOutbox
 from app.harness.permissions.guard import DEFAULT_GUARD, PermissionDenied
-from app.packages.store import PackageStore
+from app.packages.store import PackageNotFound, PackageStore
 from app.pipelines.field_generation import FieldGenerationService
 from app.pipelines.group_onboarding import GroupOnboardingService
 from app.pipelines.icebreaker_feedback import IcebreakerFeedbackService
@@ -109,6 +109,13 @@ def create_app() -> FastAPI:
     bus.subscribe(world_service.apply_event)
     store = PackageStore()  # 数据目录由 ECHO_DATA_DIR 控制，默认 backend/data
     seed_demo_packages(store)  # 6 个 demo Package（幂等），检索/资料包开箱有数据
+    # 已注销的种子人物从咖啡厅世界种子中移除（静默，不产生离场事件）
+    for agent_seed in SEED_AGENTS:
+        try:
+            if store.load_package(agent_seed["id"])["identity"].get("deactivated"):
+                world_service.unregister_person(agent_seed["id"], record_event=False)
+        except PackageNotFound:
+            pass
     memory = MemoryStore(store, guard=DEFAULT_GUARD)
 
     # 展位大厅（MVP1.5 两级世界）：静态陈列实例 + 稀疏串门调度器；
@@ -123,6 +130,8 @@ def create_app() -> FastAPI:
     for agent_seed in SEED_AGENTS:
         person_id = agent_seed["id"]
         package = store.load_package(person_id)
+        if package["identity"].get("deactivated"):
+            continue  # 已注销的种子人物不再回到世界
         hall_world.register_person(person_id, build_display_from_package(package, store))
         registered_people.add(person_id)
     queued_people = []

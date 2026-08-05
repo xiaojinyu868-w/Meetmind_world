@@ -433,6 +433,24 @@ export async function setEncounterPrivacy(personId, encounterId, privacy) {
   );
 }
 
+/** 注销人物（软删除）：世界快照/展位/名册下一轮即移除，磁盘事实保留。 */
+export async function deactivatePackage(personId) {
+  if (!isLiveMode()) {
+    throw new Error("mock 资料包不支持注销");
+  }
+  const path = `/packages/${encodeURIComponent(personId)}`;
+  const response = await fetch(`${LIVE_BASE_URL}${path}`, { method: "DELETE" });
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const parsed = JSON.parse(await response.text());
+      if (typeof parsed?.detail === "string") detail = parsed.detail;
+    } catch { /* 非 JSON 响应忽略 */ }
+    throw new Error(`DELETE ${path} failed: HTTP ${response.status}${detail ? `（${detail.slice(0, 200)}）` : ""}`);
+  }
+  return response.json();
+}
+
 export async function getPersonSignal(personId) {
   if (!isLiveMode()) return null;
   const url = `${LIVE_BASE_URL}/people/${encodeURIComponent(personId)}/signal`;

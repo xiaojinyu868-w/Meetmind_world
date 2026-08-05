@@ -130,3 +130,47 @@ def test_full_loop_ingest_pipeline_confirm(client):
     # agent 视角同样全量（不过滤）
     agent_view = client.get(f"/api/v0/packages/{person_id}", params={"viewer": "agent"}).json()
     assert len(agent_view["encounters"]) == 2
+
+
+def test_deactivate_person_removes_from_world_and_reuses_booth(client):
+    """注销：人物从快照/名册消失、展位释放并被下一位复用、资料包保留可查。"""
+    # 初始：种子 6 人在大厅快照里
+    hall = client.get("/api/v0/world/snapshot", params={"world": "hall"}).json()
+    assert any(agent["id"] == "lin-che" for agent in hall["agents"])
+    assert any(m.get("person_id") == "lin-che" for m in hall["modules"] if m.get("type") == "booth")
+
+    resp = client.delete("/api/v0/packages/lin-che")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["deactivated"] is True
+
+    # 快照不再有 lin-che（agent 与展位模块都撤了）
+    hall = client.get("/api/v0/world/snapshot", params={"world": "hall"}).json()
+    assert all(agent["id"] != "lin-che" for agent in hall["agents"])
+    assert all(m.get("person_id") != "lin-che" for m in hall["modules"])
+    # 咖啡厅快照同样移除
+    cafe = client.get("/api/v0/world/snapshot", params={"world": "cafe"}).json()
+    assert all(agent["id"] != "lin-che" for agent in cafe["agents"])
+    # 名册默认排除；资料包详情仍可查（带 deactivated 标记，事实层只增不改）
+    summaries = client.get("/api/v0/packages").json()["packages"]
+    assert all(s["person_id"] != "lin-che" for s in summaries)
+    package = client.get("/api/v0/packages/lin-che").json()
+    assert package["identity"]["deactivated"] is True
+    assert package["identity"]["deactivated_at"]
+    # 404 语义保持
+    assert client.delete("/api/v0/packages/nobody").status_code == 404
+
+    # 展位槽位复用：新 confirm 的人物拿到 lin-che 释放的 0 号锚点（-4.0, -12.6）
+    input_id = _ingest(client)["input_id"]
+    draft = client.post("/api/v0/pipeline",
+                        json={"input_id": input_id, "mode": "once"}).json()["encounter_draft"]
+    resp = client.post("/api/v0/confirm", json={
+        "encounter_draft": draft,
+        "identity": {"name": "新朋友", "match_person_id": None},
+        "privacy": "self-only",
+    })
+    assert resp.status_code == 200, resp.text
+    new_id = resp.json()["person_id"]
+    hall = client.get("/api/v0/world/snapshot", params={"world": "hall"}).json()
+    new_booth = next(m for m in hall["modules"] if m.get("person_id") == new_id)
+    assert new_booth["position"]["x"] == pytest.approx(-4.0)
+    assert new_booth["position"]["z"] == pytest.approx(-12.6)

@@ -88,13 +88,26 @@ class HallRegistry:
 
     def __init__(self):
         self._index_by_person: dict = {}
+        self._released_indexes: list = []  # 注销释放的锚点序号，优先复用
 
     def assign(self, person_id: str) -> dict:
         """分配展位（幂等：已分配返回原展位）。返回 {booth_id, position}。"""
         if person_id not in self._index_by_person:
-            self._index_by_person[person_id] = len(self._index_by_person)
+            if self._released_indexes:
+                self._index_by_person[person_id] = self._released_indexes.pop(0)
+            else:
+                self._index_by_person[person_id] = len(self._index_by_person)
         index = self._index_by_person[person_id]
         return {"booth_id": f"booth_{person_id}", "position": booth_anchor(index)}
+
+    def release(self, person_id: str) -> bool:
+        """注销释放展位：锚点序号进空闲队列，下一位入场人物复用（不挪动在册展位）。"""
+        index = self._index_by_person.pop(person_id, None)
+        if index is None:
+            return False
+        self._released_indexes.append(index)
+        self._released_indexes.sort()
+        return True
 
     def booth_of(self, person_id: str) -> str | None:
         return f"booth_{person_id}" if person_id in self._index_by_person else None

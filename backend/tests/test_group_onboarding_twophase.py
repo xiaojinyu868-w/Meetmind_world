@@ -13,6 +13,7 @@ from PIL import Image
 from app.agents.llm.base import LLMResponse
 from app.main import create_app
 from app.packages.store import PackageStore
+from app.pipeline.person_builder import _default_palette_for
 from app.pipelines.group_onboarding import (
     GroupFaceDetector,
     GroupOnboardingService,
@@ -327,3 +328,32 @@ def test_confirm_booth_capacity_full_still_onboards(tmp_path):
         package = store.load_package(participant["person_id"])
         assert package["identity"]["confirmed"] is True
     assert any("排队" in issue for issue in result["issues"])
+
+
+def test_confirm_flags_possible_duplicate_names(tmp_path):
+    """去重检测：同名已确认人物存在时，新参与者带 possible_duplicate_of + issues 提示（不拦截）。"""
+    store = PackageStore(tmp_path)
+    # 预置一个已确认的「甲」
+    existing = store.create_draft_package("person_existing_jia", _default_palette_for("person_existing_jia"))
+    store.save_package(existing)
+    store.confirm_identity("person_existing_jia", name="甲")
+
+    class FakeHall:
+        def register_person(self, person_id, display):
+            return {"id": f"booth_{person_id}"}
+
+    service = GroupOnboardingService(store, hall=FakeHall(),
+                                     face_detector=GroupFaceDetector(FakeVision(FIVE_FACES_JSON)))
+    detection = service.detect(PHOTO, "group.jpg")
+    assignments = [
+        {"face_id": face["face_id"], "name": name}
+        for face, name in zip(detection["faces"], ["甲", "乙", "丙", "丁", "戊"])
+    ]
+    result = service.confirm(detection["group_id"], assignments)
+    flagged = [p for p in result["participants"] if p.get("possible_duplicate_of")]
+    assert len(flagged) == 1
+    assert flagged[0]["name"] == "甲"
+    assert flagged[0]["possible_duplicate_of"] == "person_existing_jia"
+    assert any("重复" in issue for issue in result["issues"])
+    # 不拦截：新人物照常创建
+    assert len(result["participants"]) == 5

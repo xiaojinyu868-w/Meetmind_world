@@ -204,6 +204,13 @@ export function createUnifiedApi(base = MockApi) {
     getPersonSignal(personId) {
       return base.getPersonSignal(personId);
     },
+    // 注销人物（软删除）：录入错误/重复录入的清理入口；成功后名册缓存失效
+    deactivatePackage(personId) {
+      return base.deactivatePackage(personId).then((result) => {
+        packagesPromise = null;
+        return result;
+      });
+    },
     getField(personId) {
       return base.getField(personId);
     },

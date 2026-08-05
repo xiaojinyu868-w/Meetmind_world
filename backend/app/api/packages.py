@@ -69,3 +69,29 @@ def update_encounter_privacy(
     encounter["privacy"] = body.privacy
     store.save_package(package)
     return package
+
+
+@router.delete("/{person_id}")
+def deactivate_package(request: Request, person_id: str):
+    """注销人物（软删除）：从世界快照/展位大厅/名册移除，磁盘事实保留可恢复。
+
+    用于「录入错了」「同一个人重复录入」的清理；资料包详情仍可 GET（带
+    identity.deactivated 标记），世界侧下一轮快照即消失。
+    """
+    store = request.app.state.store
+    try:
+        package = store.deactivate_identity(person_id)
+    except PackageNotFound:
+        raise HTTPException(status_code=404, detail=f"人物不存在：{person_id}")
+    removed = []
+    for service_name in ("hall", "world"):
+        service = getattr(request.app.state, service_name, None)
+        if service is not None and hasattr(service, "unregister_person"):
+            if service.unregister_person(person_id):
+                removed.append(service_name)
+    return {
+        "person_id": person_id,
+        "deactivated": True,
+        "removed_from": removed,
+        "name": package["identity"].get("name"),
+    }

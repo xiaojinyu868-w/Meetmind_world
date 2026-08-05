@@ -16,6 +16,7 @@
 import hashlib
 import json
 import re
+from datetime import UTC, datetime
 from pathlib import Path
 
 from app.config import get_data_dir
@@ -233,18 +234,23 @@ class PackageStore:
             raise PackageNotFound(person_id)
         return validate_package(json.loads(target.read_text(encoding="utf-8")))
 
-    def list_packages(self) -> list:
-        """Package 摘要列表（不含 facts 内容，只列指针元信息）。"""
+    def list_packages(self, include_deactivated: bool = False) -> list:
+        """Package 摘要列表（不含 facts 内容，只列指针元信息）。
+        默认排除已注销人物（世界/名册不需要看见 TA 们）。"""
         summaries = []
         for directory in sorted(self.people_dir.iterdir()):
             profile = directory / "profile.json"
             if not directory.is_dir() or not profile.exists():
                 continue
             package = validate_package(json.loads(profile.read_text(encoding="utf-8")))
+            deactivated = bool(package["identity"].get("deactivated"))
+            if deactivated and not include_deactivated:
+                continue
             summaries.append(
                 {
                     "person_id": package["person_id"],
                     "confirmed": package["identity"]["confirmed"],
+                    "deactivated": deactivated,
                     "name": package["identity"].get("name"),
                     "encounter_count": len(package["encounters"]),
                 }
@@ -259,6 +265,15 @@ class PackageStore:
         package["identity"]["confirmed"] = True
         if name is not None:
             package["identity"]["name"] = name
+        self.save_package(package)
+        return package
+
+    def deactivate_identity(self, person_id: str) -> dict:
+        """注销人物（软删除）：identity.deactivated=True 后从世界/名册/展位移除，
+        facts 只增不改原则不变——磁盘事实保留，可人工恢复（删掉该标记即可）。"""
+        package = self.load_package(person_id)
+        package["identity"]["deactivated"] = True
+        package["identity"]["deactivated_at"] = datetime.now(UTC).isoformat()
         self.save_package(package)
         return package
 

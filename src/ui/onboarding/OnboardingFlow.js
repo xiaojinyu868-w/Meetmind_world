@@ -2,6 +2,7 @@ import {
   Check,
   CircleAlert,
   ImagePlus,
+  Info,
   LoaderCircle,
   PartyPopper,
   RefreshCw,
@@ -38,6 +39,7 @@ const ICONS = {
   Check,
   CircleAlert,
   ImagePlus,
+  Info,
   LoaderCircle,
   PartyPopper,
   RefreshCw,
@@ -304,6 +306,9 @@ export function mountOnboardingFlow(container, api, opts = {}) {
     const participants = state.result?.participants ?? [];
     const names = participants.map((item) => item.name).filter(Boolean);
     const queued = participants.filter((item) => item.booth_status === "queued" || !item.booth_id).length;
+    const duplicateNames = participants
+      .filter((item) => item.possible_duplicate_of)
+      .map((item) => item.name);
     body.innerHTML = `
       <div class="ob-success">
         <span class="ob-success-halo"></span>
@@ -318,6 +323,9 @@ export function mountOnboardingFlow(container, api, opts = {}) {
             ? "集市展位暂时满了，TA 们的展位排队中，扩容后自动上墙"
             : `大部分展位已经搭好；${queued} 位朋友的展位排队中，扩容后自动上墙`)
           : "TA 们的展位已经搭好，走进大厅就能看到"}</p>
+        ${duplicateNames.length
+          ? `<p class="ob-dup-hint">${icon("info")}<span>${duplicateNames.map((n) => `「${escapeHtml(n)}」`).join("")}与世界里已有的人物同名——如果不是同一个人就没事；如果录重了，打开 TA 的资料包可以注销多余的一个。</span></p>`
+          : ""}
         <button class="ob-button-primary" type="button" data-action="finish">
           ${onNavigateHall ? `去集市看看${icon("sparkles")}` : "太好了"}
         </button>

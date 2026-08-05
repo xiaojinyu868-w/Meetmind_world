@@ -1,5 +1,6 @@
 import {
   BookmarkPlus,
+  CircleAlert,
   Clock3,
   Info,
   Lightbulb,
@@ -12,6 +13,7 @@ import {
   Sparkles,
   Tag,
   UserRoundCheck,
+  UserRoundX,
   Users,
   X,
   createIcons,
@@ -24,6 +26,7 @@ import "./panel.css";
 
 const ICONS = {
   BookmarkPlus,
+  CircleAlert,
   Clock3,
   Info,
   Lightbulb,
@@ -36,6 +39,7 @@ const ICONS = {
   Sparkles,
   Tag,
   UserRoundCheck,
+  UserRoundX,
   Users,
   X,
 };
@@ -106,6 +110,8 @@ function inferenceGroupKey(type) {
  *   - api.chatWithAgent?(personId, message, history) => Promise<IF-6 chat 响应>  可选；
  *     缺省时「和 TA 聊聊」区不渲染
  *   - api.saveChatNote?(personId, text) => Promise<{inference_ref, note}>  可选（IF-6 手动沉淀）
+ *   - api.deactivatePackage?(personId) => Promise<{deactivated: true}>  可选（注销人物）；
+ *     缺省时危险区不渲染
  * @returns {{ openPerson(personId: string, options?: { focusChat?: boolean }): Promise<void>,
  *   close(): void, isOpen: boolean }}
  *   （focusChat=true 时打开后直接展开并定位「和 TA 聊聊」，供场景 E 键一键开聊）
@@ -149,6 +155,8 @@ export function mountPackagePanel(container, api) {
   };
   const PRESENCE_REFRESH_MS = 2000;
   let presenceProvider = null;
+  let deactivateArmed = false;  // 注销两步确认：第一次点击只是「上膛」
+  let deactivatePending = false;
   let presenceTimer = null;
 
   function refreshPresence() {
@@ -506,6 +514,30 @@ export function mountPackagePanel(container, api) {
       </section>`;
   }
 
+  // 危险区：注销人物（录入错误/重复录入的清理）。软删除——事实层保留，
+  // 世界（展位/快照/名册）下一轮即移除；自己不可注销；api 未接线时不渲染
+  function deactivateSectionMarkup(pkg) {
+    if (typeof api?.deactivatePackage !== "function") return "";
+    const personId = pkg.person_id ?? pkg.identity?.person_id;
+    if (!personId || personId === "person-self") return "";
+    if (pkg.identity?.deactivated) {
+      return `
+        <section class="pp-section pp-danger" aria-label="注销状态">
+          <p class="pp-danger-note">${icon("user-round-x")}<span>TA 已被注销，不再出现在世界里；相遇事实仍按只增不改保留。</span></p>
+        </section>`;
+    }
+    return `
+      <section class="pp-section pp-danger" aria-label="危险操作">
+        ${deactivateArmed
+          ? `<p class="pp-danger-note">${icon("circle-alert")}<span>确认注销？TA 会立刻从集市、咖啡厅和名册里消失（相遇事实保留）。</span></p>
+             <div class="pp-danger-actions">
+               <button type="button" class="pp-danger-confirm" data-pp-deactivate-confirm>${icon("user-round-x")}<span>确认注销</span></button>
+               <button type="button" class="pp-danger-cancel" data-pp-deactivate-cancel>再想想</button>
+             </div>`
+          : `<button type="button" class="pp-danger-open" data-pp-deactivate>${icon("user-round-x")}<span>注销此人</span><small>录错了或重复录入时</small></button>`}
+      </section>`;
+  }
+
   function packageMarkup(pkg) {
     const identity = pkg.identity ?? {};
     const encounters = (Array.isArray(pkg.encounters) ? [...pkg.encounters] : []).sort(
@@ -572,7 +604,8 @@ export function mountPackagePanel(container, api) {
         }
       </section>
       ${inferenceSectionMarkup(pkg, encounters)}
-      ${chatSectionMarkup()}`;
+      ${chatSectionMarkup()}
+      ${deactivateSectionMarkup(pkg)}`;
   }
 
   function render(pkg) {
@@ -617,6 +650,8 @@ export function mountPackagePanel(container, api) {
   async function openPerson(personId, { focusChat = false } = {}) {
     activePersonId = personId;
     chatOpen = focusChat && chatSupported();
+    deactivateArmed = false;
+    deactivatePending = false;
     openPanel();
     const afterRender = chatOpen ? focusChatSection : null;
     if (cache.has(personId)) {
@@ -669,6 +704,38 @@ export function mountPackagePanel(container, api) {
     if (event.target.closest("[data-pp-retry]") && activePersonId) {
       cache.delete(activePersonId);
       openPerson(activePersonId, { focusChat: chatOpen });
+      return;
+    }
+    // 注销两步确认：上膛 → 确认/取消；成功后清缓存并收起面板，
+    // 世界侧由下一轮快照自动 despawn（资料包仍可再打开，显示已注销状态）
+    if (event.target.closest("[data-pp-deactivate]")) {
+      deactivateArmed = true;
+      const pkg = activePersonId ? cache.get(activePersonId) : null;
+      if (pkg) render(pkg);
+      return;
+    }
+    if (event.target.closest("[data-pp-deactivate-cancel]")) {
+      deactivateArmed = false;
+      const pkg = activePersonId ? cache.get(activePersonId) : null;
+      if (pkg) render(pkg);
+      return;
+    }
+    if (event.target.closest("[data-pp-deactivate-confirm]") && activePersonId && !deactivatePending) {
+      deactivatePending = true;
+      const personId = activePersonId;
+      api.deactivatePackage(personId)
+        .then(() => {
+          cache.delete(personId);
+          close();
+        })
+        .catch((error) => {
+          console.error("[PackagePanel] 注销失败:", error);
+          deactivateArmed = false;
+          window.alert?.(`注销失败：${error.message}`);
+        })
+        .finally(() => {
+          deactivatePending = false;
+        });
     }
   });
 

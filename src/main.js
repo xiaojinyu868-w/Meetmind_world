@@ -7,6 +7,7 @@ import {
   BoothSystem,
   boothInteractionRadius,
   buildFallbackBooths,
+  fallbackBoothAnchor,
 } from "./runtime/BoothSystem.js";
 import { CAFE_LAYOUT, tableById } from "./runtime/CafeLayout.js";
 import { CampfireEntrance } from "./runtime/CampfireEntrance.js";
@@ -28,6 +29,10 @@ import { createEntrySpawnScatter } from "./runtime/EntrySpawnScatter.js";
 import { HeartSignalSystem } from "./runtime/HeartSignalSystem.js";
 import { createHubBlockoutEnvironment } from "./runtime/HubBlockout.js";
 import { FALLBACK_SNAPSHOT, LiveWorld } from "./runtime/LiveWorld.js";
+// 兜底快照人物站位表（咖啡厅座位）：NPC 出生落位用，替代入口圆盘散射
+const FALLBACK_POSITION_BY_ID = new Map(
+  FALLBACK_SNAPSHOT.agents.map((agent) => [agent.id, agent.position]),
+);
 import { NpcAgentSystem } from "./runtime/NpcAgentSystem.js";
 import { PersonSignalStore } from "./runtime/PersonSignalStore.js";
 import { RelationshipFieldSystem } from "./runtime/RelationshipFieldSystem.js";
@@ -654,6 +659,15 @@ async function spawnCharacters() {
         relationshipField?.scene?.companion ?? { x: 0, z: -1.1, yaw: 0 },
       ]
     : allocateEntrySpawns(visiblePeople.length + 1);
+  // 出生即生活化：NPC 出生在自己该在的地方（集市=各自展位前，咖啡厅=兜底快照座位），
+  // 而不是全员挤在入口 2.5m 圆盘里再等快照拉开（2026-08-05 篝火拥挤根因）
+  const npcEntrySpawnFor = (person, index) => {
+    if (isHallWorld) return fallbackBoothAnchor(index, environmentAssetId);
+    if (isCafeWorld) {
+      return FALLBACK_POSITION_BY_ID.get(person.id) ?? entrySpawns[index + 1];
+    }
+    return entrySpawns[index + 1];
+  };
   playerEntity = await characterSystem.spawn(
     characterSpec(currentUser, "self-player", entrySpawns[0], 0),
   );
@@ -718,7 +732,7 @@ async function spawnCharacters() {
       characterSpec(
         visiblePeople[index],
         `agent-${visiblePeople[index].id}`,
-        entrySpawns[index + 1],
+        npcEntrySpawnFor(visiblePeople[index], index),
       ),
     );
     expressionSystem.register(entity, visiblePeople[index].id, activeCharacterVariant.id);
@@ -2281,7 +2295,13 @@ async function ensureAgentEntity(agent) {
       },
     };
     dynamicPeople.set(agent.id, personLike);
-    const [spawn] = allocateEntrySpawns(1, currentCharacterOccupancy());
+    // 新人直接出生在快照给出的世界位置（展位/座位），不进入口圆盘；
+    // 仅在快照缺位置时才退回圆盘散射兜底
+    const snapshotSpot = agent.seat ?? agent.position;
+    const [scatterSpawn] = allocateEntrySpawns(1, currentCharacterOccupancy());
+    const spawn = (snapshotSpot && Number.isFinite(snapshotSpot.x) && Number.isFinite(snapshotSpot.z))
+      ? { x: snapshotSpot.x, z: snapshotSpot.z, yaw: snapshotSpot.yaw ?? 0 }
+      : scatterSpawn;
     pendingEntrySpawns.set(agent.id, spawn);
     const entity = await characterSystem.spawn(
       characterSpec(personLike, `agent-${agent.id}`, spawn, 0.005),

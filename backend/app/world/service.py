@@ -116,6 +116,26 @@ class WorldService:
             }
         return booth
 
+    def unregister_person(self, person_id: str, *, record_event: bool = True) -> bool:
+        """把一个人移出世界（注销）：撤掉 agent 与展位模块、释放展位锚点、
+        释放座位占用，并记录一条世界事件（前端快照驱动自动 despawn）。"""
+        existed = person_id in self._agents
+        booth_id = self._hall.booth_of(person_id)
+        self._agents.pop(person_id, None)
+        if booth_id is not None:
+            self._modules = [m for m in self._modules if m.get("id") != booth_id]
+        released = self._hall.release(person_id)
+        self._release_seat(person_id)
+        if not existed and not released:
+            return False
+        if record_event:
+            self._record_event({
+                "type": "person-deactivated",
+                "agent_id": person_id,
+                "summary": "一位朋友离开了集市",
+            })
+        return True
+
     def _record_event(self, event: dict) -> None:
         """写入滚动事件缓冲；统一盖上 created_at，供晨报按时间合并多来源事件。"""
         event["created_at"] = datetime.now(UTC).isoformat()

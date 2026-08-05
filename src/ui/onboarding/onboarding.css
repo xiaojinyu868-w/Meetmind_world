@@ -725,3 +725,25 @@
     text-align: center;
   }
 }
+
+/* 疑似重复录入提示 */
+.ob-dup-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid rgb(230 193 105 / 35%);
+  border-radius: 6px;
+  color: #8a6d3b;
+  background: rgb(230 193 105 / 10%);
+  font-size: 11px;
+  line-height: 1.65;
+  text-align: left;
+}
+.ob-dup-hint svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  margin-top: 2px;
+}
