@@ -1,17 +1,6 @@
 export const SCENE_VARIANTS = Object.freeze([
-  Object.freeze({
-    id: "original",
-    label: "原始版本",
-    title: "木屋夜集（保留）",
-    environmentAssetId: "environment.hub-town.v1",
-    visualProfile: "hubDusk",
-    boothTemplateAssetId: "module.market-stall.v2",
-    cinematic: Object.freeze({
-      position: Object.freeze([6.45, 4.55, 8]),
-      target: Object.freeze([0, 0.72, -0.35]),
-      orbit: Object.freeze([0.45, 0.12, 0.34]),
-    }),
-  }),
+  // 2026-08-05 产品决策：放弃「原始版本」（木屋夜集 hub-town），村落市集 1.0 成为唯一版本；
+  // 旧 ?scene=original 链接经 sceneVariantFromLocation 兜底回落到这里
   Object.freeze({
     id: "v1",
     label: "1.0",
@@ -30,8 +19,8 @@ export const SCENE_VARIANTS = Object.freeze([
 
 export const SCENE_VARIANT_OPTIONS = SCENE_VARIANTS;
 
-// 默认保持木屋夜集（hub-town）；村落市集经 ?scene=v1 或场景版本切换器进入
-export const DEFAULT_SCENE_VARIANT_ID = "original";
+// 唯一版本即村落市集 1.0（场景更大，展位容量随街道/广场外扩）
+export const DEFAULT_SCENE_VARIANT_ID = "v1";
 
 
 export function sceneVariantById(value) {

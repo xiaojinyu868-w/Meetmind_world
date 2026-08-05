@@ -3500,6 +3500,8 @@ boot().catch(showFatalError);
 
 window.__echoWorld = {
   get ready() { return worldReady; },
+  // 调试/采样用途：页内 raycast 等需要 three 构造器（Raycaster/Vector3）
+  get THREE() { return THREE; },
   get player() { return player; },
   get renderer() { return renderer; },
   get camera() { return camera; },

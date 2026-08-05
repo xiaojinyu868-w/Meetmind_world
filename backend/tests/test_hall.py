@@ -28,15 +28,24 @@ def client(tmp_path, monkeypatch):
 # ---------- 布局算法（露天集市街道：两侧两排摊位） ----------
 
 def test_layout_two_rows_alternating_and_facing_street():
-    anchors = [booth_anchor(i) for i in range(12)]
+    anchors = [booth_anchor(i) for i in range(BOOTH_CAPACITY)]
     # 街道 8 摊左右交替：偶数左排 x=-4.0，奇数右排 x=+4.0；行距 2.9（同侧 2.9）
     for i, anchor in enumerate(anchors[:8]):
         expected_x = -BOOTH_SIDE_X if i % 2 == 0 else BOOTH_SIDE_X
         assert anchor["x"] == expected_x
         assert anchor["z"] == pytest.approx(-12.6 + (i // 2) * 2.9)
     # 广场北弧 4 摊：在广场 r≈5 弧上且面朝广场中心
-    for anchor in anchors[8:]:
+    for anchor in anchors[8:12]:
         assert math.hypot(anchor["x"] - 0.0, anchor["z"] - 2.5) == pytest.approx(5.0, abs=0.05)
+        forward = (math.sin(anchor["yaw"]), math.cos(anchor["yaw"]))
+        to_center = (-anchor["x"], 2.5 - anchor["z"])
+        length = math.hypot(*to_center)
+        cos_sim = (forward[0] * to_center[0] + forward[1] * to_center[1]) / length
+        assert cos_sim > 0.999
+    # 广场外圈 13 摊（村落 1.0 扩容）：r≈8/r≈11 两环，同样面朝广场中心
+    for anchor in anchors[12:]:
+        radius = math.hypot(anchor["x"] - 0.0, anchor["z"] - 2.5)
+        assert 7.0 <= radius <= 12.5
         forward = (math.sin(anchor["yaw"]), math.cos(anchor["yaw"]))
         to_center = (-anchor["x"], 2.5 - anchor["z"])
         length = math.hypot(*to_center)
@@ -53,7 +62,7 @@ def test_layout_two_rows_alternating_and_facing_street():
         assert HALL_BOUNDS["min_x"] <= anchor["x"] <= HALL_BOUNDS["max_x"]
         assert HALL_BOUNDS["min_z"] <= anchor["z"] <= HALL_BOUNDS["max_z"]
         assert anchor["z"] > SPAWN_FREE_Z
-    # 任意两摊位间距 ≥ 2.2m（同侧 2.9、对街 8.0、对角更大）
+    # 任意两摊位间距 ≥ 2.2m（含外圈 13 摊全部组合）
     for i, a in enumerate(anchors):
         for b in anchors[i + 1:]:
             assert math.hypot(a["x"] - b["x"], a["z"] - b["z"]) >= 2.2 - 1e-9

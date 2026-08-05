@@ -8,12 +8,13 @@
 验收：tests/test_hall.py —— 两排交替、朝向街道中心、间距 ≥2.2m、边界内、
       出生区留空；注册幂等；display 全量上墙（首版不过滤 TBD-P3）。
 
-布局算法（小镇 Hub 街道：与 blender/build_hub_town.py 的 PAD_Booth 一一对应）：
+布局算法（村落市集 1.0，2026-08-05 起为唯一场景版本；原始锚点沿用 hub-town 街道契约）：
   - 入口木门在北端（z=-14.5），出生区 z<-12.9 留空，不放展位；
   - 左排 x=-4.0（yaw=+90°，朝 +x 即街道中心），右排 x=+4.0（yaw=-90°）；
   - z 从 -12.6 起，每行左右各一，行距 2.9m（同侧相邻 2.9m、对街 8.0m，≥2.2m）；
-  - 容量 4 行 × 2 = 8（z ≤ -3.9 为止，篝火广场 z≥-3.5 留空）；
-  - 大厅边界 x∈[-14,14]、z∈[-15.2,15.2]（WorldService 实例化处同步传入）。
+  - 街道 4 行 × 2 = 8 + 广场北弧 4（r=5.0）+ 广场外圈 13（r≈8/r≈11 两环，
+    经运行时光线采样验证落在开阔草地，南向入口留空）= 容量 25；
+  - 村落边界 x∈[-30,30]、z∈[-30,30]（前端 ColliderRegistry 壳同步）。
 """
 
 import math
@@ -42,6 +43,23 @@ def _plaza_arc_anchor(angle_deg: float) -> dict:
     yaw = math.atan2(PLAZA_CENTER[0] - x, PLAZA_CENTER[1] - z)
     return {"x": x, "z": z, "yaw": yaw}
 
+BOOTH_CAPACITY = 25         # 街道 8 + 广场北弧 4 + 广场外圈 13（2026-08-05 村落 1.0 扩容）
+
+# 广场外圈 13 摊（2026-08-05 村落 1.0 扩容）：位置经运行时光线采样验证落在开阔草地
+# （剔除建筑屋顶/水面/河面），离篝火 ≥3.2m、离内圈锚点 ≥2.8m、互相 ≥2.6m；
+#  yaw 面向广场中心（与内圈弧同款）
+PLAZA_OUTER_ANCHORS = (
+    # 内环 r≈8（7 摊）
+    (0.0, -5.5), (7.61, 4.97), (4.7, 8.97), (0.0, 10.5), (-4.7, 8.97), (-7.61, 4.97), (-7.61, 0.03),
+    # 外环 r≈11（6 摊，南侧入口方向留空）
+    (0.0, -8.5), (8.6, -4.36), (10.72, 4.95), (-8.6, 9.36), (-10.72, 0.05), (-8.6, -4.36),
+)
+
+
+def _facing_plaza_anchor(x: float, z: float) -> dict:
+    return {"x": x, "z": z, "yaw": math.atan2(PLAZA_CENTER[0] - x, PLAZA_CENTER[1] - z)}
+
+
 _LEFT, _RIGHT = 0, 1  # 交替填充：偶数序号左排，奇数序号右排
 
 
@@ -51,6 +69,9 @@ def booth_anchor(index: int) -> dict:
         raise ValueError("展位序号必须 ≥ 0")
     if index >= BOOTH_CAPACITY:
         raise ValueError(f"展位容量已满（{BOOTH_CAPACITY} 个），等待美术扩容街道")
+    if index >= BOOTH_STREET_COUNT + len(PLAZA_ARC_ANGLES):
+        x, z = PLAZA_OUTER_ANCHORS[index - BOOTH_STREET_COUNT - len(PLAZA_ARC_ANGLES)]
+        return _facing_plaza_anchor(x, z)
     if index >= BOOTH_STREET_COUNT:
         return _plaza_arc_anchor(PLAZA_ARC_ANGLES[index - BOOTH_STREET_COUNT])
     row, side = divmod(index, 2)
