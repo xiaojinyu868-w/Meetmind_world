@@ -175,16 +175,24 @@ class GroupOnboardingService:
             if confirm_participants:
                 package = self.store.confirm_identity(person_id, name=name)
             booth_id = None
+            booth_status = "pending"
             if confirm_participants and self.hall is not None:
-                booth = self.hall.register_person(
-                    person_id, build_display_from_package(package, self.store)
-                )
-                booth_id = booth["id"]
+                try:
+                    booth = self.hall.register_person(
+                        person_id, build_display_from_package(package, self.store)
+                    )
+                    booth_id = booth["id"]
+                    booth_status = "placed"
+                except ValueError:
+                    # 展位容量已满：人物照常建档入场（Package/Agent/资料包都在），
+                    # 展位排队等扩容，不阻断整组合照入场
+                    booth_status = "queued"
             participants.append({
                 "person_id": person_id, "name": name,
                 "confirmed": bool(confirm_participants),
                 "face_ref": face_ref, "bbox": face["bbox"] if face else None,
                 "needs_face_review": face is None, "booth_id": booth_id,
+                "booth_status": booth_status,
                 "avatar_status": "ready" if face_ref else "procedural",
             })
 
@@ -197,12 +205,17 @@ class GroupOnboardingService:
             json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8"),
         )
         needs_review = any(item["needs_face_review"] for item in participants)
+        queued_count = sum(1 for item in participants if item.get("booth_status") == "queued")
+        issues = []
+        if needs_review:
+            issues.append("部分人物未匹配到检测人脸，已生成程序化体素形象")
+        if queued_count:
+            issues.append(f"集市展位暂时满了，{queued_count} 位朋友的展位排队中，扩容后自动上墙")
         return {
             **manifest,
             "status": "needs-review" if needs_review else "ready",
             "detected_count": len(faces),
-            "issues": (["部分人物未匹配到检测人脸，已生成程序化体素形象"]
-                       if needs_review else []),
+            "issues": issues,
         }
 
     # ---------- 一次性流程（脚本/测试兼容入口） ----------

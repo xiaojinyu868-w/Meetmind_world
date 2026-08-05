@@ -303,6 +303,7 @@ export function mountOnboardingFlow(container, api, opts = {}) {
   function renderSuccess(body) {
     const participants = state.result?.participants ?? [];
     const names = participants.map((item) => item.name).filter(Boolean);
+    const queued = participants.filter((item) => item.booth_status === "queued" || !item.booth_id).length;
     body.innerHTML = `
       <div class="ob-success">
         <span class="ob-success-halo"></span>
@@ -312,7 +313,11 @@ export function mountOnboardingFlow(container, api, opts = {}) {
         <div class="ob-chip-row">
           ${names.map((name) => `<span class="ob-chip">${icon("check")}${escapeHtml(name)}</span>`).join("")}
         </div>
-        <p>TA 们的展位已经搭好，走进大厅就能看到</p>
+        <p>${queued > 0
+          ? (queued === participants.length
+            ? "集市展位暂时满了，TA 们的展位排队中，扩容后自动上墙"
+            : `大部分展位已经搭好；${queued} 位朋友的展位排队中，扩容后自动上墙`)
+          : "TA 们的展位已经搭好，走进大厅就能看到"}</p>
         <button class="ob-button-primary" type="button" data-action="finish">
           ${onNavigateHall ? `去集市看看${icon("sparkles")}` : "太好了"}
         </button>

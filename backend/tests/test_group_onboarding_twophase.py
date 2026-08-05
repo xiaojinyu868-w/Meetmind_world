@@ -300,3 +300,30 @@ def test_detect_rejects_non_image(client):
     response = client.post("/api/v1/group-onboarding/detect",
                            files={"photo": ("a.txt", b"hi", "text/plain")})
     assert response.status_code == 415
+
+
+def test_confirm_booth_capacity_full_still_onboards(tmp_path):
+    """展位容量满：人物照常建档确认，展位标记 queued 并写入 issues，不再整体 422。"""
+    store = PackageStore(tmp_path)
+
+    class FullHall:
+        def register_person(self, person_id, display):
+            raise ValueError("展位容量已满（12 个），等待美术扩容街道")
+
+    service = GroupOnboardingService(store, hall=FullHall(),
+                                     face_detector=GroupFaceDetector(FakeVision(FIVE_FACES_JSON)))
+    detection = service.detect(PHOTO, "group.jpg")
+    assignments = [
+        {"face_id": face["face_id"], "name": f"朋友{index + 1}"}
+        for index, face in enumerate(detection["faces"])
+    ]
+    result = service.confirm(detection["group_id"], assignments)
+    assert result["status"] == "ready"
+    assert len(result["participants"]) == 5
+    for participant in result["participants"]:
+        assert participant["booth_id"] is None
+        assert participant["booth_status"] == "queued"
+        # 人物本身完整建档并确认
+        package = store.load_package(participant["person_id"])
+        assert package["identity"]["confirmed"] is True
+    assert any("排队" in issue for issue in result["issues"])

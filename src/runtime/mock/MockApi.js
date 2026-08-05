@@ -160,7 +160,14 @@ async function postV1Json(path, body) {
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    throw new Error(`POST v1 ${path} failed: HTTP ${response.status}`);
+    // 服务端 4xx 的 detail 是最有价值的排障信息（如 FastAPI 422 的字段级原因），透传出来
+    let detail = "";
+    try {
+      const text = await response.text();
+      const parsed = JSON.parse(text);
+      detail = typeof parsed?.detail === "string" ? parsed.detail : text;
+    } catch { /* 非 JSON 响应忽略 */ }
+    throw new Error(`POST v1 ${path} failed: HTTP ${response.status}${detail ? `（${detail.slice(0, 200)}）` : ""}`);
   }
   return response.json();
 }
@@ -791,7 +798,12 @@ export async function groupOnboardingDetect(photo, { expectedCount = 0 } = {}) {
       body: form,
     });
     if (!response.ok) {
-      throw new Error(`合照认脸失败: HTTP ${response.status}`);
+      let detail = "";
+      try {
+        const parsed = JSON.parse(await response.text());
+        if (typeof parsed?.detail === "string") detail = parsed.detail;
+      } catch { /* 非 JSON 响应忽略 */ }
+      throw new Error(`合照认脸失败: HTTP ${response.status}${detail ? `（${detail.slice(0, 200)}）` : ""}`);
     }
     return response.json();
   }
