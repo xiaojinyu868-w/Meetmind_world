@@ -44,6 +44,8 @@ PALETTE_OVERRIDES = {
 # 由程序化叠加兜底保证必现）
 GLASSES_CAST = {"zhou-ning", "chen-mo", "xu-an", "tang-ke"}
 GLASSES_COLOR = (38, 38, 44, 255)  # 深灰细框（不用纯黑，避免与眼睛糊成一团）
+# 个别人的 i2i 瓦片刘海遮住自动暗行定位（眼镜叠到头发上隐身），人工指定行
+GLASSES_ROW_OVERRIDE = {"chen-mo": 9}
 
 
 def _eye_row(tile, columns) -> int:
@@ -56,12 +58,15 @@ def _eye_row(tile, columns) -> int:
     return darkest_row
 
 
-def apply_glasses_overlay(front_tile):
+def apply_glasses_overlay(front_tile, row_override: int | None = None):
     """在 head_front 瓦片上画细框像素眼镜：双眼定位 → 镜片框 + 鼻梁 + 镜腿。"""
     tile = front_tile.convert("RGBA")
-    left_row = _eye_row(tile, range(2, 8))
-    right_row = _eye_row(tile, range(8, 14))
-    row = round((left_row + right_row) / 2)
+    if row_override is not None:
+        row = row_override
+    else:
+        left_row = _eye_row(tile, range(2, 8))
+        right_row = _eye_row(tile, range(8, 14))
+        row = round((left_row + right_row) / 2)
     c = GLASSES_COLOR
     for lens_x in (3, 10):  # 左/右镜片（4x3 框）
         for x in range(lens_x, lens_x + 4):
@@ -91,7 +96,8 @@ def build_one(person_id: str, face_path: Path, body_path: Path, store: PackageSt
         spec, image=image, cache_dir=cache_dir,
         reference=face_path.read_bytes())
     if person_id in GLASSES_CAST and "head_front" in tiles:
-        tiles["head_front"] = apply_glasses_overlay(tiles["head_front"])
+        tiles["head_front"] = apply_glasses_overlay(
+            tiles["head_front"], GLASSES_ROW_OVERRIDE.get(person_id))
         spec["visibleTraits"]["glasses"] = True
         spec["provenance"]["glasses"] = "procedural-overlay"
     if "head_front" in tiles:
