@@ -28,7 +28,7 @@ from app.world.tables import (
 
 logger = logging.getLogger(__name__)
 
-STEP = 2.0                    # 每 tick 走位步长（米）：15s 心跳下横跨咖啡厅约 1 分钟
+STEP = 2.4                    # 每 tick 走位步长（米）：15s 心跳下横跨咖啡厅约 45 秒
 ARRIVE_DISTANCE = 0.12        # 到点判定（米）
 VISIT_OFFSET = 0.95           # 站着聊天时与对方保持的距离（米）
 MEETING_TTL_SECONDS = 10 * 60  # 会议最长存续：超时自动散会（防 stale 锁死圆桌）
@@ -92,7 +92,10 @@ class RoomConductor:
     def plan(self, room_id: str, snapshot: dict, now: float) -> dict | None:
         members = {m["member_id"]: m for m in snapshot.get("members", [])}
         runtime = {r["agent_id"]: r for r in snapshot.get("agent_runtime", [])}
-        npc_ids = sorted(set(members) & set(runtime))  # agent_runtime 只给 Agent 建
+        # NPC = 除人类玩家外的成员。历史房间（agent_runtime 特性之前持久化的）
+        # 缺条目，由 apply_conductor_plan 补建；GroupPlay 多设备人类成员当前没有
+        # 标记渠道，是已记录的设计限制（docs/PRODUCT-STATUS.md）。
+        npc_ids = sorted(set(members) - {"person-self"})
         if not npc_ids:
             return None
         intents = self._intents.setdefault(room_id, {})

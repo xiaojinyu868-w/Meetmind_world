@@ -446,8 +446,10 @@ class RoomService:
         # Agent 成员即时应邀（MVP 产品决策：会议由用户发起，应邀不应阻塞在
         # 自治心跳上；人类成员仍需自己 respond）。应邀即走向圆桌站位环，
         # 与 _respond_meeting 的 accept 分支完全同源。
+        # NPC 判定与 RoomConductor 一致（成员 - person-self）；人类成员
+        #（当前仅 person-self）仍需自己到场。
         for member_id in invitation["participant_ids"]:
-            if member_id == actor_id or member_id not in room.agent_runtime:
+            if member_id == "person-self":
                 continue
             events.extend(self._accept_invitation(room, invitation, member_id, command_id))
         return events
@@ -626,9 +628,18 @@ class RoomService:
                     command_id=f"conductor-move-{room.sequence + 1}-{member_id}",
                 )
             for member_id, status in statuses.items():
-                runtime = room.agent_runtime.get(member_id)
-                if runtime is None:
+                if member_id not in room.members:
                     continue
+                # 历史房间缺条目的成员（agent_runtime 特性之前 join 的）在此补建，
+                # 默认值与 join_room 保持一致
+                runtime = room.agent_runtime.setdefault(member_id, {
+                    "agent_id": member_id,
+                    "goal": "maintain-relationships",
+                    "status": "idle",
+                    "last_action": None,
+                    "last_target_id": None,
+                    "last_sequence": None,
+                })
                 runtime.update({
                     "status": status["status"],
                     "last_action": status.get("action"),
