@@ -41,6 +41,28 @@ CUSTOM_I2I_PROMPTS = {
         "watermark. The head is centered and fills most of the frame, isolated "
         "on a solid flat magenta background (#FF00FF) with no shadow and no border."
     ),
+    # chen-mo：i2i 把他的深色细框画成白框；显式要求深色细框透明镜片
+    ("chen-mo", "head_front"): (
+        "Take the person in the reference photo and reinterpret his face as a "
+        "beautifully designed premium 16-bit retro JRPG character portrait, "
+        "while preserving the exact output format of a Minecraft-style voxel "
+        "character head skin texture. Draw only the FRONT face of the head, "
+        "facing directly toward the viewer, as one single square 16x16 "
+        "pixel-art texture tile. He has short neat black hair and wears THIN "
+        "DARK-FRAMED rectangular glasses with CLEAR TRANSPARENT lenses: the "
+        "frames are dark gray-black thin lines, and his eyes stay clearly "
+        "visible as dark pupils behind the lenses — never white, never "
+        "opaque, never thick white frames. Preserve his face shape, eyebrow "
+        "shape and calm expression. Two large bold dark eyes with one-pixel "
+        "highlights, skin in exactly two flat tones, high contrast, rich but "
+        "flat colors, elegant handcrafted 16-bit JRPG portrait pixel art. "
+        "Drawn on an exact 16x16 pixel grid, chunky clearly visible square "
+        "pixels, at most 10 total flat colors including the background. The "
+        "head is centered and fills most of the tile, isolated on a solid "
+        "flat magenta background, exact color #FF00FF. No shadow, no border, "
+        "no neck, no shoulders, no environment. True pixel art, hard pixel "
+        "edges, nearest-neighbor appearance."
+    ),
     # su-he：用户亲调的 16-bit JRPG 肖像提示词（2026-08-06，效果验收通过）——
     # 精致 JRPG 肖像风 + MC 方块头格式；刘海不过眉、两侧框发、设计感五官
     ("su-he", "head_front"): (
