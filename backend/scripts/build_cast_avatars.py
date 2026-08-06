@@ -27,6 +27,7 @@ from app.pipeline.cast_style import (  # noqa: E402
     GLASSES_ROW_OVERRIDE,
     PALETTE_OVERRIDES,
     apply_glasses_overlay,
+    generate_cast_tiles,
 )
 from app.pipeline.texture_gen import TextureSet  # noqa: E402
 
@@ -47,9 +48,10 @@ def build_one(person_id: str, face_path: Path, body_path: Path, store: PackageSt
     # 1) vision 特征来自半身照（含服装）；i2i 参考用更紧致的人脸裁剪（相似度优先）
     spec = texture_gen.summarize_visible_traits(
         [str(body_path)], person_id, vision=vision, cache_dir=cache_dir)
-    tiles, image_model = texture_gen.generate_tiles(
-        spec, image=image, cache_dir=cache_dir,
-        reference=face_path.read_bytes())
+    tiles, image_model, notes = generate_cast_tiles(
+        person_id, face_path.read_bytes(), image, cache_dir)
+    if notes:
+        spec["provenance"]["tile_notes"] = notes
     if person_id in GLASSES_CAST and "head_front" in tiles:
         tiles["head_front"] = apply_glasses_overlay(
             tiles["head_front"], GLASSES_ROW_OVERRIDE.get(person_id))

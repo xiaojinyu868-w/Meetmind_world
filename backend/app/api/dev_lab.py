@@ -32,6 +32,8 @@ from app.pipeline.cast_style import (
     GLASSES_ROW_OVERRIDE,
     PALETTE_OVERRIDES,
     apply_glasses_overlay,
+    generate_cast_tiles,
+    i2i_prompt_for,
 )
 from app.pipeline.texture_gen import TextureSet
 
@@ -114,7 +116,7 @@ def defaults(person_id: str, request: Request,
     _authorize(authorization)
     spec = _spec_for(request, person_id)
     return {
-        "prompts": {view: texture_gen.build_i2i_prompt(view) for view in _I2I_VIEWS},
+        "prompts": {view: i2i_prompt_for(person_id, view) for view in _I2I_VIEWS},
         "t2i_prompts": texture_gen.build_tile_prompts(spec),
         "visible_traits": spec["visibleTraits"],
         "palette": texture_gen.palette_from_spec(spec),
@@ -169,27 +171,9 @@ def _generate_tile_set(request: Request, person_id: str, prompts: dict[str, str]
     """按自定义提示词逐面生成（缓存键=模型+prompt+参考图，复跑只花新提示词的钱）。"""
     directory = _lab_dir(request, person_id)
     reference = _reference_bytes(directory, use_reference)
-    provider = llm_base.get_provider("image")
     cache_dir = Path(request.app.state.store.root) / "derived" / "voxel-pipeline" / person_id / "cache"
-    tiles, notes = {}, []
-    for view in _I2I_VIEWS:
-        prompt = prompts.get(view) or texture_gen.build_i2i_prompt(view)
-        cache_path = texture_gen._tile_cache_path(cache_dir, provider.model, prompt, reference)
-        raw = cache_path.read_bytes() if cache_path.exists() else None
-        if raw is None:
-            raw = provider.generate_image(prompt, images=[reference] if reference else None)
-            record = provider.call_log[-1] if provider.call_log else None
-            if record is not None and record.mock:
-                notes.append(f"{view}: 生图降级 mock，跳过")
-                continue
-            cache_path.parent.mkdir(parents=True, exist_ok=True)
-            cache_path.write_bytes(raw)
-        try:
-            tiles[view] = texture_gen.postprocess_i2i_tile(
-                raw, anchor_eyes=(view == "head_front"))
-        except Exception as exc:
-            notes.append(f"{view}: 后处理失败（{type(exc).__name__}）")
-    return tiles, provider.model, notes
+    return generate_cast_tiles(
+        person_id, reference, llm_base.get_provider("image"), cache_dir, prompts or None)
 
 
 @router.post("/atlas")

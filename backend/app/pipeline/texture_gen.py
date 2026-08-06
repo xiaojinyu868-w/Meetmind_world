@@ -758,6 +758,31 @@ def _anchor_dark_features(tile: Image.Image) -> None:
         tile.putpixel((x, y), dark)
 
 
+def _purge_magenta_leaks(tile: Image.Image) -> None:
+    """品红泄漏清除：色度键控后仍可能残留品红轮廓像素（色相/饱和略偏未被键
+    到、又被最近邻填充跳过——非透明）。逐像素检查：色相在品红邻域（290°-330°）
+    且高饱和 → 用非泄漏 4 邻域主色替换；无邻域则压成头发深色。"""
+    import colorsys
+    from collections import Counter
+
+    pixels = tile.load()
+    leaks = []
+    for y in range(tile.height):
+        for x in range(tile.width):
+            r, g, b, a = pixels[x, y]
+            hue, sat, _val = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+            if 0.80 <= hue <= 0.92 and sat > 0.7 and max(r, b) - g > 80:
+                leaks.append((x, y))
+    for x, y in leaks:
+        neighbors = [pixels[nx, ny] for nx, ny in
+                     ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1))
+                     if 0 <= nx < tile.width and 0 <= ny < tile.height
+                     and (nx, ny) not in leaks]
+        color = Counter(neighbors).most_common(1)[0][0] if neighbors \
+            else (24, 22, 24, 255)
+        pixels[x, y] = (color[0], color[1], color[2], 255)
+
+
 def postprocess_i2i_tile(png_bytes: bytes, *, anchor_eyes: bool = False) -> Image.Image:
     """i2i 生图结果 → 16x16 像素瓦片：背景检测 → 内容裁剪 → 对比/饱和增强 →
     BOX 重采样 → 定色量化 → 色度键控 → 最近邻填充（输出完全不透明、无混合色）。
@@ -794,6 +819,7 @@ def postprocess_i2i_tile(png_bytes: bytes, *, anchor_eyes: bool = False) -> Imag
         _fill_transparent_nearest(tile)
     else:
         tile.putalpha(255)
+    _purge_magenta_leaks(tile)
     if anchor_eyes:
         _anchor_dark_features(tile)
     return tile
