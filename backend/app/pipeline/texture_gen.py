@@ -759,6 +759,34 @@ def _snap_hair_mass(tile: Image.Image) -> None:
                 rgba[x, y] = (hair[0], hair[1], hair[2], 255)
 
 
+def _stylize_eyes(tile: Image.Image) -> None:
+    """眼睛矢量化（head_front 专用）：在眼带（7-11 行）定位左右两个最深簇，
+    重绘成 2x2 深色瞳孔 + 左上角 1px 高光——任何来源的脸都得到清晰眼睛。
+
+    为什么不靠缩放保留：JRPG 大眼的「白眼球+深瞳孔」在 16x16 物理上不可兼得，
+    归并必成「闭眼黑条」；MC 式深瞳 + 1px 高光是可读性最优解。"""
+    dark = (32, 26, 26, 255)
+    light = (248, 248, 244, 255)
+    for cols in (range(2, 8), range(8, 14)):
+        # 找该侧眼带里 2x2 平均最深的位置
+        best = None
+        for y in range(7, 11):
+            for x in cols:
+                if x + 1 >= 14:
+                    continue
+                block = [tile.getpixel((x + dx, y + dy)) for dx in (0, 1) for dy in (0, 1)]
+                lum = sum(sum(p[:3]) for p in block)
+                if best is None or lum < best[0]:
+                    best = (lum, x, y)
+        if best is None:
+            continue
+        _lum, x, y = best
+        for dx in (0, 1):
+            for dy in (0, 1):
+                tile.putpixel((x + dx, y + dy), dark)
+        tile.putpixel((x, y), light)  # 左上角高光
+
+
 def _anchor_dark_features(tile: Image.Image) -> None:
     """深色特征锚定（仅 head_front）：把面部中间带最暗 ~4% 像素压到深棕黑，
     保证眼睛在任何生成结果下都可读——16x16 的"好看"首先是眼睛要黑要亮。
@@ -774,6 +802,93 @@ def _anchor_dark_features(tile: Image.Image) -> None:
     dark = (43, 34, 32, 255)
     for _lum, x, y in luminance[:count]:
         tile.putpixel((x, y), dark)
+
+
+def _snap_to_grid(image: Image.Image, cells: int) -> Image.Image | None:
+    """识别生成图里的 N×N 设计网格并按格内主色吸附（N=16/32）。
+
+    gpt-image-2 说「16x16」时实际常画 32+ 格细节：强行压 16 必糊。
+    先吸到模型自己设计的网格，特征才能被尊重。检测失败返回 None。"""
+    from collections import Counter
+
+    preview = image.resize((256, 256), Image.BOX)
+    pixels = preview.load()
+    base = 256 / cells
+
+    def grid_score(block: float, ox: float, oy: float) -> float:
+        total, count = 0.0, 0
+        for cy in range(0, cells, 2):
+            for cx in range(0, cells, 2):
+                x0, y0 = int(ox + cx * block), int(oy + cy * block)
+                x1, y1 = min(256, int(ox + (cx + 1) * block)), min(256, int(oy + (cy + 1) * block))
+                if x1 - x0 < 2 or y1 - y0 < 2:
+                    return float("inf")
+                samples = [pixels[x, y] for y in range(y0, y1, 2) for x in range(x0, x1, 2)]
+                mean = [sum(p[c] for p in samples) / len(samples) for c in range(3)]
+                total += sum(
+                    sum(abs(p[c] - mean[c]) for c in range(3)) for p in samples
+                ) / len(samples)
+                count += 1
+        return total / max(count, 1)
+
+    best = None
+    for block_100 in range(int(base * 0.85 * 100), int(base * 1.15 * 100) + 1, 4):
+        block = block_100 / 100
+        for oxi in range(4):
+            for oyi in range(4):
+                ox, oy = oxi * block / 4, oyi * block / 4
+                score = grid_score(block, ox, oy)
+                if best is None or score < best[0]:
+                    best = (score, block, ox, oy)
+    if best is None or best[0] > 34:
+        return None
+    _score, block_p, ox_p, oy_p = best
+    scale = image.width / 256
+    full = image.load()
+    tile = Image.new("RGB", (cells, cells))
+    out = tile.load()
+    for cy in range(cells):
+        for cx in range(cells):
+            x0 = min(image.width - 1, max(0, int((ox_p + cx * block_p) * scale)))
+            y0 = min(image.height - 1, max(0, int((oy_p + cy * block_p) * scale)))
+            x1 = min(image.width, max(x0 + 1, int((ox_p + (cx + 1) * block_p) * scale)))
+            y1 = min(image.height, max(y0 + 1, int((oy_p + (cy + 1) * block_p) * scale)))
+            cell = [full[x, y] for y in range(y0, y1) for x in range(x0, x1)]
+            out[cx, cy] = Counter(cell).most_common(1)[0][0]
+    return tile
+
+
+def _reduce_2x2(tile32: Image.Image) -> Image.Image:
+    """32 格 → 16 格：2x2 主色归并；2-2 平票取深色（特征色通常更深，
+    眼睛/眉毛/镜框在平票时优先活下来）。"""
+    from collections import Counter
+
+    out = Image.new("RGB", (TILE_SIZE, TILE_SIZE))
+    pixels, target = tile32.load(), out.load()
+    for cy in range(TILE_SIZE):
+        for cx in range(TILE_SIZE):
+            quad = [pixels[cx * 2, cy * 2], pixels[cx * 2 + 1, cy * 2],
+                    pixels[cx * 2, cy * 2 + 1], pixels[cx * 2 + 1, cy * 2 + 1]]
+            counts = Counter(quad).most_common()
+            if len(counts) > 1 and counts[0][1] == counts[1][1]:
+                counts.sort(key=lambda kv: sum(kv[0]))
+            target[cx, cy] = counts[0][0]
+    return out
+
+
+def _resample_grid_aligned(image: Image.Image) -> Image.Image | None:
+    """网格对齐重采样：先吸到模型设计的 16/32 网格，再（需要时）2x2 归并到 16。
+
+    为什么需要它：BOX 平滑缩放会让眼睛骑跨格线被抹成灰色（2026-08-06
+    「眼睛不清晰」根因）；而模型实际常画 32 格细节，必须先按它的网格吸附。
+    全部识别失败返回 None，走原 BOX→量化→NEAREST 链路。"""
+    snapped = _snap_to_grid(image, TILE_SIZE)
+    if snapped is not None:
+        return snapped
+    snapped32 = _snap_to_grid(image, TILE_SIZE * 2)
+    if snapped32 is not None:
+        return _reduce_2x2(snapped32)
+    return None
 
 
 def _purge_magenta_leaks(tile: Image.Image) -> None:
@@ -840,12 +955,18 @@ def postprocess_i2i_tile(png_bytes: bytes, *, anchor_eyes: bool = False,
     # 绕均值等比缩放，色相关系不变，才是安全选项
     image = ImageEnhance.Contrast(image).enhance(1.18)
     image = ImageEnhance.Color(image).enhance(1.25)
-    # 下采样：BOX 到 32（去 AA 噪点）→ 定色量化 10 色（锁平色、比 16 色更脆）
-    # → NEAREST 到 16（保硬边特征：眼/镜框在 16px 下只有 1-2px，直接 BOX 到 16 会糊掉）
-    image = image.resize((TILE_SIZE * 2, TILE_SIZE * 2), Image.BOX)
-    image = image.quantize(colors=10, method=Image.Quantize.MEDIANCUT,
-                           dither=Image.Dither.NONE).convert("RGB")
-    tile = image.resize((TILE_SIZE, TILE_SIZE), Image.NEAREST).convert("RGBA")
+    # 主路径：网格对齐重采样（识别 16x16 设计网格按格取主色，眼睛原样保留）；
+    # 识别失败回退 BOX→量化→NEAREST 链路
+    grid_tile = _resample_grid_aligned(image)
+    if grid_tile is not None:
+        tile = grid_tile.convert("RGBA")
+    else:
+        # 下采样：BOX 到 32（去 AA 噪点）→ 定色量化 10 色（锁平色、比 16 色更脆）
+        # → NEAREST 到 16（保硬边特征：眼/镜框在 16px 下只有 1-2px，直接 BOX 到 16 会糊掉）
+        image = image.resize((TILE_SIZE * 2, TILE_SIZE * 2), Image.BOX)
+        image = image.quantize(colors=10, method=Image.Quantize.MEDIANCUT,
+                               dither=Image.Dither.NONE).convert("RGB")
+        tile = image.resize((TILE_SIZE, TILE_SIZE), Image.NEAREST).convert("RGBA")
     if has_background:
         opaque = _chroma_key(tile, bg)
         if opaque < TILE_SIZE * TILE_SIZE * _KEY_MIN_CONTENT_SHARE:
@@ -857,7 +978,7 @@ def postprocess_i2i_tile(png_bytes: bytes, *, anchor_eyes: bool = False,
     if hair_mass:
         _snap_hair_mass(tile)
     if anchor_eyes:
-        _anchor_dark_features(tile)
+        _stylize_eyes(tile)
     return tile
 
 
