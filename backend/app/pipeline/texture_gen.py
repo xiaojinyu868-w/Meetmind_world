@@ -817,13 +817,14 @@ def _snap_to_grid(image: Image.Image, cells: int) -> Image.Image | None:
 
     def grid_score(block: float, ox: float, oy: float) -> float:
         total, count = 0.0, 0
-        for cy in range(0, cells, 2):
-            for cx in range(0, cells, 2):
+        cell_stride = max(2, cells // 8)
+        for cy in range(0, cells, cell_stride):
+            for cx in range(0, cells, cell_stride):
                 x0, y0 = int(ox + cx * block), int(oy + cy * block)
                 x1, y1 = min(256, int(ox + (cx + 1) * block)), min(256, int(oy + (cy + 1) * block))
                 if x1 - x0 < 2 or y1 - y0 < 2:
                     return float("inf")
-                samples = [pixels[x, y] for y in range(y0, y1, 2) for x in range(x0, x1, 2)]
+                samples = [pixels[x, y] for y in range(y0, y1, 4) for x in range(x0, x1, 4)]
                 mean = [sum(p[c] for p in samples) / len(samples) for c in range(3)]
                 total += sum(
                     sum(abs(p[c] - mean[c]) for c in range(3)) for p in samples
@@ -832,11 +833,11 @@ def _snap_to_grid(image: Image.Image, cells: int) -> Image.Image | None:
         return total / max(count, 1)
 
     best = None
-    for block_100 in range(int(base * 0.85 * 100), int(base * 1.15 * 100) + 1, 4):
+    for block_100 in range(int(base * 0.85 * 100), int(base * 1.15 * 100) + 1, 6):
         block = block_100 / 100
-        for oxi in range(4):
-            for oyi in range(4):
-                ox, oy = oxi * block / 4, oyi * block / 4
+        for oxi in range(3):
+            for oyi in range(3):
+                ox, oy = oxi * block / 3, oyi * block / 3
                 score = grid_score(block, ox, oy)
                 if best is None or score < best[0]:
                     best = (score, block, ox, oy)
