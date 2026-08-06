@@ -2564,8 +2564,15 @@ async function startRoomWorld() {
   });
   roomClient.onSnapshot(applyRoomSnapshot);
   roomClient.onEvent(handleRoomEvent);
+  // 整体 30s 超时：ensureRoom 是 19 个串行 POST，慢网关下会把世界卡在
+  // 「v0 已让位、v1 没起来」的真空态——超时必须回退 v0 快照世界。
+  // 超时后 start() 仍在后台跑完，但 stop() 已把 running 置 false，
+  // 其后续 #connect/轮询回调均为空操作，不会与 v0 双轨驱动。
+  const timeout = new Promise((_, reject) => {
+    window.setTimeout(() => reject(new Error("v1 房间连接超时（30s）")), 30000);
+  });
   try {
-    await roomClient.start();
+    await Promise.race([roomClient.start(), timeout]);
     canvas.dataset.roomSource = "v1";
     pushLiveToast("已进入实时 Echo Cafe 房间");
   } catch (error) {
