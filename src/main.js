@@ -2414,6 +2414,7 @@ async function ensureAgentEntity(agent) {
     if (roomClient) rebuildSceneHotspots();
     canvas.dataset.npcCount = String(npcSystem.agents.size);
     canvas.dataset.characterCount = String(characterSystem.entities.length);
+    refreshPresence();  // 异步入场即刷新在场人数，不等下一轮快照轮询
   } catch (error) {
     dynamicPeople.delete(agent.id);
     console.warn(`[EchoWorld] 新人 ${agent.id} 的实体生成失败`, error);
