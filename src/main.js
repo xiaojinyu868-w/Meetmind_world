@@ -667,6 +667,18 @@ function validateRuntimeAnchors(root) {
 async function spawnCharacters() {
   setProgress(0.73, "正在唤醒你的关系 Agent");
   const visiblePeople = isFieldWorld ? [fieldTargetPerson] : people;
+  // 卡司专属形象（2026-08-06）：资料包 avatar（团队合照 → 像素脸体素 GLB）
+  // 并入人物记录后再生成实体；无专属形象的人保持默认体素
+  await Promise.all(visiblePeople.map(async (person) => {
+    if (person.avatar?.model_ref) return;
+    try {
+      const pkg = await api.getPackage(person.id);
+      if (pkg?.avatar?.model_ref) {
+        person.avatar = pkg.avatar;
+        if (pkg.avatar.portrait_ref) person.portrait = pkg.avatar.portrait_ref;
+      }
+    } catch { /* 离线或尚无专属形象：默认体素 */ }
+  }));
   const entrySpawns = isFieldWorld
     ? [
         // splat 场域：出生点落在高程图实测的可行走面上（无 splat 时用契约出生点）

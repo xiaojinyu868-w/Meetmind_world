@@ -603,6 +603,25 @@ class RoomService:
             self._persist(room)
             return {"ended": True, "reason": reason, "events": events}
 
+    def system_remove_member(self, room_id: str, member_id: str) -> bool:
+        """系统侧移除成员（资料包注销联动）：从成员与 agent_runtime 移除并发
+        member.left 事件；若其在进行中的会议里，先散会。房间/成员不存在返回 False。"""
+        with self._lock:
+            room = self._rooms.get(room_id)
+            if room is None or member_id not in room.members:
+                return False
+            if room.active_meeting and member_id in room.active_meeting["participant_ids"]:
+                self._finish_meeting(room, "system.conductor", f"system-end-{room.sequence + 1}")
+            del room.members[member_id]
+            room.agent_runtime.pop(member_id, None)
+            self._append_event(
+                room, "member.left", {"member_id": member_id},
+                actor_id="system.api", subject_id=member_id,
+                command_id=f"system-leave-{room.sequence + 1}",
+            )
+            self._persist(room)
+            return True
+
     def apply_conductor_plan(self, room_id: str, plan: dict[str, Any]) -> None:
         """应用生活指挥（RoomConductor）的一拍计划：会议时间戳/散会、Agent 走位
         与状态。整个计划在锁内原子落地并只持久化一次；机制在此，策略在

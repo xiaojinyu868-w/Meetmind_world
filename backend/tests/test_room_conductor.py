@@ -128,6 +128,35 @@ def test_conductor_separates_overlapping_npcs():
         assert WALK_BOUNDS["min_z"] - 0.01 <= pos[member_id]["z"] <= WALK_BOUNDS["max_z"] + 0.01
 
 
+def test_system_remove_member_cleans_room_state():
+    service = _room_with_members(("r1",))
+    assert service.system_remove_member("cafe-test", "r1") is True
+    snapshot = service.snapshot("cafe-test")
+    assert all(m["member_id"] != "r1" for m in snapshot["members"])
+    assert all(r["agent_id"] != "r1" for r in snapshot["agent_runtime"])
+    assert service.system_remove_member("cafe-test", "r1") is False  # 幂等
+    assert service.system_remove_member("no-such-room", "r1") is False
+
+
+def test_system_remove_member_ends_meeting_they_attend():
+    service = _room_with_members(("m1",))
+    service.execute("cafe-test", command_id="walk-in", actor_id="person-self",
+                    command_type="member.move", payload={"x": 0.0, "z": 1.57})
+    service.execute(
+        "cafe-test", command_id="invite-1", actor_id="person-self",
+        command_type="meeting.invite",
+        payload={"invitation_id": "inv-1", "participant_ids": ["m1"], "topic": "t"},
+    )
+    service.execute(
+        "cafe-test", command_id="start-1", actor_id="person-self",
+        command_type="meeting.start",
+        payload={"invitation_id": "inv-1", "meeting_id": "meeting-rm-1"},
+    )
+    assert service.snapshot("cafe-test")["meeting"] is not None
+    service.system_remove_member("cafe-test", "m1")
+    assert service.snapshot("cafe-test")["meeting"] is None
+
+
 def test_stale_meeting_auto_ends_after_ttl():
     service = _room_with_members(("d1",))
     conductor = RoomConductor(

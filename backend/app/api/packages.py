@@ -89,6 +89,12 @@ def deactivate_package(request: Request, person_id: str):
         if service is not None and hasattr(service, "unregister_person"):
             if service.unregister_person(person_id):
                 removed.append(service_name)
+    # v1 实时房间联动：成员与 agent_runtime 一并移除（在会则先散会）
+    room_service = getattr(request.app.state, "room_service", None)
+    if room_service is not None:
+        for room_id in room_service.room_ids():
+            if room_service.system_remove_member(room_id, person_id):
+                removed.append(f"room:{room_id}")
     return {
         "person_id": person_id,
         "deactivated": True,
