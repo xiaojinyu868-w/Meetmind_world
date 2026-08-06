@@ -741,6 +741,24 @@ def _fill_transparent_nearest(tile: Image.Image) -> None:
             pixels[x, y] = (fallback[0], fallback[1], fallback[2], 255)
 
 
+def _snap_hair_mass(tile: Image.Image) -> None:
+    """发团吸附（head_top/head_back 专用）：这两个视角审美上就是一团头发。
+    当 ≥55% 像素已是深色发色时，把残留的亮像素（皮肤/背景泄漏）吸附到
+    主深色——头顶/后脑勺出现亮斑会一眼出戏。"""
+    from collections import Counter
+
+    pixels = list(tile.convert("RGBA").getdata())
+    dark = [p for p in pixels if sum(p[:3]) < 360]
+    if len(dark) < len(pixels) * 0.55:
+        return
+    hair = Counter(dark).most_common(1)[0][0]
+    rgba = tile.load()
+    for y in range(tile.height):
+        for x in range(tile.width):
+            if sum(rgba[x, y][:3]) > 630:
+                rgba[x, y] = (hair[0], hair[1], hair[2], 255)
+
+
 def _anchor_dark_features(tile: Image.Image) -> None:
     """深色特征锚定（仅 head_front）：把面部中间带最暗 ~4% 像素压到深棕黑，
     保证眼睛在任何生成结果下都可读——16x16 的"好看"首先是眼睛要黑要亮。
@@ -783,7 +801,8 @@ def _purge_magenta_leaks(tile: Image.Image) -> None:
         pixels[x, y] = (color[0], color[1], color[2], 255)
 
 
-def postprocess_i2i_tile(png_bytes: bytes, *, anchor_eyes: bool = False) -> Image.Image:
+def postprocess_i2i_tile(png_bytes: bytes, *, anchor_eyes: bool = False,
+                         hair_mass: bool = False) -> Image.Image:
     """i2i 生图结果 → 16x16 像素瓦片：背景检测 → 内容裁剪 → 对比/饱和增强 →
     BOX 重采样 → 定色量化 → 色度键控 → 最近邻填充（输出完全不透明、无混合色）。
 
@@ -820,6 +839,8 @@ def postprocess_i2i_tile(png_bytes: bytes, *, anchor_eyes: bool = False) -> Imag
     else:
         tile.putalpha(255)
     _purge_magenta_leaks(tile)
+    if hair_mass:
+        _snap_hair_mass(tile)
     if anchor_eyes:
         _anchor_dark_features(tile)
     return tile

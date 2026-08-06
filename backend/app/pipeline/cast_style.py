@@ -17,7 +17,7 @@ PALETTE_OVERRIDES = {
     "tang-ke":   {"jacket": "#1F1F22", "shirt": "#1F1F22", "pants": "#A8B8C8", "shoes": "#F0F0EC"},
 }
 
-GLASSES_CAST = {"zhou-ning", "chen-mo", "xu-an"}
+GLASSES_CAST = {"zhou-ning", "chen-mo", "xu-an", "tang-ke"}
 GLASSES_COLOR = (38, 38, 44, 255)  # 深灰细框（不用纯黑，避免与眼睛糊成一团）
 # 个别人的 i2i 瓦片刘海遮住自动暗行定位（眼镜叠到头发上隐身），人工指定行
 GLASSES_ROW_OVERRIDE = {"chen-mo": 9}
@@ -96,7 +96,10 @@ def generate_cast_tiles(person_id: str, face_bytes: bytes | None, image_provider
             cache_path.write_bytes(raw)
         try:
             tiles[view] = texture_gen.postprocess_i2i_tile(
-                raw, anchor_eyes=(view == "head_front"))
+                raw,
+                anchor_eyes=(view == "head_front"),
+                hair_mass=(view in ("head_top", "head_back")),
+            )
         except Exception as exc:
             notes.append(f"{view}: 后处理失败（{type(exc).__name__}）")
     return tiles, image_provider.model, notes
