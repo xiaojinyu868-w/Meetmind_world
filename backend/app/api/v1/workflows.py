@@ -124,13 +124,20 @@ def submit_impression(request: Request, body: ImpressionRequest):
     if body.kind == "peer-impression" and body.author_id == body.subject_id:
         raise HTTPException(status_code=422, detail="互评的作者和对象不能相同")
     store = request.app.state.store
+    caller = caller_user_id(request)
+    # 移动端「记录相遇」：作者可以是登录用户本人（Bearer sub == author_id），
+    # 此时不要求作者有已确认 Package——用户本人是事实来源，不是 Agent 人物。
+    author_is_user = bool(caller) and body.author_id == caller
     try:
-        author = store.load_package(body.author_id)
+        if not author_is_user:
+            author = store.load_package(body.author_id)
         subject = store.load_package(body.subject_id)
     except PackageNotFound as exc:
         raise HTTPException(status_code=404, detail=f"人物不存在：{exc.args[0]}") from exc
-    if not author["identity"]["confirmed"] or not subject["identity"]["confirmed"]:
-        raise HTTPException(status_code=409, detail="第一印象只能由已确认人物提交给已确认人物")
+    if not author_is_user and not author["identity"]["confirmed"]:
+        raise HTTPException(status_code=409, detail="第一印象只能由已确认人物提交")
+    if not subject["identity"]["confirmed"]:
+        raise HTTPException(status_code=409, detail="第一印象只能提交给已确认人物")
 
     impression_id = f"impression_{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}"
     submission = {

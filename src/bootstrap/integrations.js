@@ -1,4 +1,4 @@
-import { CloudUpload, Coffee, ScanFace, Store, Users, createIcons } from "lucide";
+import { CloudUpload, Coffee, ScanFace, Smartphone, Store, Users, createIcons } from "lucide";
 import * as MockApi from "../runtime/mock/MockApi.js";
 import { publicUrl } from "../runtime/WorldSpec.js";
 import { navigateToWorld } from "../runtime/WorldSwitch.js";
@@ -14,13 +14,14 @@ import { mountOnboardingFlow } from "../ui/onboarding/OnboardingFlow.js";
  * 1. 把 MockApi（docs/API.md 契约客户端）适配为各 UI 模块期望的注入形状；
  * 2. 挂载同事模块：PipelineFlow（IF-1/2/3）、PackagePanel（IF-5）；
  *    （顶部检索条 2026-08-03 下线，SearchBar.js 保留在 package-panel/ 备用）
- * 3. 提供「记录相遇」入口按钮、世界切换导航按钮与模块间联动（选中定位、确认后刷新人名映射）。
+ * 3. 提供「记录相遇」「合照入场」「手机录入」（扫码进移动端页）入口按钮、
+ *    世界切换导航按钮与模块间联动（选中定位、确认后刷新人名映射）。
  *
  * 模块 CSS 由各自 JS import（pipeline.css / panel.css），经 vite 自动生效。
  * z-index 分层：世界气泡(7) < 检索条(22) < 入口按钮(30) < 资料包面板(40) < 事件 Toast(60) < pipeline 浮层(80)。
  */
 
-const INTEGRATIONS_ICONS = { CloudUpload, Coffee, ScanFace, Store, Users };
+const INTEGRATIONS_ICONS = { CloudUpload, Coffee, ScanFace, Smartphone, Store, Users };
 
 const INTEGRATION_STYLES = `
 .echo-integrations .record-fab {
@@ -77,6 +78,46 @@ body[data-view="cafe"] .echo-integrations .record-fab { display: flex; }
 @keyframes echo-onboard-pulse {
   0%, 100% { box-shadow: 0 12px 30px rgb(18 45 39 / 18%); }
   50% { box-shadow: 0 12px 34px rgb(229 180 81 / 45%); }
+}
+
+/* 「手机录入」：最上一层，扫码在手机上导入合照/记录相遇 */
+.echo-integrations .mobile-fab {
+  bottom: max(296px, calc(env(safe-area-inset-bottom) + 276px));
+}
+.echo-mobile-qr-panel {
+  position: fixed;
+  z-index: 40;
+  bottom: max(296px, calc(env(safe-area-inset-bottom) + 276px));
+  left: max(20px, env(safe-area-inset-left));
+  width: 240px;
+  padding: 18px;
+  border: 1px solid rgb(255 255 255 / 56%);
+  border-radius: 20px;
+  color: var(--ink, #193d36);
+  background: var(--glass, rgb(250 250 246 / 92%));
+  box-shadow: 0 18px 44px rgb(18 45 39 / 26%);
+  backdrop-filter: blur(18px) saturate(1.05);
+  text-align: center;
+}
+.echo-mobile-qr-panel[hidden] { display: none !important; }
+.echo-mobile-qr-panel h3 { margin: 0 0 6px; font-size: 14px; }
+.echo-mobile-qr-panel p { margin: 0 0 12px; font-size: 11px; line-height: 1.6; opacity: 0.72; }
+.echo-mobile-qr-panel img {
+  width: 196px;
+  height: 196px;
+  border-radius: 12px;
+  border: 1px solid rgb(25 61 54 / 12%);
+}
+.echo-mobile-qr-panel .echo-mobile-qr-close {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  border: none;
+  background: none;
+  font-size: 16px;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.6;
 }
 
 .echo-integrations .group-fab {
@@ -409,6 +450,30 @@ export function mountIntegrations({
   onboardFab.addEventListener("click", () => onboardingFlow.open());
   mountRoot.append(onboardFab);
 
+  // 「手机录入」：扫码在手机上导入合照/记录相遇（移动页由后端 /api/mobile/ 提供，
+  // 与桌面共用 localStorage token，微信内打开会自动走 EchoWorld 自建 OAuth 登录）
+  const mobileFab = document.createElement("button");
+  mobileFab.className = "record-fab mobile-fab";
+  mobileFab.type = "button";
+  mobileFab.setAttribute("aria-label", "用手机扫码录入");
+  mobileFab.innerHTML =
+    `<i data-lucide="smartphone"></i>` +
+    `<span><small>Mobile</small><strong>手机录入</strong></span>`;
+  const mobileQrPanel = document.createElement("div");
+  mobileQrPanel.className = "echo-mobile-qr-panel";
+  mobileQrPanel.hidden = true;
+  mobileQrPanel.innerHTML =
+    `<button class="echo-mobile-qr-close" type="button" aria-label="关闭">×</button>` +
+    `<h3>手机打开 EchoWorld</h3>` +
+    `<p>微信扫一扫，在手机上导入合照、记录相遇；<br>登录后这里的世界同步可见。</p>` +
+    `<img src="${import.meta.env.BASE_URL}api/mobile/qr.png" alt="EchoWorld 手机端二维码">`;
+  mobileFab.addEventListener("click", () => {
+    mobileQrPanel.hidden = !mobileQrPanel.hidden;
+  });
+  mobileQrPanel.querySelector(".echo-mobile-qr-close")
+    .addEventListener("click", () => { mobileQrPanel.hidden = true; });
+  mountRoot.append(mobileFab, mobileQrPanel);
+
   // 空广场引导：大厅快照同步后仍无展位时，提示合照入场（一次性）
   if (currentWorld === "hall") {
     window.setTimeout(() => {
@@ -437,8 +502,10 @@ export function mountIntegrations({
     fab.hidden = true;
     groupFab.hidden = true;
     onboardFab.hidden = true;
+    mobileFab.hidden = true;
+    mobileQrPanel.hidden = true;
   }
-  for (const button of [fab, navFab, onboardFab, groupFab]) {
+  for (const button of [fab, navFab, onboardFab, groupFab, mobileFab]) {
     createIcons({ icons: INTEGRATIONS_ICONS, root: button, attrs: { "stroke-width": 1.8 } });
   }
 

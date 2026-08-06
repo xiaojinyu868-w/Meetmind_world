@@ -33,7 +33,7 @@ from app.agents.contracts import ContextFact
 from app.agents.tools import EventSummaryTool, MemoryQueryTool, ToolRegistry
 from app.application import CommandValidator
 from app.api import confirm as confirm_api
-from app.api import admin, agents as agents_api, auth as auth_api, dev_lab, experience, group, ingest, media, packages, physical_ai, pipeline, signals, search as search_api
+from app.api import admin, agents as agents_api, auth as auth_api, dev_lab, experience, group, ingest, media, mobile, packages, physical_ai, pipeline, signals, search as search_api, wechat_auth
 from app.api import world as world_api
 from app.group.service import GroupSessionService
 from app.api.v1 import rooms as rooms_v1_api
@@ -309,6 +309,10 @@ def create_app() -> FastAPI:
     app.include_router(physical_ai.router)
     app.include_router(dev_lab.router)
     app.include_router(auth_api.router)
+    # EchoWorld 自建微信 OAuth（落地自家移动页，而非教育产品流程）
+    app.include_router(wechat_auth.router)
+    # 移动端产品页 + 入口二维码（桌面端「手机录入」指向）
+    app.include_router(mobile.router)
     return app
 
 
