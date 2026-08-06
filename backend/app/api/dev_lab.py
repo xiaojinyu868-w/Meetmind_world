@@ -358,7 +358,7 @@ let current = null;
 let prompts = {};
 
 async function api(path, options = {}) {
-  const response = await fetch(path, {
+  const response = await fetch(`texture-lab/${path}`, {
     ...options,
     headers: { "content-type": "application/json",
                authorization: `Bearer ${tokenInput.value}`,
