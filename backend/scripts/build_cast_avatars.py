@@ -28,6 +28,7 @@ from app.pipeline.cast_style import (  # noqa: E402
     PALETTE_OVERRIDES,
     apply_glasses_overlay,
     generate_cast_tiles,
+    generate_expression_tile,
 )
 from app.pipeline.texture_gen import TextureSet  # noqa: E402
 
@@ -44,21 +45,21 @@ def build_one(person_id: str, face_path: Path, body_path: Path, store: PackageSt
     out_dir = out_root / person_id
     out_dir.mkdir(parents=True, exist_ok=True)
     cache_dir = out_dir / "cache"
+    face_bytes = face_path.read_bytes()
 
     # 1) vision 特征来自半身照（含服装）；i2i 参考用更紧致的人脸裁剪（相似度优先）
     spec = texture_gen.summarize_visible_traits(
         [str(body_path)], person_id, vision=vision, cache_dir=cache_dir)
+    # 高清瓦片（64x64）：生成的 JRPG 脸原样上头，不再压 16 格
     tiles, image_model, notes = generate_cast_tiles(
-        person_id, face_path.read_bytes(), image, cache_dir)
+        person_id, face_bytes, image, cache_dir, hires=True)
     if notes:
         spec["provenance"]["tile_notes"] = notes
     if person_id in GLASSES_CAST and "head_front" in tiles:
-        tiles["head_front"] = apply_glasses_overlay(
-            tiles["head_front"], GLASSES_ROW_OVERRIDE.get(person_id))
         spec["visibleTraits"]["glasses"] = True
-        spec["provenance"]["glasses"] = "procedural-overlay"
     if "head_front" in tiles:
-        front = tiles["head_front"]
+        # 肤色/发色采样在 16px 缩略版上做（与既有采样框一致）
+        front = tiles["head_front"].resize((16, 16), texture_gen.Image.BOX)
         spec["visibleTraits"]["skinTone"] = texture_gen._dominant_color(front, (4, 12, 12, 16))
         spec["visibleTraits"]["hairColor"] = texture_gen._dominant_color(front, (0, 0, 16, 2))
         spec["provenance"]["colors"] = "tile-measured"
@@ -69,11 +70,22 @@ def build_one(person_id: str, face_path: Path, body_path: Path, store: PackageSt
         spec["visibleTraits"]["outfitPalette"] = [
             overrides["jacket"], overrides["shirt"], overrides["pants"]]
         spec["provenance"]["outfit"] = "manual-ground-truth"
-    neutral = texture_gen.compose_atlas(spec, tiles)
-    expressions = {name: texture_gen.derive_expression(neutral, name)
-                   for name in texture_gen.EXPRESSIONS}
+    neutral = texture_gen.compose_atlas_hires(spec, tiles)
+    # 表情：i2i 情绪变体（同一人脸参考，仅表情不同）→ 与中性同底换正面
+    expressions = {"neutral": neutral}
+    for expression in ("happy", "surprised", "thinking"):
+        expr_tile, error = generate_expression_tile(
+            person_id, expression, face_bytes, image, cache_dir)
+        if error:
+            notes.append(error)
+        if expr_tile is not None:
+            expressions[expression] = texture_gen.compose_atlas_hires(
+                spec, {**tiles, "head_front": expr_tile})
+        else:
+            expressions[expression] = neutral
     spec["provenance"]["image"] = image_model
     spec["provenance"]["i2i"] = True
+    spec["provenance"]["resolution"] = "hires-512"
 
     textures = TextureSet(
         person_id=person_id, spec=spec, neutral=neutral,

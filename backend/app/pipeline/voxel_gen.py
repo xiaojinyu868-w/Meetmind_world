@@ -146,8 +146,8 @@ def generate(textures, style: dict | None = None, out_path=None,
     template = style.get("body_template", template)
     height_scale = float(style.get("height_scale", 1.0))
 
-    if atlas_image.size != (128, 128):
-        raise ValueError(f"atlas 必须 128x128，实际 {atlas_image.size}")
+    if atlas_image.size != (128, 128) and atlas_image.size != (512, 512):
+        raise ValueError(f"atlas 必须 128x128 或 512x512，实际 {atlas_image.size}")
 
     out = Path(out_path) if out_path else \
         Path(tempfile.mkdtemp(prefix="voxel_gen_")) / f"{person_id}.glb"

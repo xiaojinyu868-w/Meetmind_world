@@ -192,14 +192,14 @@ def test_fabricated_names_are_rejected(tmp_path, monkeypatch):
     assert field_llm.try_llm_field(
         generate_field(package), package,
         provider=_FakeProvider(json.dumps(payload))) is not None
-    # 端到端：种子六人互为他者，lin-che 的场域提及刘璐即回退规则模板
+    # 端到端：种子六人互为他者，lin-che 的场域提及杨璐即回退规则模板
     leaked = _valid_payload()
-    leaked["summary"] = "刘璐也在场。"
+    leaked["summary"] = "杨璐也在场。"
     monkeypatch.setattr(field_llm.llm_base, "get_provider",
                         lambda role="chat": _FakeProvider(json.dumps(leaked)))
     field = client.get("/api/v0/fields/lin-che").json()
     assert field["model"] == "relationship-field-rules.v1"
-    assert "刘璐" not in field["scene"]["summary"]  # 骨架未被污染
+    assert "杨璐" not in field["scene"]["summary"]  # 骨架未被污染
 
 
 def test_schema_surface_stays_stable_for_frontend(tmp_path, monkeypatch):

@@ -91,10 +91,35 @@ def i2i_prompt_for(person_id: str, view: str) -> str:
     return CUSTOM_I2I_PROMPTS.get((person_id, view)) or build_i2i_prompt(view)
 
 
+# 表情提示词变体（hires 表情瓦片）：同一参考人脸 + 情绪描述，身份不变表情变
+_EXPRESSION_DIRECTIONS = {
+    "happy": "with a warm genuine happy smile, softly smiling lips, cheerful "
+             "friendly eyes, same identity",
+    "surprised": "with a surprised expression, slightly open small mouth, "
+                 "wide attentive eyes, raised eyebrows, same identity",
+    "thinking": "with a thoughtful pondering expression, gentle slight frown, "
+                "calm eyes looking very slightly to the side, same identity",
+}
+
+
+def i2i_expression_prompt(person_id: str, expression: str) -> str:
+    """表情瓦片提示词：以该人正面提示词为底，在参考人脸处注入目标情绪。"""
+    base = i2i_prompt_for(person_id, "head_front")
+    direction = _EXPRESSION_DIRECTIONS[expression]
+    marker = "reference photo"
+    index = base.find(marker)
+    if index >= 0:
+        end = index + len(marker)
+        return f"{base[:end]}, {direction},{base[end:]}"
+    return f"{direction}. {base}"
+
+
 def generate_cast_tiles(person_id: str, face_bytes: bytes | None, image_provider,
-                        cache_dir, prompts: dict | None = None) -> tuple[dict, str, list[str]]:
+                        cache_dir, prompts: dict | None = None,
+                        hires: bool = False) -> tuple[dict, str, list[str]]:
     """卡司五面瓦片生成：逐面走 定制/默认 提示词（缓存键=模型+prompt+参考图，
-    复跑只花新提示词的钱）；head_front 额外深色眼睛锚定。
+    复跑只花新提示词的钱）；head_front 额外深色眼睛锚定（hires 时跳过——
+    64px 瓦片里生成的眼睛本身就好看，不需要矢量化）。
     返回 (tiles, model, notes)。"""
     from pathlib import Path
 
@@ -117,14 +142,43 @@ def generate_cast_tiles(person_id: str, face_bytes: bytes | None, image_provider
             cache_path.parent.mkdir(parents=True, exist_ok=True)
             cache_path.write_bytes(raw)
         try:
-            tiles[view] = texture_gen.postprocess_i2i_tile(
-                raw,
-                anchor_eyes=(view == "head_front"),
-                hair_mass=(view in ("head_top", "head_back")),
-            )
+            if hires:
+                tiles[view] = texture_gen.postprocess_i2i_hires(raw)
+            else:
+                tiles[view] = texture_gen.postprocess_i2i_tile(
+                    raw,
+                    anchor_eyes=(view == "head_front"),
+                    hair_mass=(view in ("head_top", "head_back")),
+                )
         except Exception as exc:
             notes.append(f"{view}: 后处理失败（{type(exc).__name__}）")
     return tiles, image_provider.model, notes
+
+
+def generate_expression_tile(person_id: str, expression: str, face_bytes: bytes | None,
+                             image_provider, cache_dir) -> tuple[object | None, str | None]:
+    """单张表情正面瓦片（i2i 情绪变体 + hires 后处理，缓存复用）。"""
+    from pathlib import Path
+
+    from app.pipeline import texture_gen
+
+    cache_dir = Path(cache_dir)
+    prompt = i2i_expression_prompt(person_id, expression)
+    cache_path = texture_gen._tile_cache_path(
+        cache_dir, image_provider.model, prompt, face_bytes)
+    raw = cache_path.read_bytes() if cache_path.exists() else None
+    if raw is None:
+        raw = image_provider.generate_image(
+            prompt, images=[face_bytes] if face_bytes else None)
+        record = image_provider.call_log[-1] if image_provider.call_log else None
+        if record is not None and record.mock:
+            return None, f"{expression}: 生图降级 mock"
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_bytes(raw)
+    try:
+        return texture_gen.postprocess_i2i_hires(raw), None
+    except Exception as exc:
+        return None, f"{expression}: 后处理失败（{type(exc).__name__}）"
 
 
 def _eye_row(tile, columns) -> int:

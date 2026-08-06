@@ -40,6 +40,8 @@ SCHEMA_VERSION = "echo-character-spec.v1"
 ATLAS_SIZE = 128
 EXPRESSIONS = ("neutral", "happy", "surprised", "thinking")
 TILE_SIZE = 16
+HIRES_SCALE = 4                    # 高清 atlas：128 → 512（UV 归一化布局不变）
+HIRES_TILE_SIZE = TILE_SIZE * HIRES_SCALE  # 头部瓦片 16 → 64（精致像素脸的物理空间）
 _TILE_COLORS = 16  # 生成瓦片量化色数上限（锁像素风）
 
 # 固定 UV 区域（Blender 画布坐标，x/y/w/h；与 build_photo_character_modes.py 一致）
@@ -1129,6 +1131,61 @@ def _procedural_front_tile(spec: dict) -> Image.Image:
             draw.rectangle((gx, 6, gx + 4, 9), outline=frame, width=1)
         draw.rectangle((7, 7, 8, 7), fill=frame)
     return tile
+
+
+def postprocess_i2i_hires(png_bytes: bytes) -> Image.Image:
+    """i2i 生图结果 → 64x64 高清像素瓦片（精致 16-bit JRPG 脸的主路径）。
+
+    与 16x16 链路的本质区别：不再把细节往 16 格压——识别生图自带的
+    16/32 设计网格按格取主色后，整数倍放大到 64（每格 4x4/2x2 硬边像素，
+    生成的漂亮脸**原样**落在 MC 方块头上）。键控仍仅限品红系背景。
+    """
+    from PIL import ImageEnhance
+
+    image = Image.open(io.BytesIO(png_bytes)).convert("RGB")
+    bg, share = _border_dominant_color(image)
+    has_background = share >= _KEY_MIN_BORDER_SHARE and _is_keyable_background(bg)
+    if has_background:
+        bbox = _content_bbox(image, bg)
+        if bbox is not None:
+            image = image.crop(bbox)
+    image = ImageEnhance.Contrast(image).enhance(1.12)
+    image = ImageEnhance.Color(image).enhance(1.15)
+    snapped = _snap_to_grid(image, TILE_SIZE) or _snap_to_grid(image, TILE_SIZE * 2)
+    if snapped is not None:
+        tile = snapped.resize((HIRES_TILE_SIZE, HIRES_TILE_SIZE), Image.NEAREST)
+    else:
+        # 回退：轻度量化（24 色，保更多层次）→ BOX 到 64
+        tile = image.quantize(colors=24, method=Image.Quantize.MEDIANCUT,
+                              dither=Image.Dither.NONE).convert("RGB") \
+            .resize((HIRES_TILE_SIZE, HIRES_TILE_SIZE), Image.BOX)
+    tile = tile.convert("RGBA")
+    if has_background:
+        opaque = _chroma_key(tile, bg)
+        if opaque < HIRES_TILE_SIZE * HIRES_TILE_SIZE * _KEY_MIN_CONTENT_SHARE:
+            raise ValueError(f"i2i 高清瓦片内容退化（有效像素 {opaque}），走降级链")
+        _fill_transparent_nearest(tile)
+    else:
+        tile.putalpha(255)
+    _purge_magenta_leaks(tile)
+    return tile
+
+
+def compose_atlas_hires(spec: dict, tiles: dict | None = None) -> Image.Image:
+    """512x512 高清 atlas：128 版确定性合成（身体色块/程序头面）整数倍放大保
+    MC 体素感，头部五面贴 64x64 高清瓦片（UV 归一化布局与 128 完全一致，
+    GLB 无需任何改动）。"""
+    base = compose_atlas(spec, tiles=None).resize(
+        (ATLAS_SIZE * HIRES_SCALE, ATLAS_SIZE * HIRES_SCALE), Image.NEAREST)
+    for region in ("head_front", "head_back", "head_left", "head_right", "head_top"):
+        tile = (tiles or {}).get(region)
+        if tile is None:
+            continue
+        x, y, w, h = _to_pil_rect(region)
+        base.paste(tile.convert("RGBA").resize(
+            (w * HIRES_SCALE, h * HIRES_SCALE), Image.NEAREST),
+            (x * HIRES_SCALE, y * HIRES_SCALE))
+    return base
 
 
 def compose_atlas(spec: dict, tiles: dict | None = None) -> Image.Image:
