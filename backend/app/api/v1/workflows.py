@@ -11,6 +11,8 @@ from typing import Literal
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 
+from app.security.meetmind_jwt import caller_user_id
+
 from app.packages.store import PackageNotFound
 
 router = APIRouter(prefix="/api/v1", tags=["mvp2-workflows"])
@@ -47,6 +49,7 @@ async def group_onboarding(
             content, photo.filename or "group.jpg", _parse_names(participant_names),
             expected_count=expected_count,
             confirm_participants=confirm_participants,
+            owner_id=caller_user_id(request),
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -97,6 +100,7 @@ def group_onboarding_confirm(request: Request, body: GroupConfirmRequest):
     try:
         return request.app.state.group_onboarding.confirm(
             body.group_id, [item.model_dump() for item in body.assignments],
+            owner_id=caller_user_id(request),
         )
     except ValueError as exc:
         detail = str(exc)

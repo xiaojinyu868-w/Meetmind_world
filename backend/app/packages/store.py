@@ -252,6 +252,7 @@ class PackageStore:
                     "confirmed": package["identity"]["confirmed"],
                     "deactivated": deactivated,
                     "name": package["identity"].get("name"),
+                    "owner_id": package.get("owner_id"),
                     "encounter_count": len(package["encounters"]),
                 }
             )

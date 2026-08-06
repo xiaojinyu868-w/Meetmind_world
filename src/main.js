@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { currentUser, people, relationships } from "./data/demoPeople.js";
+import { currentUser as baseCurrentUser, people, relationships } from "./data/demoPeople.js";
 import { personSignals } from "./data/demoSignals.js";
 import { AssetCatalog } from "./runtime/AssetCatalog.js";
 import { AssetStore } from "./runtime/AssetStore.js";
@@ -78,6 +78,7 @@ import {
 } from "./runtime/VisualProfiles.js";
 import { loadWorldSpec, publicUrl } from "./runtime/WorldSpec.js";
 import { createCafeShell } from "./ui/CafeShell.js";
+import { mountLoginPanel } from "./ui/LoginPanel.js";
 import { mountSceneInteraction } from "./ui/SceneInteraction.js";
 import { mountRoomPanel } from "./ui/group/RoomPanel.js";
 import { mountIntegrations, resolveMediaUrl } from "./bootstrap/integrations.js";
@@ -204,6 +205,8 @@ const integrations = mountIntegrations({
   onGroupPresenceHook: (participants, viewerId) => applyGroupPresence(participants, viewerId),
 });
 const api = integrations.api;
+// 微信登录（MeetMind 共享登录态）：未登录时提供扫码面板；登录后整页刷新生效
+mountLoginPanel();
 // v1 现场房间（ROADMAP 2.H.3 升级，docs/MVP2-BACKEND.md）：WS 有序事件流 + cursor
 // 重放 + 降级轮询；远端位置复用 v0 的 groupPresenceOverrides 渲染通道。
 // 后端无 v1（/api/v1/scenes/modules 不可达）时面板自动隐藏，v0 GroupPlay 不受影响
@@ -414,6 +417,41 @@ let hoverClientX = 0;
 let hoverClientY = 0;
 let hoverActive = false;
 let hoverBooth = null;
+
+// 登录态（MeetMind 共享 JWT，LOGIN-AND-OWNERSHIP）：有效的 MeetMind 登录会把
+//「我」从演示身份切换为真实用户（房间 actor / 包 owner / 世界归属过滤的锚点）
+const currentUser = { ...baseCurrentUser };
+
+async function hydrateAuthIdentity() {
+  const token = localStorage.getItem("meetmind_access_token");
+  if (!token) return;
+  try {
+    const controller = new AbortController();
+    window.setTimeout(() => controller.abort(), 4000);
+    const response = await fetch(`${import.meta.env.BASE_URL}api/v0/auth/me`, {
+      headers: { authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      if (response.status === 401) {
+        // 过期/无效 token：清掉并挂出登录面板（否则用户既进不来也看不到入口）
+        localStorage.removeItem("meetmind_access_token");
+        mountLoginPanel();
+      }
+      return;
+    }
+    const me = await response.json();
+    if (!me?.authenticated) return;
+    currentUser.id = me.user_id;
+    currentUser.name = me.name ?? currentUser.name;
+    currentUser.displayName = me.name ?? currentUser.displayName;
+    if (me.avatar) currentUser.portrait = me.avatar;
+    canvas.dataset.authUser = me.user_id;
+  } catch { /* 后端不可达：保持演示身份 */ }
+}
+
+// 壳创建前完成身份水合（intro/名册上的「我」就是登录用户）
+await hydrateAuthIdentity();
 
 const appShell = createCafeShell({
   root: document.querySelector("#ui-root"),

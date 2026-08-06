@@ -121,7 +121,8 @@ class GroupOnboardingService:
         return None
 
     def confirm(self, group_id: str, assignments: list[dict], *,
-                confirm_participants: bool = True) -> dict:
+                confirm_participants: bool = True,
+                owner_id: str | None = None) -> dict:
         """按用户确认的人脸-姓名指派批量建档；可选 impression 写第一印象推断。"""
         detection = self._load_detection(group_id)
         faces = detection.get("faces", [])
@@ -152,6 +153,7 @@ class GroupOnboardingService:
             package = self.store.create_draft_package(
                 person_id, _default_palette_for(person_id)
             )
+            package["owner_id"] = owner_id or "system"
             encounter = {
                 "encounter_id": f"enc_{group_id}_{index + 1}",
                 "time": now,
@@ -246,6 +248,7 @@ class GroupOnboardingService:
         *,
         expected_count: int = 0,
         confirm_participants: bool = True,
+        owner_id: str | None = None,
     ) -> dict:
         names = [str(name).strip()[:80] for name in participant_names if str(name).strip()]
         if len(names) > MAX_FACES:
@@ -268,4 +271,5 @@ class GroupOnboardingService:
             for index in range(count)
         ]
         return self.confirm(detection["group_id"], assignments,
-                            confirm_participants=confirm_participants)
+                            confirm_participants=confirm_participants,
+                            owner_id=owner_id)

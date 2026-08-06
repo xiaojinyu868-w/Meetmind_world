@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from app.agents.contracts import EventEnvelope
 from app.domain.rooms import RoomError, RoomService
 from app.realtime.protocol import STREAM_POLL_SECONDS, error_frame, event_frame
+from app.security.meetmind_jwt import caller_user_id
 
 router = APIRouter(prefix="/api/v1/rooms", tags=["rooms-v1"])
 
@@ -101,9 +102,31 @@ def join_room(room_id: str, body: JoinRoomInput, request: Request):
 @router.get("/{room_id}/snapshot")
 def room_snapshot(room_id: str, request: Request):
     try:
-        return _service(request.app).snapshot(room_id)
+        snapshot = _service(request.app).snapshot(room_id)
     except RoomError as exc:
         _raise_http(exc)
+    # 房间成员按归属过滤（LOGIN-AND-OWNERSHIP）：常驻居民 + 自己 + 本人
+    store = getattr(request.app.state, "store", None)
+    if store is None:
+        return snapshot  # 独立 RoomService 宿主（无 PackageStore）不过滤
+    caller = caller_user_id(request)
+    visible = {"system"} | ({caller} if caller else set())
+    owners = {p["person_id"]: p.get("owner_id") or "system"
+              for p in request.app.state.store.list_packages(include_deactivated=True)}
+
+    def member_visible(member_id: str) -> bool:
+        if member_id == caller or owners.get(member_id, "system") in visible:
+            return True
+        return caller is None and member_id == "person-self"  # 未登录开发模式
+
+    snapshot["members"] = [
+        member for member in snapshot["members"] if member_visible(member["member_id"])
+    ]
+    snapshot["agent_runtime"] = [
+        item for item in snapshot.get("agent_runtime", [])
+        if member_visible(item["agent_id"])
+    ]
+    return snapshot
 
 
 @router.post("/{room_id}/commands")

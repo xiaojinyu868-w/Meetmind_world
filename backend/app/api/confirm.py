@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 from app.packages.store import PackageNotFound
 from app.pipeline.person_builder import _default_palette_for
+from app.security.meetmind_jwt import caller_user_id
 from app.schemas.package_schema import (
     DEFAULT_PRIVACY,
     PRIVACY_LEVELS,
@@ -74,6 +75,7 @@ def confirm(request: Request, body: ConfirmRequest):
 
     encounter = {key: value for key, value in draft.items() if key != "identity"}
     package["encounters"].append(encounter)
+    package["owner_id"] = package.get("owner_id") or caller_user_id(request) or "system"
     photos = (encounter.get("facts") or {}).get("photos") or []
     if photos and not package["identity"].get("face_ref"):
         # 资料包内保留真实人脸指针（P-6）

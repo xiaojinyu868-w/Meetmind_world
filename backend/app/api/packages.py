@@ -18,6 +18,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 
 from app.packages.store import PackageNotFound
+from app.security.meetmind_jwt import caller_user_id
 
 router = APIRouter(prefix="/api/v0/packages", tags=["packages"])
 
@@ -28,7 +29,13 @@ class EncounterPrivacyUpdate(BaseModel):
 
 @router.get("")
 def list_packages(request: Request):
-    return {"packages": request.app.state.store.list_packages()}
+    """资料包列表按归属过滤（docs/LOGIN-AND-OWNERSHIP.md）：未登录只见
+    system 常驻居民；登录后 = system + 自己录入的。"""
+    caller = caller_user_id(request)
+    visible = {"system"} | ({caller} if caller else set())
+    packages = [pkg for pkg in request.app.state.store.list_packages()
+                if (pkg.get("owner_id") or "system") in visible]
+    return {"packages": packages}
 
 
 @router.get("/{person_id}")
@@ -38,6 +45,10 @@ def get_package(request: Request, person_id: str,
     try:
         package = store.load_package(person_id)
     except PackageNotFound:
+        raise HTTPException(status_code=404, detail=f"人物不存在：{person_id}")
+    caller = caller_user_id(request)
+    owner = package.get("owner_id") or "system"
+    if owner != "system" and owner != caller:
         raise HTTPException(status_code=404, detail=f"人物不存在：{person_id}")
     # FR-1.3：未确认身份不进 Agent 上下文（数据可靠性，与隐私过滤无关，保留）
     if viewer == "agent" and not package["identity"]["confirmed"]:

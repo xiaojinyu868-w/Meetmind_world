@@ -69,8 +69,15 @@ function mockUrl(fileName) {
   return publicUrl(`${MOCK_DIR}/${fileName}`);
 }
 
+/** MeetMind 共享登录态（LOGIN-AND-OWNERSHIP）：同域 localStorage token → Bearer。
+ *  真实后端请求统一带上；mock 静态文件附带无害。 */
+export function authHeaders() {
+  const token = globalThis.localStorage?.getItem("meetmind_access_token");
+  return token ? { authorization: `Bearer ${token}` } : {};
+}
+
 async function fetchJson(url) {
-  const response = await fetch(url);
+  const response = await fetch(url, { headers: authHeaders() });
   if (!response.ok) {
     throw new Error(`GET ${url} failed: HTTP ${response.status}`);
   }
@@ -111,7 +118,7 @@ async function fetchJsonLines(url) {
 async function postJson(path, body) {
   const response = await fetch(`${LIVE_BASE_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(body),
   });
   if (!response.ok) {
@@ -124,7 +131,7 @@ async function postJson(path, body) {
 async function postJsonWithDetail(path, body) {
   const response = await fetch(`${LIVE_BASE_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(body),
   });
   if (!response.ok) {
@@ -144,7 +151,7 @@ async function postJsonWithDetail(path, body) {
 async function patchJson(path, body) {
   const response = await fetch(`${LIVE_BASE_URL}${path}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(body),
   });
   if (!response.ok) {
@@ -156,7 +163,7 @@ async function patchJson(path, body) {
 async function postV1Json(path, body) {
   const response = await fetch(`${LIVE_V1_BASE_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(body),
   });
   if (!response.ok) {
@@ -290,7 +297,9 @@ export async function ingest(files, meta = {}) {
     form.append("device", meta.device);
     if (meta.note) form.append("note", meta.note);
     if (meta.place_hint) form.append("place_hint", meta.place_hint);
-    const response = await fetch(`${LIVE_BASE_URL}/ingest`, { method: "POST", body: form });
+    const response = await fetch(`${LIVE_BASE_URL}/ingest`, {
+      method: "POST", headers: authHeaders(), body: form,
+    });
     if (!response.ok) {
       throw new Error(`IF-1 ingest failed: HTTP ${response.status}`);
     }
@@ -318,7 +327,7 @@ export async function pipelineStream(inputId, onProgress, options = {}) {
   if (await useLiveMode()) {
     const response = await fetch(`${LIVE_BASE_URL}/pipeline`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream", ...authHeaders() },
       body: JSON.stringify({ input_id: inputId, mode: "stream" }),
     });
     if (!response.ok) {
@@ -439,7 +448,7 @@ export async function deactivatePackage(personId) {
     throw new Error("mock 资料包不支持注销");
   }
   const path = `/packages/${encodeURIComponent(personId)}`;
-  const response = await fetch(`${LIVE_BASE_URL}${path}`, { method: "DELETE" });
+  const response = await fetch(`${LIVE_BASE_URL}${path}`, { method: "DELETE", headers: authHeaders() });
   if (!response.ok) {
     let detail = "";
     try {

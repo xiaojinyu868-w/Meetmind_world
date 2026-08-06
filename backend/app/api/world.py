@@ -12,7 +12,32 @@
 
 from fastapi import APIRouter, Query, Request
 
+from app.security.meetmind_jwt import caller_user_id
+
 router = APIRouter(prefix="/api/v0/world", tags=["world"])
+
+
+def _visible_owners(request: Request) -> set[str]:
+    caller = caller_user_id(request)
+    return {"system"} | ({caller} if caller else set())
+
+
+def _filter_snapshot_by_owner(request: Request, snapshot: dict) -> dict:
+    """世界快照按归属过滤（LOGIN-AND-OWNERSHIP）：agent/booth module 的
+    person 归属不在 常驻居民+自己 集合里的不返回。"""
+    visible = _visible_owners(request)
+    owners = {p["person_id"]: p.get("owner_id") or "system"
+              for p in request.app.state.store.list_packages(include_deactivated=True)}
+    snapshot["agents"] = [
+        agent for agent in snapshot.get("agents", [])
+        if owners.get(agent["id"], "system") in visible
+    ]
+    snapshot["modules"] = [
+        module for module in snapshot.get("modules", [])
+        if module.get("type") != "booth"
+        or owners.get(module.get("person_id"), "system") in visible
+    ]
+    return snapshot
 
 
 @router.get("/snapshot")
@@ -23,10 +48,10 @@ def world_snapshot(request: Request, advance: int = 0,
         if advance:
             request.app.state.hall_runtime.tick(hall.snapshot())
             hall.step()
-        return hall.snapshot()
+        return _filter_snapshot_by_owner(request, hall.snapshot())
     cafe = request.app.state.world
     runtime = request.app.state.runtime
     if advance:
         runtime.tick(cafe.snapshot())
         cafe.step()
-    return cafe.snapshot()
+    return _filter_snapshot_by_owner(request, cafe.snapshot())

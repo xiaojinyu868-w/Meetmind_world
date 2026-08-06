@@ -173,9 +173,14 @@ export class RoomClient {
     // 15s 超时：慢网关/大回放不许把 start()/轮询永久挂起
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 15000);
+    const token = window.localStorage?.getItem("meetmind_access_token");
     try {
       const response = await fetch(`${this.baseUrl}/${path}`, {
-        headers: { accept: "application/json", "content-type": "application/json" },
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
         signal: controller.signal,
         ...options,
       });
