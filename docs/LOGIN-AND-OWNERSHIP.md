@@ -32,6 +32,11 @@
 
 - [x] 卡司像素形象管线与生成（build_cast_avatars.py，2026-08-06）
 - [x] 测试垃圾人物清理（注销 API + 房间成员联动）
-- [ ] JWT 互认中间件（FastAPI 侧）与本地用户表
-- [ ] packages owner_id 与按归属过滤世界快照/房间成员
-- [ ] 登录态下的轻引导流程接入
+- [x] JWT 互认中间件（FastAPI 侧）与本地用户表（2026-08-06：
+      `app/security/meetmind_jwt.py` 零依赖验签 + `/api/v0/auth/me` 自动补注册；
+      前端扫码面板同源复用主站带参二维码流程，token 落同域 localStorage）
+- [x] packages owner_id 与按归属过滤世界快照/房间成员（2026-08-06：
+      9 位存量人物 owner=system；列表/详情/hall/cafe/房间快照按
+      「system + 自己」过滤；新录入 owner=登录用户）
+- [ ] 登录态下的轻引导流程接入（登录成功后引导上传合照/相遇信息——
+      合照入场流程已存在，待做登录后引导串联）
