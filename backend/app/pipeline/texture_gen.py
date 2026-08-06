@@ -766,7 +766,7 @@ def postprocess_i2i_tile(png_bytes: bytes, *, anchor_eyes: bool = False) -> Imag
     降级链；无纯色背景（模型没听背景指令）时跳过裁剪/键控，整幅量化兜底。
     anchor_eyes：head_front 专用，深色特征锚定（眼睛必黑）。
     """
-    from PIL import ImageEnhance, ImageOps
+    from PIL import ImageEnhance
 
     image = Image.open(io.BytesIO(png_bytes)).convert("RGB")
     bg, share = _border_dominant_color(image)
@@ -775,9 +775,12 @@ def postprocess_i2i_tile(png_bytes: bytes, *, anchor_eyes: bool = False) -> Imag
         bbox = _content_bbox(image, bg)
         if bbox is not None:
             image = image.crop(bbox)
-    # 审美增强：生成图偏灰偏淡是常态，先拉对比再提饱和（量化前做，保住层次）
-    image = ImageOps.autocontrast(image, cutoff=1)
-    image = ImageEnhance.Color(image).enhance(1.3)
+    # 审美增强：生成图偏灰偏淡是常态，量化前提对比与饱和。
+    # 注意不能用 autocontrast——它逐通道归一化直方图，品红背景/暗部占比
+    # 不等会把黑发拉绿再拉蓝（2026-08-06 发色事故）；ImageEnhance.Contrast
+    # 绕均值等比缩放，色相关系不变，才是安全选项
+    image = ImageEnhance.Contrast(image).enhance(1.18)
+    image = ImageEnhance.Color(image).enhance(1.25)
     # 下采样：BOX 到 32（去 AA 噪点）→ 定色量化 10 色（锁平色、比 16 色更脆）
     # → NEAREST 到 16（保硬边特征：眼/镜框在 16px 下只有 1-2px，直接 BOX 到 16 会糊掉）
     image = image.resize((TILE_SIZE * 2, TILE_SIZE * 2), Image.BOX)
