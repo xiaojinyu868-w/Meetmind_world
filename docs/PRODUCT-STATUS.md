@@ -4,9 +4,9 @@
 
 - **Agent 位置/状态/会议**：v1 房间由 RoomConductor 驱动（入座/交谈/走位/超时散会），
   广场由 hall_runtime 驱动（有理由才串门）。不再是写死脚本。
-- **Agent 对话**：chat 模型已切 DashScope qwen3.7-plus（DeepSeek 402 余额不足，
-  2026-08-06），咖啡厅日常决策、串门对话、圆桌会议、PersonAgent 回复全部走真实
-  LLM；仅在调用失败时降级模板。
+- **Agent 对话**：chat 模型走百炼托管 `deepseek-v4-flash`（与 DeepSeek 官方同价，
+  官方账号 402 余额不足，2026-08-06），咖啡厅日常决策、串门对话、圆桌会议、
+  PersonAgent 回复全部走真实 LLM；仅在调用失败时降级模板。
 - **在场人数**：顶部「N Agent 在线」与头像墙跟随世界真实 Agent 集合。
 - **房间会议 409**：已修复（Agent 即时应邀 + stale meeting TTL 自动散会）。
 - **资料包/注销/去重提示**：真实 API + 软删除。

@@ -34,6 +34,13 @@ from app.harness.permissions.guard import DEFAULT_GUARD
 logger = logging.getLogger(__name__)
 
 DECISION_ACTIONS = ("move", "visit", "sit", "talk")
+# LLM 输出动作名的同义词归一表（小写后查表；未命中视为未知动作丢弃）
+DECISION_ACTION_ALIASES = {
+    "move": "move", "walk": "move", "wander": "move", "stroll": "move",
+    "visit": "visit",
+    "sit": "sit", "seat": "sit", "sitdown": "sit", "sit-down": "sit",
+    "talk": "talk", "chat": "talk", "converse": "talk",
+}
 TALK_DISTANCE = 2.5        # 触发交谈的最大距离
 TALK_COOLDOWN_TICKS = 3    # 同一 Agent 两次交谈的最小间隔（避免演出感过重）
 VISIT_STEP = 0.8           # visit 单步接近距离
@@ -279,8 +286,11 @@ class AgentRuntime:
         for item in data["actions"]:
             if not isinstance(item, dict):
                 continue
-            agent_id, action, target = item.get("agent_id"), item.get("action"), item.get("target")
-            if agent_id not in idle_ids or action not in DECISION_ACTIONS:
+            agent_id, target = item.get("agent_id"), item.get("target")
+            # 同义词归一：模型常输出 walk/chat/seat 等自然语言近义词（deepseek-v4-flash
+            # 实测），不归一就白白丢弃有效决策
+            action = DECISION_ACTION_ALIASES.get(str(item.get("action") or "").strip().lower())
+            if agent_id not in idle_ids or action is None:
                 logger.warning("丢弃越权/未知决策条目：%r", item)
                 continue
             if action in ("visit", "talk") and target not in idle_ids:

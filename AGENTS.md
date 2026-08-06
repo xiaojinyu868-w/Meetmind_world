@@ -14,8 +14,9 @@
   （127.0.0.1:8000，日志 `/var/log/echoworld-uvicorn.log`）→
   `rm -rf /var/www/echoworld && cp -a dist /var/www/echoworld`。
 - 后端测试：`cd backend && PHYSICAL_AI_PACKAGE_SCHEMA="" .venv/bin/python -m pytest tests/ -q`。
-- `.env` 不进 git：线上后端读 `/root/meetmind_wt_main/.env`（chat 已切 DashScope
-  qwen3.7-plus；DeepSeek 402 余额不足，恢复后改回 CHAT_* 即可）。
+- `.env` 不进 git：线上后端读 `/root/meetmind_wt_main/.env`（chat 已切百炼托管
+  `deepseek-v4-flash`——与 DeepSeek 官方同价 1元/2元 每百万 Token，比 qwen3.7-plus
+  便宜一半以上且更快；DeepSeek 官方 402 余额不足，恢复后改回 CHAT_* 即可）。
 - 梳理文档：`docs/AGENT-RUNTIME.md`（Agent 运行机制）、`docs/PRODUCT-STATUS.md`
   （Mock/未实现清单）——改动涉及这些结论时同步更新。
 
