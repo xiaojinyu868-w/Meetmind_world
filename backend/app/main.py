@@ -33,7 +33,7 @@ from app.agents.contracts import ContextFact
 from app.agents.tools import EventSummaryTool, MemoryQueryTool, ToolRegistry
 from app.application import CommandValidator
 from app.api import confirm as confirm_api
-from app.api import admin, agents as agents_api, experience, group, ingest, media, packages, physical_ai, pipeline, signals, search as search_api
+from app.api import admin, agents as agents_api, dev_lab, experience, group, ingest, media, packages, physical_ai, pipeline, signals, search as search_api
 from app.api import world as world_api
 from app.group.service import GroupSessionService
 from app.api.v1 import rooms as rooms_v1_api
@@ -307,6 +307,7 @@ def create_app() -> FastAPI:
     app.include_router(workflows_v1_api.router)
     app.include_router(scenes_v1_api.router)
     app.include_router(physical_ai.router)
+    app.include_router(dev_lab.router)
     return app
 
 

@@ -554,10 +554,12 @@ _I2I_VIEWS = {
                   "person's hairstyle, hair color, glasses and face shape)",
     "head_back": "the BACK of the same person's head, same hairstyle and hair "
                  "color, hair only, no face features",
-    "head_left": "the LEFT side profile of the same person's head, same "
-                 "hairstyle and hair color, show the ear",
-    "head_right": "the RIGHT side profile of the same person's head, same "
-                  "hairstyle and hair color, show the ear",
+    "head_left": "the flat LEFT side of the same person's cube head: mostly "
+                 "hair and one ear, strictly no eyes, no nose, no mouth, "
+                 "no profile face",
+    "head_right": "the flat RIGHT side of the same person's cube head: mostly "
+                  "hair and one ear, strictly no eyes, no nose, no mouth, "
+                  "no profile face",
     "head_top": "the TOP of the same person's head viewed from directly above, "
                 "same hair color and texture, hair whorl only, no face",
 }
@@ -569,18 +571,31 @@ _KEY_MIN_CONTENT_SHARE = 0.3
 
 
 def build_i2i_prompt(view: str) -> str:
-    """i2i 像素瓦片提示词：参考人脸 + 视角 + 像素风锁定 + 可键控纯色背景。"""
+    """i2i 像素瓦片提示词：参考人脸 + 视角 + 像素风锁定 + 可键控纯色背景。
+
+    审美锚点（2026-08-06 视觉 QA 后的重写）：16x16 的好看 = 大而深的眼睛、
+    干净的发形剪影、两档平色皮肤、高对比高饱和——提示词必须显式锁定这些
+    结构，否则模型输出软糊的"印象派"脸。"""
     if view not in _I2I_VIEWS:
         raise ValueError(f"未知 i2i 视角：{view!r}（支持 {sorted(_I2I_VIEWS)}）")
-    return (
-        "Take the person in the reference photo and draw "
-        f"{_I2I_VIEWS[view]}, as a single 16x16 retro pixel-art game skin "
-        "texture tile for a Minecraft-style voxel character head. Drawn on an "
-        "exact 16x16 pixel grid: chunky visible pixels, at most 16 flat colors, "
-        "strictly no anti-aliasing, no gradients, no shading, no outline glow, "
+    aesthetic = (
+        " Aesthetic rules for a beautiful result: two big bold near-black square "
+        "eyes (each 2x3 pixels) with clear separation, readable at a glance; "
+        "skin in exactly two flat tones (light base + one warm shadow); hair as "
+        "one bold clean silhouette mass with a crisp edge; high contrast, rich "
+        "but flat colors, kawaii Minecraft-skin cuteness. Absolutely no soft "
+        "blending, no painterly blur, no photographic detail.")
+    rules = (
+        "Drawn on an exact 16x16 pixel grid: chunky visible pixels, at most 10 "
+        "flat colors, strictly no anti-aliasing, no gradients, no shading glow, "
         "no text, no logo, no watermark. The head is centered and fills most of "
         "the frame, isolated on a solid flat magenta background (#FF00FF) with "
         "no shadow and no border.")
+    base = (
+        "Take the person in the reference photo and draw "
+        f"{_I2I_VIEWS[view]}, as a single 16x16 retro pixel-art game skin "
+        "texture tile for a Minecraft-style voxel character head. ")
+    return base + (aesthetic if view == "head_front" else "") + rules
 
 
 def _border_dominant_color(image: Image.Image) -> tuple[tuple, float]:
@@ -726,13 +741,33 @@ def _fill_transparent_nearest(tile: Image.Image) -> None:
             pixels[x, y] = (fallback[0], fallback[1], fallback[2], 255)
 
 
-def postprocess_i2i_tile(png_bytes: bytes) -> Image.Image:
-    """i2i 生图结果 → 16x16 像素瓦片：背景检测 → 内容裁剪 → BOX 重采样 →
-    定色量化 → 色度键控 → 最近邻填充（输出完全不透明、无混合色）。
+def _anchor_dark_features(tile: Image.Image) -> None:
+    """深色特征锚定（仅 head_front）：把面部中间带最暗 ~4% 像素压到深棕黑，
+    保证眼睛在任何生成结果下都可读——16x16 的"好看"首先是眼睛要黑要亮。
+    只动中间带（6..11 行），不影响头发与轮廓。"""
+    band = [(x, y) for y in range(6, 12) for x in range(tile.width)]
+    luminance = sorted(
+        ((sum(tile.getpixel((x, y))[:3]), x, y) for x, y in band),
+        key=lambda item: item[0],
+    )
+    if not luminance:
+        return
+    count = max(4, int(len(luminance) * 0.04))
+    dark = (43, 34, 32, 255)
+    for _lum, x, y in luminance[:count]:
+        tile.putpixel((x, y), dark)
+
+
+def postprocess_i2i_tile(png_bytes: bytes, *, anchor_eyes: bool = False) -> Image.Image:
+    """i2i 生图结果 → 16x16 像素瓦片：背景检测 → 内容裁剪 → 对比/饱和增强 →
+    BOX 重采样 → 定色量化 → 色度键控 → 最近邻填充（输出完全不透明、无混合色）。
 
     退化输出（键控后有效像素过少，如整幅背景）抛 ValueError，由调用方走
     降级链；无纯色背景（模型没听背景指令）时跳过裁剪/键控，整幅量化兜底。
+    anchor_eyes：head_front 专用，深色特征锚定（眼睛必黑）。
     """
+    from PIL import ImageEnhance, ImageOps
+
     image = Image.open(io.BytesIO(png_bytes)).convert("RGB")
     bg, share = _border_dominant_color(image)
     has_background = share >= _KEY_MIN_BORDER_SHARE
@@ -740,10 +775,13 @@ def postprocess_i2i_tile(png_bytes: bytes) -> Image.Image:
         bbox = _content_bbox(image, bg)
         if bbox is not None:
             image = image.crop(bbox)
-    # 下采样：BOX 到 32（去 AA 噪点）→ 定色量化（锁平色）→ NEAREST 到 16
-    # （保硬边特征：眼/镜框在 16px 下只有 1-2px，直接 BOX 到 16 会糊掉）
+    # 审美增强：生成图偏灰偏淡是常态，先拉对比再提饱和（量化前做，保住层次）
+    image = ImageOps.autocontrast(image, cutoff=1)
+    image = ImageEnhance.Color(image).enhance(1.3)
+    # 下采样：BOX 到 32（去 AA 噪点）→ 定色量化 10 色（锁平色、比 16 色更脆）
+    # → NEAREST 到 16（保硬边特征：眼/镜框在 16px 下只有 1-2px，直接 BOX 到 16 会糊掉）
     image = image.resize((TILE_SIZE * 2, TILE_SIZE * 2), Image.BOX)
-    image = image.quantize(colors=_TILE_COLORS, method=Image.Quantize.MEDIANCUT,
+    image = image.quantize(colors=10, method=Image.Quantize.MEDIANCUT,
                            dither=Image.Dither.NONE).convert("RGB")
     tile = image.resize((TILE_SIZE, TILE_SIZE), Image.NEAREST).convert("RGBA")
     if has_background:
@@ -753,6 +791,8 @@ def postprocess_i2i_tile(png_bytes: bytes) -> Image.Image:
         _fill_transparent_nearest(tile)
     else:
         tile.putalpha(255)
+    if anchor_eyes:
+        _anchor_dark_features(tile)
     return tile
 
 
@@ -783,8 +823,10 @@ def generate_tiles(spec: dict, image=None, cache_dir=None,
     plan: list[tuple[str, str, bytes | None, object]] = []
     if reference:
         for view, _desc in _I2I_VIEWS.items():
-            plan.append((view, build_i2i_prompt(view), reference,
-                         postprocess_i2i_tile))
+            # head_front 额外做深色特征锚定（眼睛必黑，审美锚点）
+            postprocess = (lambda b: postprocess_i2i_tile(b, anchor_eyes=True)) \
+                if view == "head_front" else postprocess_i2i_tile
+            plan.append((view, build_i2i_prompt(view), reference, postprocess))
     for name, prompt in build_tile_prompts(spec).items():
         plan.append((name, prompt, None, postprocess_tile))
 
