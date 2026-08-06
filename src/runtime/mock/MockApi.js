@@ -556,10 +556,10 @@ export async function getWorldBrief() {
   return {
     schema: "echo-world-brief.v1",
     date: new Date().toISOString().slice(0, 10),
-    headline: events[0]?.summary ?? "集市今天安静开门",
+    headline: events[0]?.summary ?? "广场今天安静开门",
     summary: events.length
       ? events.slice(0, 3).map((event) => event.summary).join("；")
-      : "还没有新事件。走近一个摊位，或邀请一位朋友到圆桌坐下。",
+      : "还没有新事件。走近广场上的一位朋友，或邀请一位朋友到圆桌坐下。",
     event_count: events.length,
     events,
   };

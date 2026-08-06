@@ -8,6 +8,8 @@ function commandId(prefix) {
 }
 
 export class RoomClient {
+  static POLL_INTERVAL_MS = 6000;
+
   constructor({ roomId = "echoworld-cafe", actor, members = [], baseUrl = `${import.meta.env.BASE_URL}api/v1` } = {}) {
     this.roomId = roomId;
     this.actor = actor;
@@ -18,6 +20,7 @@ export class RoomClient {
     this.socket = null;
     this.running = false;
     this.reconnectTimer = null;
+    this.pollTimer = null;
     this.eventCallbacks = new Set();
     this.snapshotCallbacks = new Set();
     this.seenEventIds = new Set();
@@ -40,11 +43,17 @@ export class RoomClient {
     await this.#refreshSnapshot();
     await this.#replay();
     this.#connect();
+    // 周期性快照轮询：房间生活指挥（入座/走位/会议）的权威刷新通道；
+    // WS 事件负责即时性，轮询负责最终一致（WS 断开/事件丢失时世界仍然生动）
+    this.pollTimer = window.setInterval(() => {
+      if (this.running) this.#refreshSnapshot().catch(() => {});
+    }, RoomClient.POLL_INTERVAL_MS);
   }
 
   stop() {
     this.running = false;
     window.clearTimeout(this.reconnectTimer);
+    window.clearInterval(this.pollTimer);
     this.socket?.close();
     this.socket = null;
   }

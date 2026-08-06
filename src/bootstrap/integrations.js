@@ -351,7 +351,7 @@ export function mountIntegrations({
       refreshPackages().catch((error) => {
         console.warn("[integrations] 合照入场后刷新资料包列表失败", error);
       });
-      notifyToast(`${count} 位朋友已进入集市${names?.length ? `：${names.join("、")}` : ""}`);
+      notifyToast(`${count} 位朋友已进入广场${names?.length ? `：${names.join("、")}` : ""}`);
     },
     // 成功屏 CTA：不在大厅时整页跳集市（大厅内则下一轮快照自动带出新展位，无需刷新）
     onNavigateHall: currentWorld === "hall" ? null : () => navigateToWorld("hall"),
@@ -384,17 +384,17 @@ export function mountIntegrations({
   fab.addEventListener("click", () => flow.open());
   mountRoot.append(fab);
 
-  // 世界切换导航：大厅 →「去咖啡厅坐坐」，咖啡厅 →「回到我的集市」（body.dataset.world 由 main.js 写入）
+  // 世界切换导航：大厅 →「去咖啡厅坐坐」，咖啡厅 →「回到广场」（body.dataset.world 由 main.js 写入）
   const navTarget = currentWorld === "hall" ? "cafe" : "hall";
   const navToCafe = navTarget === "cafe";
   const navFab = document.createElement("button");
   navFab.className = "record-fab nav-world-fab";
   navFab.type = "button";
-  navFab.setAttribute("aria-label", navToCafe ? "去咖啡厅坐坐" : "回到我的集市");
+  navFab.setAttribute("aria-label", navToCafe ? "去咖啡厅坐坐" : "回到广场");
   navFab.innerHTML =
     `<i data-lucide="${navToCafe ? "coffee" : "store"}"></i>` +
-    `<span><small>${navToCafe ? "Echo Cafe" : "Echo 集市"}</small>` +
-    `<strong>${navToCafe ? "去咖啡厅坐坐" : "回到我的集市"}</strong></span>`;
+    `<span><small>${navToCafe ? "Echo Cafe" : "Echo 广场"}</small>` +
+    `<strong>${navToCafe ? "去咖啡厅坐坐" : "回到广场"}</strong></span>`;
   navFab.addEventListener("click", () => navigateToWorld(navTarget));
   mountRoot.append(navFab);
 
@@ -409,13 +409,13 @@ export function mountIntegrations({
   onboardFab.addEventListener("click", () => onboardingFlow.open());
   mountRoot.append(onboardFab);
 
-  // 空集市引导：大厅快照同步后仍无展位时，提示合照入场（一次性）
+  // 空广场引导：大厅快照同步后仍无展位时，提示合照入场（一次性）
   if (currentWorld === "hall") {
     window.setTimeout(() => {
       const boothCount = document.querySelector("#world")?.dataset.boothCount;
       if (boothCount === "0") {
         onboardFab.classList.add("is-suggested");
-        notifyToast("集市还空着——用一张合照让大家一起入场");
+        notifyToast("广场还空着——用一张合照让大家一起入场");
       }
     }, 5000);
   }

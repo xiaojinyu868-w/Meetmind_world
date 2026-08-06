@@ -314,20 +314,20 @@ export function mountOnboardingFlow(container, api, opts = {}) {
         <span class="ob-success-halo"></span>
         <span class="ob-success-halo is-late"></span>
         <span class="ob-success-badge">${icon("party-popper")}</span>
-        <h2>${participants.length} 位朋友已进入集市</h2>
+        <h2>${participants.length} 位朋友已进入广场</h2>
         <div class="ob-chip-row">
           ${names.map((name) => `<span class="ob-chip">${icon("check")}${escapeHtml(name)}</span>`).join("")}
         </div>
         <p>${queued > 0
           ? (queued === participants.length
-            ? "集市展位暂时满了，TA 们的展位排队中，扩容后自动上墙"
-            : `大部分展位已经搭好；${queued} 位朋友的展位排队中，扩容后自动上墙`)
-          : "TA 们的展位已经搭好，走进大厅就能看到"}</p>
+            ? "广场暂时坐满了，TA 们排队中，扩容后自动入场"
+            : `大部分朋友已经入场；${queued} 位朋友在排队中，扩容后自动入场`)
+          : "TA 们已经在广场上了，走进大厅就能看到"}</p>
         ${duplicateNames.length
           ? `<p class="ob-dup-hint">${icon("info")}<span>${duplicateNames.map((n) => `「${escapeHtml(n)}」`).join("")}与世界里已有的人物同名——如果不是同一个人就没事；如果录重了，打开 TA 的资料包可以注销多余的一个。</span></p>`
           : ""}
         <button class="ob-button-primary" type="button" data-action="finish">
-          ${onNavigateHall ? `去集市看看${icon("sparkles")}` : "太好了"}
+          ${onNavigateHall ? `去广场看看${icon("sparkles")}` : "太好了"}
         </button>
       </div>`;
   }

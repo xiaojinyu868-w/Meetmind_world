@@ -462,24 +462,24 @@ export function createCafeShell({
   const activeSpeechIds = new Set();
   const avatarImg = createAvatarRenderer(resolveMediaUrl);
   defaultAvatarImg = avatarImg;
-  // HUD 文案按世界联动（hall=集市 / cafe=咖啡厅 / field=关系场域）
+  // HUD 文案按世界联动（hall=广场 / cafe=咖啡厅 / field=关系场域）
   const worldLabel = world === "hall"
-    ? "Echo 集市"
+    ? "Echo 广场"
     : world === "field"
       ? `${fieldPerson?.name ?? "TA"} · 关系场域`
       : "Echo Cafe";
   const worldStatusLine = world === "hall"
-    ? "展位陈列中 · 欢迎串门"
+    ? "篝火不灭 · 欢迎来坐"
     : world === "field"
       ? "共同记忆正在构成环境"
       : "熟人交流空间 · 今日播报已开启";
-  const introTitle = world === "field" ? "关系场域" : world === "cafe" ? "Echo Cafe" : "Echo 集市";
+  const introTitle = world === "field" ? "关系场域" : world === "cafe" ? "Echo Cafe" : "Echo 广场";
   const introDescription = world === "field"
     ? `这里表达的是你与${fieldPerson?.name ?? "TA"}相处时留下的感觉，而不是对现实的复刻。`
     : world === "cafe"
       ? "坐到桌边，邀请熟人喝杯咖啡，或在圆桌展开一次有上下文的交流。"
-      : "这是你的关系集市：你认识的人，都在这里有了自己的展位。";
-  const introAction = world === "field" ? "进入这段关系" : world === "cafe" ? "推门进咖啡厅" : "走进集市";
+      : "这是你的关系广场：你认识的人，都在这里生活、走动、彼此交谈。";
+  const introAction = world === "field" ? "进入这段关系" : world === "cafe" ? "推门进咖啡厅" : "走进广场";
   const expressionTimers = new Map();
   const personExpressions = new Map();
   const personSignals = new Map();
@@ -511,7 +511,7 @@ export function createCafeShell({
               activeCharacterVariant,
               context: "intro",
             }) : ""}
-            <div class="intro-live"><span></span>${world === "field" ? "关系场域已生成" : world === "cafe" ? "熟人空间已开门" : "6 个 Agent 已在展位就位"}</div>
+            <div class="intro-live"><span></span>${world === "field" ? "关系场域已生成" : world === "cafe" ? "熟人空间已开门" : "广场上的 TA 们正在生活"}</div>
           </div>
         </header>
         <div class="intro-copy">
@@ -525,7 +525,7 @@ export function createCafeShell({
         </button>
         <footer class="intro-footnote">
           <span>ECHOWORLD / PRIVATE AGENT SPACE</span>
-          <span>${world === "field" ? "01 RELATION · 04 MEMORIES · REGENERABLE" : "06 PEOPLE · 06 BOOTHS · 01 CAFE"}</span>
+          <span>${world === "field" ? "01 RELATION · SHARED MEMORIES · REGENERABLE" : "RELATIONSHIP PLAZA · ECHO CAFE · FIELD"}</span>
         </footer>
       </section>
 
@@ -536,10 +536,10 @@ export function createCafeShell({
             <span><small>当前位置</small><strong>${worldLabel}</strong></span>
           </button>
           <div class="cafe-presence">
-            <div class="presence-faces">
+            <div class="presence-faces" id="presence-faces">
               ${(world === "field" && fieldPerson ? [fieldPerson] : people).map((person) => avatarImg(person, { title: person.name })).join("")}
             </div>
-            <span><strong>${world === "field" ? 1 : people.length}</strong> Agent 在线</span>
+            <span><strong id="presence-count">${world === "field" ? 1 : people.length}</strong> Agent 在线</span>
           </div>
           <button class="glass-control map-control" type="button" data-action="open-map">
             ${icon("network")}
@@ -570,7 +570,7 @@ export function createCafeShell({
         <header class="map-header">
           <button class="glass-icon-button" type="button" data-action="back-cafe" title="返回咖啡厅" aria-label="返回咖啡厅">${icon("arrow-left")}</button>
           <div><small>EchoWorld</small><strong>人物关系 Map</strong></div>
-          <span>6 PEOPLE / 12 CONNECTIONS</span>
+          <span>${people.length} PEOPLE / ${relationships.length} CONNECTIONS</span>
         </header>
         <div id="cafe-relationship-graph" class="cafe-relationship-graph"></div>
         <aside id="map-inspector" class="map-inspector" aria-label="人物资料" aria-hidden="true"></aside>
@@ -1168,6 +1168,19 @@ export function createCafeShell({
       agentStates.set(state.personId, state);
       if (selectedWorldPerson?.id === state.personId) renderWorldInspector();
       if (selectedMapPerson?.id === state.personId) renderMapInspector();
+    },
+    // 世界在场人数随快照/房间动态更新（头像墙最多 7 张，超出折叠为 +N）
+    updatePresence(entries = []) {
+      if (world === "field") return;
+      const faces = root.querySelector("#presence-faces");
+      const count = root.querySelector("#presence-count");
+      if (count) count.textContent = String(entries.length);
+      if (!faces) return;
+      const shown = entries.slice(0, 7);
+      faces.innerHTML = shown.map((person) => avatarImg(person, { title: person.name })).join("")
+        + (entries.length > shown.length
+          ? `<span class="presence-more" title="${escapeHtml(entries.slice(7).map((person) => person.name).join("、"))}">+${entries.length - shown.length}</span>`
+          : "");
     },
     setRoundtableNearby() {
       // 已退役（2026-08-04）：旧的 #roundtable-prompt 悬浮入口由场景热点

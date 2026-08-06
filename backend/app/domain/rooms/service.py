@@ -434,7 +434,7 @@ class RoomService:
             "responses": {actor_id: "accepted"},
         }
         room.invitations[invitation_id] = invitation
-        return [
+        events = [
             self._append_event(
                 room,
                 "meeting.invited",
@@ -443,6 +443,14 @@ class RoomService:
                 command_id=command_id,
             )
         ]
+        # Agent 成员即时应邀（MVP 产品决策：会议由用户发起，应邀不应阻塞在
+        # 自治心跳上；人类成员仍需自己 respond）。应邀即走向圆桌站位环，
+        # 与 _respond_meeting 的 accept 分支完全同源。
+        for member_id in invitation["participant_ids"]:
+            if member_id == actor_id or member_id not in room.agent_runtime:
+                continue
+            events.extend(self._accept_invitation(room, invitation, member_id, command_id))
+        return events
 
     def _respond_meeting(
         self, room: RoomState, actor_id: str, command_id: str, payload: dict[str, Any]
@@ -459,7 +467,28 @@ class RoomService:
         invitation["responses"][actor_id] = response
         if response == "declined":
             invitation["status"] = "declined"
-        elif all(
+            return [
+                self._append_event(
+                    room,
+                    "meeting.invitation-responded",
+                    {"invitation_id": invitation_id, "member_id": actor_id,
+                     "response": response, "status": invitation["status"]},
+                    actor_id=actor_id,
+                    command_id=command_id,
+                )
+            ]
+        return self._accept_invitation(room, invitation, actor_id, command_id)
+
+    def _accept_invitation(
+        self, room: RoomState, invitation: dict[str, Any], actor_id: str, command_id: str
+    ) -> list[dict[str, Any]]:
+        """应邀的统一结算：记录响应、全员接受后推进状态、应邀者走向圆桌站位环。
+
+        人类成员经 meeting.respond 到达这里；Agent 成员由 _invite_meeting 即时
+        自动应邀时也走同一条路径（幂等：重复 accept 只刷新站位）。"""
+        invitation_id = invitation["invitation_id"]
+        invitation["responses"][actor_id] = "accepted"
+        if all(
             invitation["responses"].get(member_id) == "accepted"
             for member_id in invitation["participant_ids"]
         ):
@@ -468,12 +497,12 @@ class RoomService:
                 room,
                 "meeting.invitation-responded",
                 {"invitation_id": invitation_id, "member_id": actor_id,
-                 "response": response, "status": invitation["status"]},
+                 "response": "accepted", "status": invitation["status"]},
                 actor_id=actor_id,
                 command_id=command_id,
             )
         events = [response_event]
-        if response == "accepted" and actor_id != invitation["organizer_id"]:
+        if actor_id != invitation["organizer_id"]:
             hotspot = room.hotspots[invitation["hotspot_id"]]
             participant_index = invitation["participant_ids"].index(actor_id)
             angle = math.tau * participant_index / len(invitation["participant_ids"])
@@ -553,6 +582,71 @@ class RoomService:
         requested_id = payload.get("meeting_id")
         if requested_id is not None and requested_id != meeting["meeting_id"]:
             raise RoomError("meeting_not_found", "Active meeting id does not match")
+        return self._finish_meeting(room, actor_id, command_id)
+
+    def system_end_meeting(self, room_id: str, *, reason: str = "system") -> dict[str, Any] | None:
+        """系统侧散会（conductor 超时清理等）：绕过 organizer 校验，事件演员记为
+        system.conductor。无进行中会议返回 None。"""
+        with self._lock:
+            room = self._room(room_id)
+            if room.active_meeting is None:
+                return None
+            events = self._finish_meeting(room, "system.conductor", f"system-end-{room.sequence + 1}")
+            self._persist(room)
+            return {"ended": True, "reason": reason, "events": events}
+
+    def apply_conductor_plan(self, room_id: str, plan: dict[str, Any]) -> None:
+        """应用生活指挥（RoomConductor）的一拍计划：会议时间戳/散会、Agent 走位
+        与状态。整个计划在锁内原子落地并只持久化一次；机制在此，策略在
+        app/agents/room_conductor.py。"""
+        with self._lock:
+            room = self._room(room_id)
+            meeting = room.active_meeting
+            started_at = plan.get("meeting_started_at")
+            if meeting is not None and started_at is not None and "started_at" not in meeting:
+                meeting["started_at"] = float(started_at)
+            if plan.get("end_meeting") and room.active_meeting is not None:
+                self._finish_meeting(room, "system.conductor", f"conductor-end-{room.sequence + 1}")
+            statuses = plan.get("statuses") or {}
+            for member_id, position in (plan.get("moves") or {}).items():
+                member = room.members.get(member_id)
+                if member is None:
+                    continue
+                x, z = float(position["x"]), float(position["z"])
+                if math.hypot(member.x - x, member.z - z) < 1e-6:
+                    continue
+                member.x, member.z = x, z
+                self._append_event(
+                    room,
+                    "member.moved",
+                    {"member_id": member_id,
+                     "position": {"x": x, "z": z, "yaw": float(position.get("yaw", 0.0))},
+                     "reason": "conductor"},
+                    actor_id="system.conductor", subject_id=member_id,
+                    command_id=f"conductor-move-{room.sequence + 1}-{member_id}",
+                )
+            for member_id, status in statuses.items():
+                runtime = room.agent_runtime.get(member_id)
+                if runtime is None:
+                    continue
+                runtime.update({
+                    "status": status["status"],
+                    "last_action": status.get("action"),
+                    "last_target_id": status.get("target_id"),
+                    "last_sequence": room.sequence,
+                })
+                if "yaw" in status:
+                    runtime["yaw"] = float(status["yaw"])
+                if status.get("seat"):
+                    runtime["seat"] = dict(status["seat"])
+                else:
+                    runtime.pop("seat", None)
+            self._persist(room)
+
+    def _finish_meeting(
+        self, room: RoomState, actor_id: str, command_id: str
+    ) -> list[dict[str, Any]]:
+        meeting = room.active_meeting
         ended = copy.deepcopy(meeting)
         ended["status"] = "ended"
         ended_event = self._append_event(

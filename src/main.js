@@ -327,11 +327,18 @@ const targetQuaternion = new THREE.Quaternion();
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 const FIELD_COMPANION_SPEED = 1.8;
 // 名牌行为状态行文案（快照/本地调度 agent.state → 名牌 caption）
-const AGENT_ACTIVITY_LABELS = Object.freeze({
-  walking: "串门途中",
-  talking: "交谈中",
-  "at-booth": "守着摊位",
+const HALL_ACTIVITY_LABELS = Object.freeze({
+  walking: "在广场走动",
+  talking: "与人交谈",
+  "at-booth": "在广场上",
   seated: "坐着休息",
+  "in-meeting": "圆桌会议中",
+});
+const AGENT_ACTIVITY_LABELS = Object.freeze({
+  walking: "走动中",
+  talking: "与人交谈",
+  "at-booth": "在广场上",
+  seated: "在桌边小坐",
   "in-meeting": "圆桌会议中",
 });
 const FIELD_COMPANION_SIDE_DISTANCE = 1.35;
@@ -1369,10 +1376,10 @@ function rebuildSceneHotspots() {
         ),
         personId: record.personId,
         eyebrow: "人 ↔ 共同课题 ↔ 人",
-        title: `${record.displayName ?? nameOf(record.personId)}的摊位`,
-        detail: record.displayHeadline || "从这个摊位的照片、作品和共同经历出发，看看你们之间还有什么值得继续。",
-        prompt: `看看${record.displayName ?? nameOf(record.personId)}的摊位`,
-        icon: "store",
+        title: `${record.displayName ?? nameOf(record.personId)}`,
+        detail: record.displayHeadline || "从照片、作品和共同经历出发，看看你们之间还有什么值得继续。",
+        prompt: `走近${record.displayName ?? nameOf(record.personId)}`,
+        icon: "user",
         actions: [
           { id: "chat-person", label: "和 TA 聊聊", description: "与 TA 的数字分身对话（基于授权信息）", icon: "message-circle" },
           { id: "open-package", label: "翻开资料包", description: "回到相遇事实与现场记录", icon: "eye" },
@@ -1412,11 +1419,11 @@ function rebuildSceneHotspots() {
       z: 4.3,
       radius: 1.6,
       eyebrow: "回到室外",
-      title: "推开木门回到集市",
-      detail: "回到篝火广场与市集街道，去看看摊位和现场房间。",
-      prompt: "回到集市",
+      title: "推开木门回到广场",
+      detail: "回到篝火广场，去看看那里的朋友和现场房间。",
+      prompt: "回到广场",
       icon: "door-open",
-      actions: [{ id: "exit-cafe", label: "回到集市", description: "返回小镇广场", icon: "door-open" }],
+      actions: [{ id: "exit-cafe", label: "回到广场", description: "返回小镇广场", icon: "door-open" }],
     },
     {
       id: "cafe-roundtable",
@@ -1427,7 +1434,7 @@ function rebuildSceneHotspots() {
       eyebrow: "中央六人圆桌",
       title: pendingSceneInviteId ? `邀请${nameOf(pendingSceneInviteId)}入座` : "发起一次圆桌会议",
       detail: pendingSceneInviteId
-        ? `你从集市带来了给${nameOf(pendingSceneInviteId)}的邀请。还可以继续邀请其他人。`
+        ? `你从广场带来了给${nameOf(pendingSceneInviteId)}的邀请。还可以继续邀请其他人。`
         : "围绕最近的变化、下一步或共同记忆，邀请最多五个人一起坐下。",
       prompt: pendingSceneInviteId ? `带${nameOf(pendingSceneInviteId)}加入圆桌` : "发起圆桌会议",
       icon: "users",
@@ -1748,7 +1755,7 @@ async function handleSceneInteraction(hotspot, actionId) {
     return { close: true };
   }
   if (actionId === "enter-field") {
-    void recordWorldEvent("field-entered", `你从${nameOf(hotspot.personId)}的摊位走进关系场域`, [hotspot.personId]);
+    void recordWorldEvent("field-entered", `你从广场上走向与${nameOf(hotspot.personId)}的关系场域`, [hotspot.personId]);
     navigateToField(hotspot.personId);
     return { close: true };
   }
@@ -1909,7 +1916,7 @@ const TICK_SOURCE_STYLE = {
 
 function setTickBadge(tick, source) {
   const style = TICK_SOURCE_STYLE[source] ?? { color: "#9fb4ad", label: "离线" };
-  const momentLabel = isHallWorld ? "集市时刻" : "世界时刻";
+  const momentLabel = isHallWorld ? "广场时刻" : "世界时刻";
   tickBadge.innerHTML =
     `<span style="width:7px;height:7px;border-radius:50%;background:${style.color}"></span>` +
     `<span>${momentLabel} #${tick ?? "—"} · ${style.label}</span>`;
@@ -2005,9 +2012,10 @@ function applyLiveSnapshot(rawSnapshot) {
   canvas.dataset.liveSource = liveWorld?.source ?? "unknown";
   canvas.dataset.worldTick = String(adapted.tick);
 
-  // 名牌行为状态行：把 Agent 的当前意图写到世界上可读（「串门途中」「交谈中」…）
+  // 名牌行为状态行：把 Agent 的当前意图写到世界上可读（「在广场走动」「与人交谈」…）
+  const activityLabels = isHallWorld ? HALL_ACTIVITY_LABELS : AGENT_ACTIVITY_LABELS;
   for (const agent of adapted.agents) {
-    heartSignalSystem.setActivity(agent.id, AGENT_ACTIVITY_LABELS[agent.state] ?? null);
+    heartSignalSystem.setActivity(agent.id, activityLabels[agent.state] ?? null);
   }
 
   if (isHallWorld && boothSystem) {
@@ -2087,13 +2095,14 @@ function applyLiveSnapshot(rawSnapshot) {
       personId: agent.id,
       status: agent.state === "talking" ? "seated" : agent.state,
       tableId: agent.seat?.tableId ?? null,
-      tableLabel: agent.seat?.tableLabel ?? (isHallWorld ? "集市大厅展位" : "咖啡厅大厅"),
+      tableLabel: agent.seat?.tableLabel ?? (isHallWorld ? "Echo 广场" : "咖啡厅大厅"),
       seatIndex: agent.seat?.seatIndex ?? null,
       meeting: agent.state === "in-meeting",
     });
   }
 
   syncDynamicAgents(adapted.agents);
+  refreshPresence();
 }
 
 
@@ -2325,6 +2334,32 @@ function personLikeFor(personId) {
 
 
 // 快照里的新面孔：用 CharacterSystem 克隆/换色现场生成实体，注册进既有驱动链路
+// 无手环数据的人物：展示由 personId 决定的静息估算（名牌不再是 "--"）；
+// capturedAt 固定在昨天，任何真实信号（REST hydrate / 事件流）都会把它覆盖。
+function ensureEstimatedSignal(personId) {
+  if (!personId || personSignalStore.getSnapshot(personId)) return;
+  const hash = hashString(personId);
+  const baseline = 62 + (hash % 15);              // 62-76 静息基线
+  personSignalStore.upsert({
+    personId,
+    capturedAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
+    status: "estimated",
+    heart: {
+      currentBpm: baseline + (hash % 7) - 2,
+      baselineBpm: baseline,
+      peakBpm: baseline + 12 + (hash % 9),
+      heartScore: 46 + (hash % 24),
+      trend: "steady",
+      explanation: "暂无手环数据，展示静息估算；接入真实心率后自动替换。",
+    },
+    inference: {
+      label: "静息估算",
+      summary: "TA 还没有心率数据，当前展示的是平静的静息基线。",
+      confidence: 0.2,
+    },
+  }, { source: "estimated" });
+}
+
 async function ensureAgentEntity(agent) {
   if (!characterSystem || !npcSystem) return;
   if (pendingAgentSpawns.has(agent.id) || npcSystem.getEntity(agent.id)) return;
@@ -2348,6 +2383,7 @@ async function ensureAgentEntity(agent) {
       relation: "刚搬进世界的新朋友",
       palette,
       avatar: pkg?.avatar ?? agent.avatar ?? null,
+      portrait: pkg?.identity?.face_ref ?? pkg?.identity?.faceRef ?? null,
       bio: "刚从一次真实相遇进入 EchoWorld。",
       conversation: {
         starters: ["最近在做什么？", "我们上次聊到了什么？", "想去圆桌坐坐吗？"],
@@ -2367,6 +2403,7 @@ async function ensureAgentEntity(agent) {
       characterSpec(personLike, `agent-${agent.id}`, spawn, 0.005),
     );
     expressionSystem.register(entity, agent.id, activeCharacterVariant.id);
+    ensureEstimatedSignal(agent.id);
     heartSignalSystem.register(
       entity,
       agent.id,
@@ -2541,6 +2578,41 @@ async function startRoomWorld() {
 }
 
 
+// 房间快照的座位解析：后端 conductor 在 agent_runtime[*].seat.node 写 Blender
+// 座位节点名（与 CafeLayout/tables.py 同源），这里映射回锚点坐标与桌位信息
+const CAFE_SEAT_BY_NODE = new Map([
+  ...CAFE_LAYOUT.roundtable.seats.map((seat, index) => [
+    seat.nodeName,
+    { seat, table: CAFE_LAYOUT.roundtable, index },
+  ]),
+  ...CAFE_LAYOUT.npcTables.flatMap((table) =>
+    table.seats.map((seat, index) => [seat.nodeName, { seat, table, index }])),
+]);
+// 名牌行为状态行（v1 房间 runtime status → caption）
+const ROOM_ACTIVITY_LABELS = Object.freeze({
+  moving: "走动中",
+  seated: "在桌边小坐",
+  talking: "与人交谈",
+  meeting: "圆桌会议中",
+  idle: null,
+});
+
+// 顶部在场人数/头像墙：以世界里真实的 Agent 集合为准（不再是写死的 6）
+function refreshPresence() {
+  if (!npcSystem || typeof appShell.updatePresence !== "function") return;
+  const entries = [...npcSystem.agents.keys()].map((personId) => {
+    const known = people.find((person) => person.id === personId)
+      ?? dynamicPeople.get(personId);
+    return {
+      id: personId,
+      name: nameOf(personId),
+      portrait: known?.portrait ?? null,
+    };
+  });
+  appShell.updatePresence(entries);
+}
+
+
 function applyRoomSnapshot(snapshot) {
   if (!snapshot || !Array.isArray(snapshot.members)) return;
   liveWorldTick = Number(snapshot.sequence) || 0;
@@ -2550,45 +2622,91 @@ function applyRoomSnapshot(snapshot) {
   const runtimeById = new Map(
     (snapshot.agent_runtime ?? []).map((item) => [item.agent_id, item]),
   );
+  const meetingParticipants = snapshot.meeting?.participant_ids ?? [];
   for (const member of snapshot.members) {
     if (member.member_id === currentUser.id) continue;
+    ensureEstimatedSignal(member.member_id);
     const entity = npcSystem?.getEntity(member.member_id);
+    const runtime = runtimeById.get(member.member_id) ?? {};
+    const inMeeting = meetingParticipants.includes(member.member_id);
+    const seatInfo = runtime.seat?.node ? CAFE_SEAT_BY_NODE.get(runtime.seat.node) : null;
+    const seat = seatInfo ? {
+      x: seatInfo.seat.x,
+      z: seatInfo.seat.z,
+      yaw: seatInfo.seat.yaw,
+      tableId: seatInfo.table.id,
+      tableLabel: seatInfo.table.label,
+      seatIndex: seatInfo.index,
+    } : null;
+    const renderState = inMeeting
+      ? "in-meeting"
+      : runtime.status === "talking"
+        ? "talking"
+        : seat
+          ? "seated"
+          : "walking";
+    const position = member.position ?? {};
+    const target = {
+      x: seat?.x ?? (Number(position.x) || 0),
+      z: seat?.z ?? (Number(position.z) || 0),
+      yaw: seat?.yaw
+        ?? (Number.isFinite(runtime.yaw) ? runtime.yaw : entity?.root.rotation.y ?? 0),
+      state: renderState,
+      seat,
+    };
     if (!entity) {
       void ensureAgentEntity({
         id: member.member_id,
-        position: member.position,
-        state: "walking",
+        position: { x: target.x, z: target.z, yaw: target.yaw },
+        state: renderState,
       });
       continue;
     }
-    const position = member.position ?? {};
-    const inMeeting = Boolean(snapshot.meeting?.participant_ids?.includes(member.member_id));
-    const runtimeStatus = runtimeById.get(member.member_id)?.status ?? "idle";
-    const renderState = inMeeting
-      ? "in-meeting"
-      : (runtimeStatus === "talking" ? "talking" : "walking");
-    liveTargets.set(member.member_id, {
-      x: Number(position.x) || 0,
-      z: Number(position.z) || 0,
-      yaw: entity.root.rotation.y,
-      state: renderState,
-      seat: null,
-    });
+    liveTargets.set(member.member_id, target);
+    entity.root.userData.agentState = renderState;
+    heartSignalSystem.setActivity(
+      member.member_id,
+      inMeeting ? ROOM_ACTIVITY_LABELS.meeting : ROOM_ACTIVITY_LABELS[runtime.status] ?? null,
+    );
     appShell.updateAgentState({
       personId: member.member_id,
-      status: inMeeting ? "in-meeting" : runtimeStatus,
-      tableId: inMeeting ? CAFE_LAYOUT.roundtable.id : null,
-      tableLabel: inMeeting ? CAFE_LAYOUT.roundtable.label : "Echo Cafe",
-      seatIndex: null,
+      status: inMeeting ? "in-meeting" : runtime.status ?? "idle",
+      tableId: seat?.tableId ?? (inMeeting ? CAFE_LAYOUT.roundtable.id : null),
+      tableLabel: seat?.tableLabel ?? (inMeeting ? CAFE_LAYOUT.roundtable.label : "Echo Cafe"),
+      seatIndex: seat?.seatIndex ?? null,
       meeting: inMeeting,
     });
   }
   canvas.dataset.roomSequence = String(snapshot.sequence ?? 0);
+  refreshPresence();
   rebuildSceneHotspots();
 }
 
 
 function handleRoomEvent(event) {
+  if (event?.type === "member.moved") {
+    // 房间走位（conductor/应邀入座）即时生效；座位吸附与状态以快照轮询为权威
+    const { member_id: movedId, position } = event.payload ?? {};
+    if (movedId && movedId !== currentUser.id && position && npcSystem?.getEntity(movedId)) {
+      const existing = liveTargets.get(movedId);
+      if (!existing?.seat && Number.isFinite(position.x) && Number.isFinite(position.z)) {
+        liveTargets.set(movedId, {
+          x: position.x,
+          z: position.z,
+          yaw: Number.isFinite(position.yaw) ? position.yaw : existing?.yaw ?? 0,
+          state: existing?.state ?? "walking",
+          seat: existing?.seat ?? null,
+        });
+      }
+    }
+    return;
+  }
+  if (event?.type === "meeting.ended") {
+    // 服务端散会（发起人结束/conductor 超时清理）：本地同步拆除会议状态
+    if (meetingMode) teardownMeetingLocalState();
+    appShell.meetingEnded?.();
+    return;
+  }
   if (event?.type === "person.message-created") {
     const payload = event.payload ?? {};
     if (payload.speaker_id && payload.text) {

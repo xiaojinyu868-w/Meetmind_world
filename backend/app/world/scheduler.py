@@ -34,6 +34,9 @@ class WorldScheduler:
             cafe = self.app.state.world
             self.app.state.runtime.tick(cafe.snapshot())
             cafe.step()
+        conductor = getattr(self.app.state, "room_conductor", None)
+        if conductor is not None:
+            conductor.tick_once()  # v1 房间生活指挥：入座/交谈/会议走位/超时散会
         self._cycles += 1
         if self._cycles % self.hall_every == 0:
             hall = self.app.state.hall

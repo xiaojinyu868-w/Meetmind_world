@@ -40,7 +40,7 @@ function drawBoard(canvas, brief) {
 
   context.fillStyle = "#fffaf0";
   context.font = '800 52px "PingFang SC", "Microsoft YaHei", sans-serif';
-  const headline = wrapLines(context, brief?.headline ?? "集市今天安静开门", 900, 2);
+  const headline = wrapLines(context, brief?.headline ?? "广场今天安静开门", 900, 2);
   headline.forEach((line, index) => context.fillText(line, 58, 122 + index * 64));
 
   context.fillStyle = "#cde0d5";

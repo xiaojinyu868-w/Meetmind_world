@@ -529,7 +529,7 @@ export function mountPackagePanel(container, api) {
     return `
       <section class="pp-section pp-danger" aria-label="危险操作">
         ${deactivateArmed
-          ? `<p class="pp-danger-note">${icon("circle-alert")}<span>确认注销？TA 会立刻从集市、咖啡厅和名册里消失（相遇事实保留）。</span></p>
+          ? `<p class="pp-danger-note">${icon("circle-alert")}<span>确认注销？TA 会立刻从广场、咖啡厅和名册里消失（相遇事实保留）。</span></p>
              <div class="pp-danger-actions">
                <button type="button" class="pp-danger-confirm" data-pp-deactivate-confirm>${icon("user-round-x")}<span>确认注销</span></button>
                <button type="button" class="pp-danger-cancel" data-pp-deactivate-cancel>再想想</button>

@@ -27,6 +27,7 @@ from app.agents.roles.person import PersonAgent
 from app.agents.contracts import PrivacyLevel
 from app.agents.runtime_v2 import AgentCoordinator, AgentRouter, ContextBuilder
 from app.agents.room_autonomy import RoomAutonomyService
+from app.agents.room_conductor import RoomConductor
 from app.agents.dialogue import build_pair_context
 from app.agents.contracts import ContextFact
 from app.agents.tools import EventSummaryTool, MemoryQueryTool, ToolRegistry
@@ -259,6 +260,7 @@ def create_app() -> FastAPI:
     app.state.room_autonomy = RoomAutonomyService(
         app.state.room_service, app.state.agent_coordinator,
     )
+    app.state.room_conductor = RoomConductor(app.state.room_service)
     app.state.group_onboarding = GroupOnboardingService(store, hall=hall_world)
     app.state.physical_ai = PhysicalAIReceiver(store, hall=hall_world, memory=memory)
     app.state.field_generation = FieldGenerationService(store)

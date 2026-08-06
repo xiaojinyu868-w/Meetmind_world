@@ -1,5 +1,5 @@
 export const WORLDS = Object.freeze([
-  Object.freeze({ id: "hall", label: "集市", title: "Echo 集市大厅" }),
+  Object.freeze({ id: "hall", label: "广场", title: "Echo 广场" }),
   Object.freeze({ id: "cafe", label: "咖啡厅", title: "Echo Cafe" }),
   Object.freeze({ id: "field", label: "关系场域", title: "关系回声场域" }),
 ]);

@@ -2,6 +2,23 @@
 
 面向 AI 编码代理的项目说明。阅读本文件即可了解 EchoWorld 前端的结构、命令与约定。
 
+## 开发与部署规范（2026-08-06，先读再动手）
+
+- **权威代码 = GitHub `main` = `/root/meetmind_wt_main`**（生产检出）。所有改动在这里做、
+  在这里构建、从这里推送（SSH：`git@github.com:xiaojinyu868-w/Meetmind_world.git`）。
+- `/root/meetmind_go` 是**共享工作区**（用户与其他代理都在里面）：不在那里做 git 操作
+  和构建；它的 `backend/data/` 是线上数据目录（`ECHO_DATA_DIR`），不要动数据结构。
+- 合并协作者分支：fetch 后在 wt_main 里 merge，**临时 worktree 用完即删**
+  （`git worktree remove` + 删分支），不留第二个长期工作区。
+- 部署流程：改代码 → `npm run build` → 提交推送 →（改过后端才）重启 uvicorn
+  （127.0.0.1:8000，日志 `/var/log/echoworld-uvicorn.log`）→
+  `rm -rf /var/www/echoworld && cp -a dist /var/www/echoworld`。
+- 后端测试：`cd backend && PHYSICAL_AI_PACKAGE_SCHEMA="" .venv/bin/python -m pytest tests/ -q`。
+- `.env` 不进 git：线上后端读 `/root/meetmind_wt_main/.env`（chat 已切 DashScope
+  qwen3.7-plus；DeepSeek 402 余额不足，恢复后改回 CHAT_* 即可）。
+- 梳理文档：`docs/AGENT-RUNTIME.md`（Agent 运行机制）、`docs/PRODUCT-STATUS.md`
+  （Mock/未实现清单）——改动涉及这些结论时同步更新。
+
 ## 并行协作分工（2026-08-04，先读再动手）
 
 本仓库有两条并行代理工作流，为避免互相覆盖：
