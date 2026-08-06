@@ -29,6 +29,52 @@ FACES_DIR = Path("/tmp/cast-faces")
 BODY_DIR = Path("/tmp/cast-body")
 AVATAR_TYPE = "voxel-textured.v1"
 
+# 人工校准配色（对照合照逐人核对，2026-08-06）：vision 会把挂绳/肤色误报进
+# outfitPalette，卡司是长期固定 NPC，人工 ground truth 一次到位。
+# 键对应 palette 六键中的 jacket/shirt/pants/shoes（hex）。
+PALETTE_OVERRIDES = {
+    "lin-che":   {"jacket": "#655A73", "shirt": "#2B2B30", "pants": "#2E3A54", "shoes": "#E8E8E8"},
+    "zhou-ning": {"jacket": "#F2F2F0", "shirt": "#F2F2F0", "pants": "#24262B", "shoes": "#B3453F"},
+    "chen-mo":   {"jacket": "#9BA1A6", "shirt": "#9BA1A6", "pants": "#8F959B", "shoes": "#6B5CA8"},
+    "xu-an":     {"jacket": "#1D1D20", "shirt": "#1D1D20", "pants": "#1D1D20", "shoes": "#2A2A2E"},
+    "su-he":     {"jacket": "#F5F2EA", "shirt": "#FFFFFF", "pants": "#B8A88C", "shoes": "#F0F0EC"},
+    "tang-ke":   {"jacket": "#1F1F22", "shirt": "#1F1F22", "pants": "#A8B8C8", "shoes": "#F0F0EC"},
+}
+# 合照中戴眼镜的卡司（16x16 瓦片生图极易丢眼镜——它是辨识度第一特征，
+# 由程序化叠加兜底保证必现）
+GLASSES_CAST = {"zhou-ning", "chen-mo", "xu-an", "tang-ke"}
+GLASSES_COLOR = (38, 38, 44, 255)  # 深灰细框（不用纯黑，避免与眼睛糊成一团）
+
+
+def _eye_row(tile, columns) -> int:
+    """在 6..10 行里找指定列范围最暗的一行（眼睛所在行）。"""
+    darkest_row, darkest_value = 8, None
+    for y in range(6, 11):
+        value = sum(sum(tile.getpixel((x, y))[:3]) for x in columns)
+        if darkest_value is None or value < darkest_value:
+            darkest_row, darkest_value = y, value
+    return darkest_row
+
+
+def apply_glasses_overlay(front_tile):
+    """在 head_front 瓦片上画细框像素眼镜：双眼定位 → 镜片框 + 鼻梁 + 镜腿。"""
+    tile = front_tile.convert("RGBA")
+    left_row = _eye_row(tile, range(2, 8))
+    right_row = _eye_row(tile, range(8, 14))
+    row = round((left_row + right_row) / 2)
+    c = GLASSES_COLOR
+    for lens_x in (3, 10):  # 左/右镜片（4x3 框）
+        for x in range(lens_x, lens_x + 4):
+            tile.putpixel((x, row - 1), c)
+            tile.putpixel((x, row + 1), c)
+        tile.putpixel((lens_x, row), c)
+        tile.putpixel((lens_x + 3, row), c)
+    for x in (7, 8):  # 鼻梁
+        tile.putpixel((x, row - 1), c)
+    tile.putpixel((2, row - 1), c)   # 左镜腿
+    tile.putpixel((13, row - 1), c)  # 右镜腿
+    return tile
+
 
 def build_one(person_id: str, face_path: Path, body_path: Path, store: PackageStore,
               out_root: Path) -> dict:
@@ -44,12 +90,22 @@ def build_one(person_id: str, face_path: Path, body_path: Path, store: PackageSt
     tiles, image_model = texture_gen.generate_tiles(
         spec, image=image, cache_dir=cache_dir,
         reference=face_path.read_bytes())
+    if person_id in GLASSES_CAST and "head_front" in tiles:
+        tiles["head_front"] = apply_glasses_overlay(tiles["head_front"])
+        spec["visibleTraits"]["glasses"] = True
+        spec["provenance"]["glasses"] = "procedural-overlay"
     if "head_front" in tiles:
         front = tiles["head_front"]
         spec["visibleTraits"]["skinTone"] = texture_gen._dominant_color(front, (4, 12, 12, 16))
         spec["visibleTraits"]["hairColor"] = texture_gen._dominant_color(front, (0, 0, 16, 2))
         spec["provenance"]["colors"] = "tile-measured"
         texture_gen.validate_character_spec(spec)
+    # 人工校准配色覆盖（vision 易把挂绳/肤色误报进服装色）
+    overrides = PALETTE_OVERRIDES.get(person_id)
+    if overrides:
+        spec["visibleTraits"]["outfitPalette"] = [
+            overrides["jacket"], overrides["shirt"], overrides["pants"]]
+        spec["provenance"]["outfit"] = "manual-ground-truth"
     neutral = texture_gen.compose_atlas(spec, tiles)
     expressions = {name: texture_gen.derive_expression(neutral, name)
                    for name in texture_gen.EXPRESSIONS}
@@ -59,7 +115,7 @@ def build_one(person_id: str, face_path: Path, body_path: Path, store: PackageSt
     textures = TextureSet(
         person_id=person_id, spec=spec, neutral=neutral,
         expressions=expressions,
-        palette=texture_gen.palette_from_spec(spec),
+        palette=texture_gen.palette_from_spec(spec) | (overrides or {}),
         model=image_model,
         vision_model=spec["provenance"].get("vision", "mock"),
         source_photos=[str(body_path), str(face_path)],
