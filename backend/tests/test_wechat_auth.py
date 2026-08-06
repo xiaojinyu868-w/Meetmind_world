@@ -155,3 +155,61 @@ def test_impression_authored_by_user(client):
         "text": "匿名不该通过", "kind": "peer-impression", "privacy": "self-only",
     })
     assert anonymous.status_code == 404
+
+
+# ---------- 桌面↔手机配对登录 ----------
+
+
+def test_pair_flow(client):
+    token = sign_echo_token("wechat_pair_user", "阿澄")
+    created = client.post("/api/v0/auth/pair")
+    assert created.status_code == 201
+    challenge_id = created.json()["challenge_id"]
+
+    # 未确认前：pending
+    assert client.get(f"/api/v0/auth/pair?id={challenge_id}").json()["status"] == "pending"
+
+    # 未登录不能确认
+    assert client.post("/api/v0/auth/pair/confirm",
+                       json={"challenge_id": challenge_id}).status_code == 401
+
+    confirmed = client.post("/api/v0/auth/pair/confirm",
+                            json={"challenge_id": challenge_id},
+                            headers={"authorization": f"Bearer {token}"})
+    assert confirmed.status_code == 200
+    assert confirmed.json()["nickname"] == "阿澄"
+
+    # 轮询一次性拿到 token，随后挑战销毁
+    polled = client.get(f"/api/v0/auth/pair?id={challenge_id}").json()
+    assert polled["status"] == "authorized"
+    assert polled["nickname"] == "阿澄"
+    assert verify_meetmind_token(polled["token"])["sub"] == "wechat_pair_user"
+    assert client.get(f"/api/v0/auth/pair?id={challenge_id}").json()["status"] == "expired"
+
+
+def test_pair_unknown_and_expired(client):
+    assert client.get("/api/v0/auth/pair?id=nope").json()["status"] == "expired"
+    expired = client.post("/api/v0/auth/pair/confirm", json={"challenge_id": "nope"},
+                          headers={"authorization": f"Bearer {sign_echo_token('u', 'n')}"})
+    assert expired.status_code == 404
+
+
+def test_pair_qr_encodes_challenge(client):
+    # pair 参数被编进二维码内容（合法字符才接受）
+    import segno
+    from io import BytesIO
+    response = client.get("/api/mobile/qr.png?pair=abcDEF-123_")
+    assert response.status_code == 200
+    decoded = segno.decode(BytesIO(response.content)) if hasattr(segno, "decode") else None
+    # segno 无解码器：退化为接口级冒烟（200 + PNG + 不同 pair 产出不同图）
+    again = client.get("/api/mobile/qr.png?pair=zzz999")
+    assert again.content != response.content
+    assert decoded is None or "pair=abcDEF-123_" in decoded
+
+
+def test_pair_qr_rejects_injection(client):
+    # 注入字符不进二维码目标（退回无 pair 的入口码）
+    injected = client.get("/api/mobile/qr.png?pair=x?evil=1")
+    plain = client.get("/api/mobile/qr.png")
+    assert injected.status_code == 200
+    assert injected.content == plain.content

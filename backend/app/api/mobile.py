@@ -32,15 +32,24 @@ def _public_mobile_url() -> str:
 
 
 @router.get("/qr.png")
-def mobile_qr():
-    """移动端入口二维码（桌面端「手机录入」面板展示）。"""
+def mobile_qr(pair: str = ""):
+    """移动端入口二维码（桌面端「手机录入」面板展示）。
+
+    pair 非空时编入配对挑战（桌面扫码登录）：扫码进移动页登录后可
+    「确认登录到电脑」。pair 只允许 URL 安全字符，防注入。
+    """
+    import re
+
     import segno
 
+    target = _public_mobile_url()
+    if pair and re.fullmatch(r"[A-Za-z0-9_\-]{1,64}", pair):
+        target = f"{target}?pair={pair}"
     buffer = io.BytesIO()
-    segno.make(_public_mobile_url(), error="m").save(
+    segno.make(target, error="m").save(
         buffer, kind="png", scale=8, border=2, dark="#333415", light="#f6f3ea")
     return Response(content=buffer.getvalue(), media_type="image/png",
-                    headers={"Cache-Control": "public, max-age=3600"})
+                    headers={"Cache-Control": "no-store"})
 
 
 _PAGE = """<!doctype html>
@@ -189,6 +198,17 @@ background:#eef2e7;color:var(--green-deep);margin-left:6px;vertical-align:2px}
     </div>
   </div>
 
+  <div id="view-pair" class="hidden">
+    <div class="card" style="text-align:center">
+      <div style="font-size:34px">💻</div>
+      <strong>在电脑上登录 EchoWorld？</strong>
+      <p class="muted" style="margin-top:8px">确认后，电脑端会以你的身份进入你的世界。</p>
+      <button class="btn" id="pair-confirm">确认登录到电脑</button>
+      <button class="btn warn" id="pair-cancel">取消</button>
+      <p class="status" id="pair-status"></p>
+    </div>
+  </div>
+
   <div id="view-note" class="hidden">
     <button class="back" data-back>‹ 返回</button>
     <div class="card">
@@ -209,14 +229,18 @@ background:#eef2e7;color:var(--green-deep);margin-left:6px;vertical-align:2px}
 "use strict";
 var BASE = location.pathname.indexOf("/echoworld/") === 0 ? "/echoworld" : "";
 var TOKEN_KEY = "meetmind_access_token";
+var PAIR_KEY = "echo_pending_pair";
 var $ = function(id){ return document.getElementById(id); };
 var state = { me:null, people:[], groupId:null, faces:[], photoFile:null };
 
-// token 从 URL 落 localStorage 后清掉地址栏
+// token / pair 从 URL 落 localStorage 后清掉地址栏
+// （pair 要熬过 OAuth 跳转：授权回来时凭 localStorage 里的它继续配对）
 var qs = new URLSearchParams(location.search);
 var urlToken = qs.get("token");
-if (urlToken) {
-  localStorage.setItem(TOKEN_KEY, urlToken);
+var urlPair = qs.get("pair");
+if (urlPair) localStorage.setItem(PAIR_KEY, urlPair);
+if (urlToken || urlPair) {
+  if (urlToken) localStorage.setItem(TOKEN_KEY, urlToken);
   history.replaceState(null, "", location.pathname);
 }
 function token(){ return localStorage.getItem(TOKEN_KEY) || ""; }
@@ -226,7 +250,7 @@ function authHeaders(extra){
   return h;
 }
 function show(view){
-  ["loading","login","home","photo","note"].forEach(function(v){
+  ["loading","login","home","photo","note","pair"].forEach(function(v){
     $("view-"+v).classList.toggle("hidden", v !== view);
   });
 }
@@ -246,6 +270,7 @@ function boot(){
   if (!token()) { renderLogin(); return; }
   api("/api/v0/auth/me", { headers: authHeaders() }).then(function(me){
     state.me = me;
+    if (localStorage.getItem(PAIR_KEY)) { renderPair(); return; }
     renderHome();
     loadPeople();
   }).catch(function(){
@@ -253,6 +278,35 @@ function boot(){
     renderLogin();
   });
 }
+
+// ---------- 配对登录到电脑 ----------
+function renderPair(){
+  show("pair");
+  $("pair-status").textContent = "";
+}
+$("pair-confirm").addEventListener("click", function(){
+  var challengeId = localStorage.getItem(PAIR_KEY);
+  var btn = this;
+  btn.disabled = true;
+  $("pair-status").textContent = "正在授权…";
+  api("/api/v0/auth/pair/confirm", {
+    method: "POST",
+    headers: authHeaders({ "content-type": "application/json" }),
+    body: JSON.stringify({ challenge_id: challengeId }),
+  }).then(function(){
+    localStorage.removeItem(PAIR_KEY);
+    $("pair-status").textContent = "电脑已登录 ✅ 可以回到电脑继续了";
+    btn.classList.add("hidden");
+    $("pair-cancel").textContent = "留在手机继续";
+  }).catch(function(err){
+    $("pair-status").textContent = err.message;
+  }).finally(function(){ btn.disabled = false; });
+});
+$("pair-cancel").addEventListener("click", function(){
+  localStorage.removeItem(PAIR_KEY);
+  renderHome();
+  loadPeople();
+});
 
 function renderLogin(){
   show("login");

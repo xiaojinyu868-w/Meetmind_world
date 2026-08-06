@@ -311,6 +311,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_api.router)
     # EchoWorld 自建微信 OAuth（落地自家移动页，而非教育产品流程）
     app.include_router(wechat_auth.router)
+    app.include_router(wechat_auth.pair_router)
     # 移动端产品页 + 入口二维码（桌面端「手机录入」指向）
     app.include_router(mobile.router)
     return app

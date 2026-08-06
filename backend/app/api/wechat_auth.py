@@ -29,9 +29,16 @@ import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from app.security.meetmind_jwt import sign_echo_token
+from app.security.meetmind_jwt import sign_echo_token, verify_meetmind_token
 
 router = APIRouter(prefix="/api/v0/auth/wechat", tags=["auth-wechat"])
+pair_router = APIRouter(prefix="/api/v0/auth/pair", tags=["auth-pair"])
+
+# 桌面↔手机配对登录：桌面 POST 建挑战 → 展示移动页二维码（带 pair 参数）→
+# 手机扫码进移动页、微信授权登录后点「确认登录到电脑」→ POST /confirm 绑定
+# → 桌面轮询 GET ?id= 拿到 token。全程不经过服务号会话（区别于 MeetMind 的
+# 带参二维码流程），与教育产品零交互。
+PAIR_TTL_SECONDS = 600
 
 AUTHORIZE_URL = "https://open.weixin.qq.com/connect/oauth2/authorize"
 TOKEN_URL = "https://api.weixin.qq.com/sns/oauth2/access_token"
@@ -201,3 +208,88 @@ def wechat_callback(request: Request, code: str = "", state: str = ""):
 
     token = sign_echo_token(user_id, user["nickname"], expires_in=TOKEN_EXPIRES_IN)
     return RedirectResponse(f"{MOBILE_PAGE_PATH}?token={token}")
+
+
+# ---------- 桌面↔手机配对登录（不经过服务号会话） ----------
+
+
+def _pairs_path(request: Request) -> Path:
+    directory = Path(request.app.state.store.root) / "users"
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory / "pair_challenges.json"
+
+
+def _load_pairs(request: Request) -> dict:
+    path = _pairs_path(request)
+    if not path.is_file():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+
+
+def _save_pairs(request: Request, pairs: dict) -> None:
+    _pairs_path(request).write_text(
+        json.dumps(pairs, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _prune_pairs(pairs: dict) -> dict:
+    now = time.time()
+    return {key: value for key, value in pairs.items()
+            if now - float(value.get("created", 0)) < PAIR_TTL_SECONDS}
+
+
+@pair_router.post("", status_code=201)
+def pair_create(request: Request):
+    """桌面端建配对挑战，随后把 pair=<id> 编进移动页二维码。"""
+    pairs = _prune_pairs(_load_pairs(request))
+    challenge_id = secrets.token_urlsafe(12)
+    pairs[challenge_id] = {"created": time.time(), "status": "pending"}
+    _save_pairs(request, pairs)
+    return {"challenge_id": challenge_id, "expires_in": PAIR_TTL_SECONDS}
+
+
+@pair_router.get("")
+def pair_poll(request: Request, id: str = ""):
+    """桌面端轮询；authorized 时一次性返回 token 并销毁挑战。"""
+    pairs = _load_pairs(request)
+    entry = pairs.get(id)
+    if entry is None:
+        return {"status": "expired"}
+    if time.time() - float(entry.get("created", 0)) >= PAIR_TTL_SECONDS:
+        pairs.pop(id, None)
+        _save_pairs(request, pairs)
+        return {"status": "expired"}
+    if entry.get("status") != "authorized":
+        return {"status": "pending"}
+    pairs.pop(id, None)
+    _save_pairs(request, _prune_pairs(pairs))
+    return {"status": "authorized", "token": entry.get("token"),
+            "nickname": entry.get("nickname")}
+
+
+@pair_router.post("/confirm")
+def pair_confirm(request: Request, body: dict):
+    """手机端（已登录）确认把这个登录态授权给电脑。"""
+    authorization = request.headers.get("authorization", "")
+    scheme, _, token = authorization.partition(" ")
+    payload = verify_meetmind_token(token) if scheme.lower() == "bearer" else None
+    if payload is None:
+        return JSONResponse(status_code=401, content={"detail": "需要有效登录态"})
+    challenge_id = str((body or {}).get("challenge_id") or "")
+    pairs = _load_pairs(request)
+    entry = pairs.get(challenge_id)
+    if entry is None or time.time() - float(entry.get("created", 0)) >= PAIR_TTL_SECONDS:
+        return JSONResponse(status_code=404,
+                            content={"detail": "配对请求已过期，请回电脑端重新获取二维码"})
+    nickname = payload.get("username") or payload["sub"]
+    user_file = Path(request.app.state.store.root) / "users" / f"{payload['sub']}.json"
+    if user_file.is_file():
+        try:
+            nickname = json.loads(user_file.read_text(encoding="utf-8")).get("nickname") or nickname
+        except json.JSONDecodeError:
+            pass
+    entry.update({"status": "authorized", "token": token, "nickname": nickname})
+    _save_pairs(request, pairs)
+    return {"ok": True, "nickname": nickname}

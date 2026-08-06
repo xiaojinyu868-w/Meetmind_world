@@ -1,14 +1,14 @@
-/** 微信登录面板（MeetMind 共享登录态）。
+/** 微信扫码登录面板（EchoWorld 自建配对登录，不经过 MeetMind 服务号会话）。
  *
- * 同源复用 MeetMind 的公众号带参二维码流程（/api/auth/wechat/qr）：
- * POST 建挑战 → <img> 展示二维码 → 轮询 GET ?id= → authenticated 后写
- * localStorage.meetmind_access_token 并整页刷新（boot 时身份水合生效）。
- * 微信内浏览器直接给主站登录页链接（snsapi_userinfo 授权后回主站，
- * token 同样落在同域 localStorage，回到 EchoWorld 自动识别）。
+ * 流程（与教育产品零交互）：
+ * 1. POST /api/v0/auth/pair 建配对挑战；
+ * 2. 展示 /api/mobile/qr.png?pair=<id>（纯网址码 → 我们自己的移动页）；
+ * 3. 手机扫码 → 移动页微信授权登录 → 点「确认登录到电脑」→ /pair/confirm；
+ * 4. 面板轮询 GET /pair?id= → authorized 后写 localStorage.meetmind_access_token
+ *    并整页刷新（boot 时身份水合生效，token 为 EchoWorld 自签的兼容 JWT）。
  */
 
-const MEETMIND_QR_URL = "/api/auth/wechat/qr";
-const MEETMIND_LOGIN_URL = "/login";
+const API_BASE = `${import.meta.env?.BASE_URL ?? "/"}api`;
 const TOKEN_KEY = "meetmind_access_token";
 const DISMISS_KEY = "echo-login-dismissed";
 
@@ -22,7 +22,6 @@ function createPanel() {
       <p>登录后你的世界会带上你录入的人；游客模式只看常驻居民。</p>
       <div class="login-qr"><img alt="微信登录二维码" /><span>正在获取二维码…</span></div>
       <p class="login-status" data-status>请用微信扫码</p>
-      <a class="login-alt" href="${MEETMIND_LOGIN_URL}" target="_blank" rel="noopener">在微信中打开登录页 →</a>
     </div>`;
   return host;
 }
@@ -54,37 +53,33 @@ export function mountLoginPanel() {
     panel = null;
   };
 
-  async function startQrFlow(statusEl, imgEl) {
-    const response = await fetch(MEETMIND_QR_URL, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ mode: "login" }),
-    });
+  async function startPairFlow(statusEl, imgEl) {
+    statusEl.onclick = null;
+    statusEl.style.cursor = "";
+    const response = await fetch(`${API_BASE}/v0/auth/pair`, { method: "POST" });
     const data = await response.json();
-    if (!data?.success || !data.challengeId) {
-      statusEl.textContent = data?.error ?? "二维码服务暂不可用";
+    if (!data?.challenge_id) {
+      statusEl.textContent = data?.detail ?? "二维码服务暂不可用";
       return;
     }
-    imgEl.src = data.imageUrl;
+    imgEl.src = `${API_BASE}/mobile/qr.png?pair=${encodeURIComponent(data.challenge_id)}`;
     imgEl.nextElementSibling?.remove();
-    statusEl.textContent = "请用微信扫码（扫码后在微信里确认）";
+    statusEl.textContent = "请用微信扫码，并在手机上确认登录到电脑";
     stopPolling();
     pollTimer = window.setInterval(async () => {
       try {
-        const poll = await fetch(`${MEETMIND_QR_URL}?id=${encodeURIComponent(data.challengeId)}`);
+        const poll = await fetch(`${API_BASE}/v0/auth/pair?id=${encodeURIComponent(data.challenge_id)}`);
         const result = await poll.json();
-        if (result.status === "authenticated" && result.accessToken) {
+        if (result.status === "authorized" && result.token) {
           stopPolling();
           statusEl.textContent = `欢迎，${result.nickname ?? "朋友"}！正在进入你的世界…`;
-          localStorage.setItem(TOKEN_KEY, result.accessToken);
+          localStorage.setItem(TOKEN_KEY, result.token);
           window.setTimeout(() => window.location.reload(), 600);
-        } else if (result.status === "scanned") {
-          statusEl.textContent = "已扫码，请在微信里确认登录";
-        } else if (result.status === "expired" || result.status === "failed") {
+        } else if (result.status === "expired") {
           stopPolling();
           statusEl.textContent = "二维码已过期，点击重新获取";
           statusEl.style.cursor = "pointer";
-          statusEl.onclick = () => startQrFlow(statusEl, imgEl);
+          statusEl.onclick = () => startPairFlow(statusEl, imgEl);
         }
       } catch { /* 网络抖动：下一轮再试 */ }
     }, 2000);
@@ -103,7 +98,7 @@ export function mountLoginPanel() {
     });
     const statusEl = panel.querySelector("[data-status]");
     const imgEl = panel.querySelector(".login-qr img");
-    void startQrFlow(statusEl, imgEl);
+    void startPairFlow(statusEl, imgEl);
   });
 
   // 首次访问且未主动关过：自动展开一次引导
