@@ -7,7 +7,10 @@ import {
   CameraRelativeMovement,
   cameraRelativeDirection,
 } from "../src/runtime/CameraRelativeMovement.js";
-import { ThirdPersonCamera } from "../src/runtime/ThirdPersonCamera.js";
+import {
+  CAMERA_PITCH_MAX,
+  ThirdPersonCamera,
+} from "../src/runtime/ThirdPersonCamera.js";
 
 
 class FakeEventTarget {
@@ -147,7 +150,7 @@ test("third-person camera orbits, zooms, collides, and locks", () => {
   assert.equal(controller.distance, 6);
   controller.applyMouseDelta(100, 10000);
   assert.ok(Math.abs(controller.yaw + 0.25) <= 1e-6);
-  assert.equal(controller.pitch, Math.PI / 3);
+  assert.equal(controller.pitch, CAMERA_PITCH_MAX);
 
   controller.snapTo(target, { yaw: 0, pitch: 0, distance: 4 });
   for (let frame = 0; frame < 180; frame += 1) {
@@ -220,4 +223,75 @@ test("camera smoothing responds to the real frame delta", () => {
   assert.ok(
     fastFrame.camera.position.distanceTo(start) > slowFrame.camera.position.distanceTo(start),
   );
+});
+
+
+test("camera arm pulls in fast on blockers and recovers slowly", () => {
+  const target = new THREE.Vector3(0, 0, 0);
+  const controller = new ThirdPersonCamera({ distance: 4, pitch: 0 });
+  controller.snapTo(target, { yaw: 0 });
+  const blocker = { x: 0, z: 2, r: 0.5 };
+
+  // 遮挡出现：恒速拉近，1 秒内必须贴近允许臂长（保护优先）
+  for (let frame = 0; frame < 60; frame += 1) {
+    controller.update(target, { delta: 1 / 60, blockers: [blocker] });
+  }
+  const pulledIn = controller.camera.position.z;
+  assert.ok(pulledIn < 1.2, `blocked arm should pull in fast, got z=${pulledIn}`);
+
+  // 遮挡消失：缓慢恢复（0.5 秒内不得弹回，4 秒后接近目标臂长）
+  for (let frame = 0; frame < 30; frame += 1) {
+    controller.update(target, { delta: 1 / 60 });
+  }
+  assert.ok(
+    controller.camera.position.z < 2.6,
+    `recovery must be gradual, got z=${controller.camera.position.z}`,
+  );
+  for (let frame = 0; frame < 240; frame += 1) {
+    controller.update(target, { delta: 1 / 60 });
+  }
+  assert.ok(controller.camera.position.z > 3.8, "arm should eventually recover");
+});
+
+
+test("spherical orbit keeps true 3d distance at any pitch", () => {
+  const target = new THREE.Vector3(0, 0, 0);
+  const controller = new ThirdPersonCamera({ distance: 4, pitch: Math.PI / 4 });
+  controller.snapTo(target, { yaw: 0 });
+  const arm = controller.camera.position
+    .clone()
+    .sub(target.clone().add(controller.lookOffset));
+  assert.ok(
+    Math.abs(arm.length() - 4) < 1e-6,
+    `orbit distance should be pitch-independent, got ${arm.length()}`,
+  );
+});
+
+
+test("sprint boost widens fov and never fights camera locks", () => {
+  const target = new THREE.Vector3(0, 0, 0);
+  const controller = new ThirdPersonCamera({ distance: 4, pitch: 0 });
+  controller.snapTo(target, { yaw: 0 });
+  const settle = (frames = 180) => {
+    for (let frame = 0; frame < frames; frame += 1) controller.update(target, 1 / 60);
+  };
+  settle();
+  assert.ok(Math.abs(controller.camera.fov - 48) < 0.02);
+
+  controller.setSprintBoost(true);
+  settle();
+  assert.ok(Math.abs(controller.camera.fov - 53) < 0.02, "sprint should widen fov by 5");
+
+  controller.lockTo([3, 4, -2], [0, 1, 0], 36);
+  settle();
+  assert.ok(Math.abs(controller.camera.fov - 36) < 0.02, "lock fov wins over sprint");
+
+  controller.unlock();
+  settle();
+  assert.ok(Math.abs(controller.camera.fov - 53) < 0.02, "unlock restores sprint fov");
+
+  controller.setSprintBoost(false);
+  settle();
+  assert.ok(Math.abs(controller.camera.fov - 48) < 0.02);
+  controller.dispose();
 });

@@ -257,7 +257,7 @@ const cameraController = new ThirdPersonCamera({
   aspect: 1,
   near: 0.06,
   far: cinematicProfile?.far ?? 80,
-  distance: 4.8,
+  distance: 5.2,
   pitch: 0.42,
 });
 const camera = cameraController.camera;
@@ -2982,21 +2982,26 @@ function updatePlayer(delta) {
   }
 
   if (meetingMode || playerSeatedAt) {
+    cameraController.setSprintBoost(false);
     characterSystem.setActivity(playerEntity, { seated: true });
     return;
   }
   if (hasBlockingWorldUi()) {
+    cameraController.setSprintBoost(false);
     characterSystem.setActivity(playerEntity);
     return;
   }
   const movementInput = readMovementInput();
+  const sprinting = input.isDown("ShiftLeft") || input.isDown("ShiftRight");
   const movementState = playerMovement.update(
     delta,
     movementInput,
     cameraController.getHorizontalAngle(),
-    { run: input.isDown("ShiftLeft") || input.isDown("ShiftRight") },
+    { run: sprinting },
   );
   const wantsToMove = movementState.moving;
+  // 冲刺动感：FOV +5°（只在真实冲刺移动时，站桩按 Shift 不晃视角）
+  cameraController.setSprintBoost(sprinting && wantsToMove);
   let movedThisFrame = false;
   moveDirection.copy(movementState.direction);
 
@@ -3127,6 +3132,11 @@ function updateFollowCamera(delta) {
     blockers: currentBlockers(),
     bounds: cameraBounds,
   });
+  // 相机极度贴近时隐藏自己（迟滞防闪烁）：彻底根绝视角穿模进身体，
+  // 这是第三人称游戏的标准解法（生化危机/最后生还者同款）
+  const cameraDistance = camera.position.distanceTo(player.position);
+  if (cameraDistance < 0.85) player.visible = false;
+  else if (cameraDistance > 1.3) player.visible = true;
 }
 
 
@@ -3175,7 +3185,7 @@ function updateScreenCamera(delta) {
 
 
 function updatePlayerLabel() {
-  if (experienceMode !== "cafe" || meetingMode) {
+  if (experienceMode !== "cafe" || meetingMode || !player.visible) {
     playerLabel.style.opacity = "0";
     return;
   }

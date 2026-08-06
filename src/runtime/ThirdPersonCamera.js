@@ -2,6 +2,11 @@ import * as THREE from "three";
 
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 
+// 俯仰角限制（弧度）：往下看最多 -20°（再低相机贴地贴人，是穿模主因）；
+// 往上看最多 66°（俯瞰全局）。配合球面轨道与人物近距离隐藏，根绝视角穿模
+export const CAMERA_PITCH_MIN = -0.35;
+export const CAMERA_PITCH_MAX = 1.15;
+
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 function smoothingAlpha(response, delta) {
@@ -91,12 +96,13 @@ export class ThirdPersonCamera {
     aspect = (globalThis.innerWidth || 1) / (globalThis.innerHeight || 1),
     near = 0.06,
     far = 80,
-    distance = 4.8,
-    minDistance = 2.5,
-    maxDistance = 12,
+    distance = 5.2,
+    minDistance = 2.2,
+    maxDistance = 10,
     yaw = 0,
     pitch = 0.42,
     mouseSensitivity = 0.0025,
+    pitchSensitivity = mouseSensitivity * 0.85,
     lookOffset = new THREE.Vector3(0, 1.28, 0),
     positionLerp = 0.12,
     lookLerp = 0.16,
@@ -106,8 +112,9 @@ export class ThirdPersonCamera {
     this.minDistance = minDistance;
     this.maxDistance = maxDistance;
     this.yaw = yaw;
-    this.pitch = pitch;
+    this.pitch = clamp(pitch, CAMERA_PITCH_MIN, CAMERA_PITCH_MAX);
     this.mouseSensitivity = mouseSensitivity;
+    this.pitchSensitivity = pitchSensitivity;
     this.positionLerp = positionLerp;
     this.lookLerp = lookLerp;
     this.fovLerp = positionLerp;
@@ -121,8 +128,11 @@ export class ThirdPersonCamera {
     this._boundaryPadding = 0.08;
     this._defaultFov = fov;
     this._targetFov = fov;
+    this._sprintBoost = 0;
     this._lockedState = null;
     this._inputCanvas = canvas;
+    // 有效臂长：碰撞拉近快、恢复慢（防视角忽近忽远），是手感的核心状态
+    this._arm = distance;
     this._onWheel = (event) => {
       if (!this.enabled) return;
       this.distance = clamp(
@@ -137,11 +147,23 @@ export class ThirdPersonCamera {
   applyMouseDelta(dx, dy, sensitivity = this.mouseSensitivity) {
     if (!this.enabled) return;
     this.yaw -= (Number(dx) || 0) * sensitivity;
-    this.pitch = clamp(this.pitch + (Number(dy) || 0) * sensitivity, -Math.PI / 3, Math.PI / 3);
+    this.pitch = clamp(
+      this.pitch + (Number(dy) || 0) * this.pitchSensitivity,
+      CAMERA_PITCH_MIN,
+      CAMERA_PITCH_MAX,
+    );
   }
 
   setEnabled(enabled) {
     this.enabled = Boolean(enabled);
+  }
+
+  /** 冲刺 FOV 动感（+5°）：lockTo（会议/运镜）期间不生效 */
+  setSprintBoost(active) {
+    this._sprintBoost = active ? 5 : 0;
+    if (!this._lockedState) {
+      this._targetFov = this._defaultFov + this._sprintBoost;
+    }
   }
 
   getHorizontalAngle() {
@@ -208,10 +230,29 @@ export class ThirdPersonCamera {
       this._smoothedLook.lerp(this._target, lookAlpha);
     }
 
-    const desired = this._target.clone().add(this._computeOffset());
+    // 球面轨道：yaw/pitch/distance 构成真正的 3D 臂长（旧实现 XZ 臂长恒定、
+    // Y 随 tan(pitch) 飞，是「俯仰时视角忽远忽近」的根因）
+    const desired = this._target.clone().add(this._computeOffset(this.distance));
     const resolved = this._resolveDesiredPosition(this._target, desired, { blockers, bounds });
-    this._clampToGround(resolved, groundHeightAt);
-    this.camera.position.lerp(resolved, positionAlpha);
+    // 碰撞换算成允许臂长比例：快拉近、慢恢复，视线穿过桌椅/墙体不再弹跳
+    const desiredXz = Math.hypot(desired.x - this._target.x, desired.z - this._target.z);
+    const resolvedXz = Math.hypot(resolved.x - this._target.x, resolved.z - this._target.z);
+    const allowedArm = desiredXz > 1e-6
+      ? this.distance * clamp(resolvedXz / desiredXz, 0, 1)
+      : this.distance;
+    if (allowedArm < this._arm) {
+      // 保护性拉近：恒速 6 m/s，任何帧率下都不给穿墙留窗口，也不会瞬移弹跳
+      this._arm = Math.max(allowedArm, this._arm - 6 * delta);
+    } else {
+      // 脱离遮挡后按指数缓慢恢复到目标臂长（时间常数约 0.8s：快拉慢放，
+      // 杜绝忽近忽远的「橡胶筋」感）
+      const recover = Math.min(this.distance, allowedArm);
+      this._arm += (recover - this._arm) * smoothingAlpha(0.02, delta);
+    }
+    this._arm = clamp(this._arm, 0, this.distance);
+    const finalPosition = this._target.clone().add(this._computeOffset(this._arm));
+    this._clampToGround(finalPosition, groundHeightAt);
+    this.camera.position.lerp(finalPosition, positionAlpha);
     if (this.camera.position.y < 0.5) this.camera.position.y = 0.5;
     this.camera.lookAt(this._smoothedLook);
   }
@@ -226,14 +267,21 @@ export class ThirdPersonCamera {
   } = {}) {
     if (!targetPosition) return;
     if (Number.isFinite(yaw)) this.yaw = yaw;
-    if (Number.isFinite(pitch)) this.pitch = clamp(pitch, -Math.PI / 3, Math.PI / 3);
+    if (Number.isFinite(pitch)) this.pitch = clamp(pitch, CAMERA_PITCH_MIN, CAMERA_PITCH_MAX);
     if (Number.isFinite(distance)) this.distance = clamp(distance, this.minDistance, this.maxDistance);
     this._target.copy(targetPosition).add(this.lookOffset);
     this._smoothedLook.copy(this._target);
-    const desired = this._target.clone().add(this._computeOffset());
+    const desired = this._target.clone().add(this._computeOffset(this.distance));
     const resolved = this._resolveDesiredPosition(this._target, desired, { blockers, bounds });
-    this._clampToGround(resolved, groundHeightAt);
-    this.camera.position.copy(resolved);
+    // 吸附立即生效：臂长同步到碰撞允许值，下一拍不走恢复曲线
+    const desiredXz = Math.hypot(desired.x - this._target.x, desired.z - this._target.z);
+    const resolvedXz = Math.hypot(resolved.x - this._target.x, resolved.z - this._target.z);
+    this._arm = desiredXz > 1e-6
+      ? this.distance * clamp(resolvedXz / desiredXz, 0, 1)
+      : this.distance;
+    const finalPosition = this._target.clone().add(this._computeOffset(this._arm));
+    this._clampToGround(finalPosition, groundHeightAt);
+    this.camera.position.copy(finalPosition);
     if (this.camera.position.y < 0.5) this.camera.position.y = 0.5;
     this.camera.lookAt(this._smoothedLook);
     this._hasTarget = true;
@@ -251,9 +299,9 @@ export class ThirdPersonCamera {
     return true;
   }
 
-  unlock(fov = this._defaultFov) {
+  unlock(fov = this._defaultFov + this._sprintBoost) {
     this._lockedState = null;
-    this._targetFov = Number.isFinite(fov) ? fov : this._defaultFov;
+    this._targetFov = Number.isFinite(fov) ? fov : this._defaultFov + this._sprintBoost;
   }
 
   resize(aspect) {
@@ -269,11 +317,13 @@ export class ThirdPersonCamera {
     this._collisionResolver = null;
   }
 
-  _computeOffset() {
+  _computeOffset(distance = this.distance) {
+    // 球面坐标：distance 是相机到注视点的真实 3D 距离
+    const cosPitch = Math.cos(this.pitch);
     return new THREE.Vector3(
-      Math.sin(this.yaw) * this.distance,
-      Math.tan(this.pitch) * this.distance,
-      Math.cos(this.yaw) * this.distance,
+      Math.sin(this.yaw) * cosPitch * distance,
+      Math.sin(this.pitch) * distance,
+      Math.cos(this.yaw) * cosPitch * distance,
     );
   }
 
