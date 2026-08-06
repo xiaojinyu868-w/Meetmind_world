@@ -801,6 +801,20 @@ def _purge_magenta_leaks(tile: Image.Image) -> None:
         pixels[x, y] = (color[0], color[1], color[2], 255)
 
 
+def _is_keyable_background(bg: tuple) -> bool:
+    """背景是否可安全键控：只有品红系高饱和背景才允许 chroma key。
+
+    模型经常不听背景指令（深色/黑色背景照出）。深色背景与黑发同色系，
+    色度键控会把头发当背景整片吃掉、再用邻近色乱填——瓦片直接「没有人型」
+    （2026-08-06 JRPG 提示词事故的根因）。此时正确做法是全程不裁不键，
+    直接下采样（构图本身就让头撑满画面）。"""
+    import colorsys
+
+    r, g, b = bg
+    hue, sat, _val = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+    return 0.78 <= hue <= 0.95 and sat > 0.55
+
+
 def postprocess_i2i_tile(png_bytes: bytes, *, anchor_eyes: bool = False,
                          hair_mass: bool = False) -> Image.Image:
     """i2i 生图结果 → 16x16 像素瓦片：背景检测 → 内容裁剪 → 对比/饱和增强 →
@@ -814,7 +828,8 @@ def postprocess_i2i_tile(png_bytes: bytes, *, anchor_eyes: bool = False,
 
     image = Image.open(io.BytesIO(png_bytes)).convert("RGB")
     bg, share = _border_dominant_color(image)
-    has_background = share >= _KEY_MIN_BORDER_SHARE
+    # 只有品红系高饱和背景才走 裁剪+键控；其余背景（深色/杂色）一律不裁不键
+    has_background = share >= _KEY_MIN_BORDER_SHARE and _is_keyable_background(bg)
     if has_background:
         bbox = _content_bbox(image, bg)
         if bbox is not None:

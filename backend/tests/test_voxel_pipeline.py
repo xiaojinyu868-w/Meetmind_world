@@ -560,3 +560,49 @@ def test_spec_from_photo_sampling(tmp_path):
     assert traits["outfitPalette"] == ["#5A6E82"]  # 胸部条带主色
     assert set(spec["designCompletion"]) == {"hair", "glasses", "bodyTemplate"}
     assert spec["provenance"]["vision"] == "photo-sampling"
+
+
+def test_i2i_postprocess_dark_background_keeps_dark_hair():
+    """深色背景（模型没听品红指令）不得触发键控：头发/脸都必须完整保留。"""
+    import io
+
+    from PIL import Image
+
+    from app.pipeline.texture_gen import postprocess_i2i_tile
+
+    img = Image.new("RGB", (64, 64), (18, 18, 22))      # 深色背景
+    for y in range(8, 56):                              # 深色头发团
+        for x in range(12, 52):
+            img.putpixel((x, y), (32, 28, 36))
+    for y in range(24, 50):                             # 皮肤脸
+        for x in range(20, 44):
+            img.putpixel((x, y), (235, 190, 150))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    tile = postprocess_i2i_tile(buf.getvalue())
+    pixels = list(tile.convert("RGB").getdata())
+    dark_ratio = sum(1 for p in pixels if sum(p) < 240) / len(pixels)
+    skin_ratio = sum(1 for p in pixels if p[0] > 180 and p[1] > 120) / len(pixels)
+    assert dark_ratio > 0.2, "头发被键控吃掉了"
+    assert skin_ratio > 0.1, "脸部丢失"
+
+
+def test_i2i_postprocess_magenta_background_still_keys():
+    """品红背景仍走键控：背景像素不得残留进瓦片。"""
+    import io
+
+    from PIL import Image
+
+    from app.pipeline.texture_gen import postprocess_i2i_tile
+
+    img = Image.new("RGB", (64, 64), (255, 0, 255))
+    for y in range(16, 48):
+        for x in range(16, 48):
+            img.putpixel((x, y), (32, 28, 36) if y < 30 else (235, 190, 150))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    tile = postprocess_i2i_tile(buf.getvalue())
+    pixels = list(tile.convert("RGB").getdata())
+    magenta_ratio = sum(
+        1 for p in pixels if p[0] > 200 and p[2] > 200 and p[1] < 80) / len(pixels)
+    assert magenta_ratio < 0.02, "品红背景泄漏进瓦片"
