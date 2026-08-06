@@ -98,7 +98,7 @@ padding:10px 12px;font-size:13px;margin-top:10px;line-height:1.6}
 .ok{background:#e9f2e6;border:1px solid #c4dcc0;color:#37573f;border-radius:12px;
 padding:10px 12px;font-size:13px;margin-top:10px;line-height:1.6}
 .people{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
-.person{text-align:center}
+.person{text-align:center;min-width:0}
 .person img{width:100%;aspect-ratio:1;border-radius:14px;object-fit:cover;background:#e8e3d0}
 .person .tag{font-size:11px;color:var(--muted);margin-top:4px;display:block}
 .person .nm{font-size:13px;margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -260,6 +260,7 @@ function renderLogin(){
     $("login-wechat").classList.remove("hidden");
     $("btn-wechat-login").href = BASE + "/api/v0/auth/wechat/login";
   } else {
+    $("login-wechat").classList.add("hidden");
     $("login-qr").classList.remove("hidden");
     $("login-qr-img").src = BASE + "/api/mobile/qr.png";
   }
@@ -291,15 +292,22 @@ function renderPeople(){
     var el = document.createElement("div");
     el.className = "person";
     var mine = p.owner_id && p.owner_id !== "system";
+    // 数据卫生：早期测试残留的 anonymous-* 名字不直接展示
+    var displayName = p.name || "未命名";
+    if (/^anonymous-/i.test(displayName)) displayName = "路过的人";
     el.innerHTML = '<div class="noimg" style="width:100%;aspect-ratio:1;border-radius:14px;background:#e8e3d0;display:flex;align-items:center;justify-content:center;color:#6b6a4e;font-size:20px">' +
-      (p.name ? p.name[0] : "·") + '</div>' +
+      displayName[0] + '</div>' +
       '<div class="nm"></div>' +
       '<span class="tag">' + (mine ? "我录入的" : "常驻居民") + '</span>';
-    el.querySelector(".nm").textContent = p.name || "未命名";
+    el.querySelector(".nm").textContent = displayName;
     grid.appendChild(el);
     api("/api/v0/packages/" + encodeURIComponent(p.person_id), { headers: authHeaders() })
       .then(function(detail){
-        var ref = detail.identity && detail.identity.face_ref;
+        // 优先像素胸像（portrait_ref）；我录入的人允许退回真实人脸裁剪，
+        // 常驻居民没有像素胸像时用占位（真实人脸不对所有访客展示）
+        var avatar = detail.avatar || {};
+        var ref = avatar.portrait_ref
+          || (mine && detail.identity && detail.identity.face_ref);
         if (ref) {
           var img = document.createElement("img");
           img.src = BASE + "/api/v0/media/" + ref;
