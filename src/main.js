@@ -2581,6 +2581,11 @@ async function startRoomWorld() {
     roomClient = null;
     canvas.dataset.roomSource = "unavailable";
     startLiveWorld({ force: true });
+    // 启动期超时多与首屏资源加载竞争有关：60s 后自动重试（成功前每 60s 一次，
+    // startRoomWorld 开头有 roomClient 守卫，成功后不再触发）
+    window.setTimeout(() => {
+      if (!roomClient && roomEnabled) void startRoomWorld();
+    }, 60000);
   }
 }
 

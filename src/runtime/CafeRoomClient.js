@@ -97,7 +97,9 @@ export class RoomClient {
     } catch (error) {
       if (error.status !== 409) throw error;
     }
-    for (const member of [this.actor, ...this.members]) {
+    // 并发 join：19 个串行 POST 在弱网/高负载下会耗尽启动预算（曾因此
+    // 超时回退 v0，世界只剩 6 人）；join 幂等，并发安全
+    await Promise.all([this.actor, ...this.members].map(async (member) => {
       try {
         await this.#request(`rooms/${this.roomId}/join`, {
           method: "POST",
@@ -110,7 +112,7 @@ export class RoomClient {
       } catch (error) {
         if (error.status !== 409) throw error;
       }
-    }
+    }));
   }
 
   async #refreshSnapshot() {
