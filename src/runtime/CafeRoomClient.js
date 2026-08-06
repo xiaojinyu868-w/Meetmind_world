@@ -41,7 +41,13 @@ export class RoomClient {
     this.running = true;
     await this.#ensureRoom();
     await this.#refreshSnapshot();
-    await this.#replay();
+    try {
+      await this.#replay();
+    } catch (error) {
+      // 历史回放失败（事件量大/网关慢）不阻塞启动：WS + 轮询照常建立，
+      // 世界最终一致比开局完整性更重要
+      console.warn("[EchoWorld] 房间事件回放失败，跳过（轮询兜底）", error);
+    }
     this.#connect();
     // 周期性快照轮询：房间生活指挥（入座/走位/会议）的权威刷新通道；
     // WS 事件负责即时性，轮询负责最终一致（WS 断开/事件丢失时世界仍然生动）
@@ -162,16 +168,24 @@ export class RoomClient {
   }
 
   async #request(path, options = {}) {
-    const response = await fetch(`${this.baseUrl}/${path}`, {
-      headers: { accept: "application/json", "content-type": "application/json" },
-      ...options,
-    });
-    if (!response.ok) {
-      const error = new Error(`Room API HTTP ${response.status}`);
-      error.status = response.status;
-      error.body = await response.json().catch(() => null);
-      throw error;
+    // 15s 超时：慢网关/大回放不许把 start()/轮询永久挂起
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch(`${this.baseUrl}/${path}`, {
+        headers: { accept: "application/json", "content-type": "application/json" },
+        signal: controller.signal,
+        ...options,
+      });
+      if (!response.ok) {
+        const error = new Error(`Room API HTTP ${response.status}`);
+        error.status = response.status;
+        error.body = await response.json().catch(() => null);
+        throw error;
+      }
+      return await response.json();
+    } finally {
+      window.clearTimeout(timer);
     }
-    return response.json();
   }
 }

@@ -72,7 +72,10 @@ class SQLiteRoomRepository:
             relationships=payload.get("relationships") or {},
             agent_runtime=payload.get("agent_runtime") or {},
             sequence=int(payload.get("sequence") or 0),
-            command_receipts=payload.get("command_receipts") or {},
+            # 历史超大回执表在加载时收敛到最近 200 条（JSON 保序，末尾最新）
+            command_receipts=dict(
+                list((payload.get("command_receipts") or {}).items())[-200:]
+            ),
         )
 
     def save(self, room: RoomState) -> None:

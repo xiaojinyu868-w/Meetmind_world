@@ -18,6 +18,10 @@ MAX_REPLAY_EVENTS = 500
 MAX_MESSAGE_DISTANCE = 3.0
 MAX_CONVERSATION_MESSAGES = 40
 AGENT_VISIT_STEP = 1.2
+# 命令幂等回执只服务短期重试：保留最近 N 条（玩家 800ms 一次 move，
+# 200 条 ≈ 2.5 分钟窗口）。无界增长曾把持久化 blob 撑到 6.7MB、
+# 每次 _persist 全量重写，房间 API 被锁拖慢到秒级（2026-08-06 修复）。
+MAX_COMMAND_RECEIPTS = 200
 
 
 class RoomError(Exception):
@@ -256,6 +260,8 @@ class RoomService:
                 "fingerprint": fingerprint,
                 "response": copy.deepcopy(response),
             }
+            while len(room.command_receipts) > MAX_COMMAND_RECEIPTS:
+                room.command_receipts.pop(next(iter(room.command_receipts)))
             self._persist(room)
             return response
 
