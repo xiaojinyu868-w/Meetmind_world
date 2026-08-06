@@ -29,10 +29,9 @@ from app.pipeline import texture_gen, voxel_gen
 from app.pipeline.cast_style import (
     CAST_ORDER,
     GLASSES_CAST,
-    GLASSES_ROW_OVERRIDE,
     PALETTE_OVERRIDES,
-    apply_glasses_overlay,
     generate_cast_tiles,
+    generate_expression_tile,
     i2i_prompt_for,
 )
 from app.pipeline.texture_gen import TextureSet
@@ -129,7 +128,6 @@ class TileRequest(BaseModel):
     view: str
     prompt: str
     use_reference: bool = True
-    anchor_eyes: bool = False
 
 
 @router.post("/tile")
@@ -153,8 +151,8 @@ def try_tile(body: TileRequest, request: Request,
         "latency_ms": round(latency_ms),
     }
     try:
-        tile = texture_gen.postprocess_i2i_tile(raw, anchor_eyes=body.anchor_eyes)
-        result["tile_png"] = _b64_png(tile.resize((128, 128), resample=0))
+        tile = texture_gen.postprocess_i2i_hires(raw)
+        result["tile_png"] = _b64_png(tile.resize((256, 256), resample=0))
     except Exception as exc:
         result["tile_error"] = f"{type(exc).__name__}: {exc}"
     return result
@@ -173,7 +171,8 @@ def _generate_tile_set(request: Request, person_id: str, prompts: dict[str, str]
     reference = _reference_bytes(directory, use_reference)
     cache_dir = Path(request.app.state.store.root) / "derived" / "voxel-pipeline" / person_id / "cache"
     return generate_cast_tiles(
-        person_id, reference, llm_base.get_provider("image"), cache_dir, prompts or None)
+        person_id, reference, llm_base.get_provider("image"), cache_dir,
+        prompts or None, hires=True)
 
 
 @router.post("/atlas")
@@ -183,16 +182,13 @@ def try_atlas(body: AtlasRequest, request: Request,
     spec = _spec_for(request, body.person_id)
     tiles, model, notes = _generate_tile_set(
         request, body.person_id, body.prompts, body.use_reference)
-    if body.person_id in GLASSES_CAST and "head_front" in tiles:
-        tiles["head_front"] = apply_glasses_overlay(
-            tiles["head_front"], GLASSES_ROW_OVERRIDE.get(body.person_id))
     overrides = PALETTE_OVERRIDES.get(body.person_id)
     if overrides:
         spec["visibleTraits"]["outfitPalette"] = [
             overrides["jacket"], overrides["shirt"], overrides["pants"]]
-    neutral = texture_gen.compose_atlas(spec, tiles)
+    neutral = texture_gen.compose_atlas_hires(spec, tiles)
     return {
-        "atlas_png": _b64_png(neutral.resize((512, 512), resample=0)),
+        "atlas_png": _b64_png(neutral),
         "tiles": sorted(tiles),
         "model": model,
         "notes": notes,
@@ -215,11 +211,9 @@ def apply_build(body: ApplyRequest, request: Request,
     tiles, image_model, notes = _generate_tile_set(
         request, body.person_id, body.prompts, body.use_reference)
     if body.person_id in GLASSES_CAST and "head_front" in tiles:
-        tiles["head_front"] = apply_glasses_overlay(
-            tiles["head_front"], GLASSES_ROW_OVERRIDE.get(body.person_id))
         spec["visibleTraits"]["glasses"] = True
     if "head_front" in tiles:
-        front = tiles["head_front"]
+        front = tiles["head_front"].resize((16, 16), texture_gen.Image.BOX)
         spec["visibleTraits"]["skinTone"] = texture_gen._dominant_color(front, (4, 12, 12, 16))
         spec["visibleTraits"]["hairColor"] = texture_gen._dominant_color(front, (0, 0, 16, 2))
     overrides = PALETTE_OVERRIDES.get(body.person_id)
@@ -227,9 +221,18 @@ def apply_build(body: ApplyRequest, request: Request,
         spec["visibleTraits"]["outfitPalette"] = [
             overrides["jacket"], overrides["shirt"], overrides["pants"]]
     texture_gen.validate_character_spec(spec)
-    neutral = texture_gen.compose_atlas(spec, tiles)
-    expressions = {name: texture_gen.derive_expression(neutral, name)
-                   for name in texture_gen.EXPRESSIONS}
+    neutral = texture_gen.compose_atlas_hires(spec, tiles)
+    expressions = {"neutral": neutral}
+    reference = _reference_bytes(_lab_dir(request, body.person_id), body.use_reference)
+    cache_dir = Path(store.root) / "derived" / "voxel-pipeline" / body.person_id / "cache"
+    for expression in ("happy", "surprised", "thinking"):
+        expr_tile, error = generate_expression_tile(
+            body.person_id, expression, reference,
+            llm_base.get_provider("image"), cache_dir)
+        if error:
+            notes.append(error)
+        expressions[expression] = texture_gen.compose_atlas_hires(
+            spec, {**tiles, "head_front": expr_tile}) if expr_tile is not None else neutral
     textures = TextureSet(
         person_id=body.person_id, spec=spec, neutral=neutral,
         expressions=expressions,
@@ -331,7 +334,6 @@ _LAB_HTML = """<!doctype html>
     <div class="row">
       <select id="view"></select>
       <label><input id="useRef" type="checkbox" checked /> 使用参考人脸（i2i）</label>
-      <label><input id="anchorEyes" type="checkbox" checked /> 深色眼睛锚定</label>
     </div>
     <textarea id="prompt" spellcheck="false"></textarea>
     <div class="row">
@@ -419,7 +421,7 @@ $("gen").addEventListener("click", async () => {
   try {
     const data = await api("tile", { method: "POST", body: JSON.stringify({
       person_id: current.person_id, view: $("view").value, prompt: $("prompt").value,
-      use_reference: $("useRef").checked, anchor_eyes: $("anchorEyes").checked }) });
+      use_reference: $("useRef").checked }) });
     $("rawImg").src = `data:image/png;base64,${data.raw_png}`;
     if (data.tile_png) $("tileImg").src = `data:image/png;base64,${data.tile_png}`;
     $("meta").textContent = `${data.model} · ${data.latency_ms}ms${data.tile_error ? " · " + data.tile_error : ""}`;
