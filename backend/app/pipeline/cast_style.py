@@ -41,6 +41,24 @@ CUSTOM_I2I_PROMPTS = {
         "watermark. The head is centered and fills most of the frame, isolated "
         "on a solid flat magenta background (#FF00FF) with no shadow and no border."
     ),
+    # su-he：默认提示词下刘海压眉遮眼成「面膜脸」；显式锁定刘海在眉毛以上、
+    # 长发只从两侧框住脸（她的真实发型）
+    ("su-he", "head_front"): (
+        "Take the person in the reference photo and draw the FRONT face of the "
+        "head, facing the viewer, as a single 16x16 retro pixel-art game skin "
+        "texture tile for a Minecraft-style voxel character head. She has long "
+        "straight black hair: the fringe stays strictly ABOVE the eyebrows "
+        "(hair occupies only the top 4-5 pixel rows), the long hair frames the "
+        "face on the left and right edges only, and the bare face with two big "
+        "bold near-black square eyes (each 2x3 pixels) is fully visible in the "
+        "vertical middle of the tile. Never let hair cover the eyes. Skin in "
+        "exactly two flat tones; high contrast, rich but flat colors. Drawn on "
+        "an exact 16x16 pixel grid: chunky visible pixels, at most 10 flat "
+        "colors, strictly no anti-aliasing, no gradients, no shading glow, no "
+        "text, no logo, no watermark. The head is centered and fills most of "
+        "the frame, isolated on a solid flat magenta background (#FF00FF) with "
+        "no shadow and no border."
+    ),
 }
 
 
