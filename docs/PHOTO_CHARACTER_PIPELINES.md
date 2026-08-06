@@ -121,7 +121,7 @@ UI、NPC 和会议系统统一发送语义事件：
 | `person_02` | 曾英杰 | `zhou-ning` |
 | `person_03` | 黄月胜 | `chen-mo` |
 | `person_04` | 李浩 | `xu-an` |
-| `person_05` | 刘璐 | `su-he` |
+| `person_05` | 杨璐 | `su-he` |
 | `person_06` | 洪选婷 | `tang-ke` |
 
 关系 Map、资料侧栏、场景模型、肖像和表情 atlas 必须共用这张映射。玩家使用独立的 `host` 槽位。

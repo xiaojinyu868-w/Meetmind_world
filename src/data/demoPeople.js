@@ -178,7 +178,7 @@ export const people = Object.freeze([
   },
   {
     id: "su-he",
-    name: "刘璐",
+    name: "杨璐",
     initials: "LL",
     portrait: "portraits/photo-derived/voxel/person_05.png",
     relation: "邻居",

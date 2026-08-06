@@ -66,7 +66,7 @@ SEED_AGENTS = [
     },
     {
         "id": "su-he",
-        "name": "刘璐",
+        "name": "杨璐",
         "position": {"x": 0.5, "z": -4.5, "yaw": 0.1},
         "state": "talking",
         "met_at": "2023 年夏 · 楼下修车棚",
