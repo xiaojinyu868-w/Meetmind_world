@@ -104,6 +104,30 @@ def test_meeting_participants_walk_to_roundtable_seats():
         assert abs(member["position"]["z"] - seat["z"]) < 1e-6
 
 
+def test_conductor_separates_overlapping_npcs():
+    """两个落点重合的 NPC 必须被分离到 MIN_SEPARATION 以上（前端胶囊死锁修复）。"""
+    from app.agents.room_conductor import MIN_SEPARATION
+
+    service = _room_with_members(("s1", "s2", "s3"))
+    conductor = _conductor(service)
+    # 强行把 s1/s2 放到完全重合的位置（模拟历史脏数据/追赶撞车）
+    for member_id in ("s1", "s2"):
+        service.apply_conductor_plan("cafe-test", {
+            "moves": {member_id: {"x": 1.0, "z": 3.0, "yaw": 0.0}},
+            "statuses": {member_id: {"status": "moving", "action": "wander"}},
+        })
+    for _ in range(3):
+        conductor.tick_once()
+    snapshot = service.snapshot("cafe-test")
+    pos = {m["member_id"]: m["position"] for m in snapshot["members"]}
+    import math
+    distance = math.hypot(pos["s1"]["x"] - pos["s2"]["x"], pos["s1"]["z"] - pos["s2"]["z"])
+    assert distance >= MIN_SEPARATION - 0.05, f"s1/s2 仍在互挤（间距 {distance:.3f}）"
+    for member_id in ("s1", "s2", "s3"):
+        assert WALK_BOUNDS["min_x"] - 0.01 <= pos[member_id]["x"] <= WALK_BOUNDS["max_x"] + 0.01
+        assert WALK_BOUNDS["min_z"] - 0.01 <= pos[member_id]["z"] <= WALK_BOUNDS["max_z"] + 0.01
+
+
 def test_stale_meeting_auto_ends_after_ttl():
     service = _room_with_members(("d1",))
     conductor = RoomConductor(

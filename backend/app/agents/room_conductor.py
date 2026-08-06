@@ -31,6 +31,8 @@ logger = logging.getLogger(__name__)
 STEP = 2.4                    # 每 tick 走位步长（米）：15s 心跳下横跨咖啡厅约 45 秒
 ARRIVE_DISTANCE = 0.12        # 到点判定（米）
 VISIT_OFFSET = 0.95           # 站着聊天时与对方保持的距离（米）
+MIN_SEPARATION = 0.62         # NPC-NPC 最小间距（前端胶囊半径 0.28×2=0.56 + 余量；
+                              # 低于此值前端的胶囊滑动与快照目标互搏——两人原地互挤死锁）
 MEETING_TTL_SECONDS = 10 * 60  # 会议最长存续：超时自动散会（防 stale 锁死圆桌）
 
 # 意图权重：大部分人就座是「咖啡厅常识」的核心
@@ -114,10 +116,119 @@ class RoomConductor:
                     "ticks_left": self.rng.randint(*INTENT_TICKS["seated"]),
                 }
 
+    def plan(self, room_id: str, snapshot: dict, now: float) -> dict | None:
+        members = {m["member_id"]: m for m in snapshot.get("members", [])}
+        runtime = {r["agent_id"]: r for r in snapshot.get("agent_runtime", [])}
+        # NPC = 除人类玩家外的成员。历史房间（agent_runtime 特性之前持久化的）
+        # 缺条目，由 apply_conductor_plan 补建；GroupPlay 多设备人类成员当前没有
+        # 标记渠道，是已记录的设计限制（docs/PRODUCT-STATUS.md）。
+        npc_ids = sorted(set(members) - {"person-self"})
+        if not npc_ids:
+            return None
+        intents = self._intents.setdefault(room_id, {})
+        for gone in set(intents) - set(npc_ids):
+            del intents[gone]
+        # 重启恢复：conductor 意图是易失的，但房间状态持久化过——座位上的人
+        # 保留原座位重建意图，避免重启后全场重新抢座。
+        for person_id in npc_ids:
+            if person_id in intents:
+                continue
+            seat_info = (runtime.get(person_id) or {}).get("seat") or {}
+            seat = _SEAT_BY_NODE.get(seat_info.get("node"))
+            if seat is not None and (runtime[person_id].get("status") in {"seated", "talking"}):
+                intents[person_id] = {
+                    "mode": "seated", "seat_node": seat["node"], "target": seat,
+                    "ticks_left": self.rng.randint(*INTENT_TICKS["seated"]),
+                }
+
         meeting = snapshot.get("meeting")
         if meeting is not None:
-            return self._plan_meeting(meeting, members, runtime, npc_ids, intents, now)
-        return self._plan_ambient(members, runtime, npc_ids, intents)
+            plan = self._plan_meeting(meeting, members, runtime, npc_ids, intents, now)
+        else:
+            plan = self._plan_ambient(members, runtime, npc_ids, intents)
+        self._separate(members, npc_ids, plan)
+        return plan
+
+    # ---------- NPC-NPC 分离（权威在后端，AGENTS.md 约定） ----------
+
+    def _separate(self, members, npc_ids, plan) -> None:
+        """对计划后的落点做两两分离：任何两个 NPC 的落点间距不得小于 MIN_SEPARATION。
+
+        没有这一步，两个目标重合的 NPC 会在前端胶囊滑动与快照目标之间互搏
+        （你挤我我挤你、原地高频抖动、谁也走不动）。已入座（座位锚点 ≥0.78m）
+        与不动的人类成员视为固定桩，只推开 NPC 侧。"""
+        moves = plan.get("moves") or {}
+        statuses = plan.get("statuses") or {}
+        positions = {}
+        for person_id in npc_ids:
+            anchor = members[person_id]["position"]
+            move = moves.get(person_id)
+            positions[person_id] = {
+                "x": float(move["x"]) if move else float(anchor["x"]),
+                "z": float(move["z"]) if move else float(anchor["z"]),
+            }
+        fixed = {
+            person_id
+            for person_id, status in statuses.items()
+            if status.get("seat") and status.get("status") in {"seated", "talking", "meeting"}
+        }
+        humans = [pid for pid in members if pid not in npc_ids]
+        for _ in range(2):  # 两轮迭代：三团互挤也能解开
+            for index, first in enumerate(npc_ids):
+                for second in npc_ids[index + 1:]:
+                    if first in fixed and second in fixed:
+                        continue
+                    a, b = positions[first], positions[second]
+                    ux, uz, deficit = self._separation_vector(a, b, first)
+                    if deficit <= 0:
+                        continue
+                    if first in fixed:
+                        self._nudge(positions, moves, second, ux, uz, deficit)
+                    elif second in fixed:
+                        self._nudge(positions, moves, first, -ux, -uz, deficit)
+                    else:
+                        self._nudge(positions, moves, first, -ux, -uz, deficit / 2)
+                        self._nudge(positions, moves, second, ux, uz, deficit / 2)
+            for human in humans:
+                anchor = members[human]["position"]
+                for person_id in npc_ids:
+                    if person_id in fixed:
+                        continue
+                    ux, uz, deficit = self._separation_vector(
+                        positions[person_id],
+                        {"x": float(anchor["x"]), "z": float(anchor["z"])},
+                        person_id,
+                    )
+                    if deficit > 0:  # 人类是固定桩：NPC 全额退让
+                        self._nudge(positions, moves, person_id, -ux, -uz, deficit)
+
+    @staticmethod
+    def _separation_vector(a, b, seed_id):
+        """b-a 方向的单位向量与间距亏空（>=MIN_SEPARATION 时亏空为 0）。"""
+        dx, dz = b["x"] - a["x"], b["z"] - a["z"]
+        distance = math.hypot(dx, dz)
+        if distance >= MIN_SEPARATION:
+            return 0.0, 0.0, 0.0
+        if distance < 1e-6:  # 完全重合：按 id 决定论方向推开
+            angle = (hash(seed_id) % 360) * math.pi / 180
+            return math.cos(angle), math.sin(angle), MIN_SEPARATION
+        return dx / distance, dz / distance, MIN_SEPARATION - distance
+
+    @staticmethod
+    def _nudge(positions, moves, person_id, ux, uz, amount):
+        """把 person_id 沿 (ux,uz) 推 amount 米（过可行走壳），并同步进计划 moves。"""
+        point = positions[person_id]
+        clamped = clamp_to_walkable({
+            "x": point["x"] + ux * amount,
+            "z": point["z"] + uz * amount,
+            "yaw": 0.0,
+        })
+        point["x"], point["z"] = clamped["x"], clamped["z"]
+        previous = moves.get(person_id) or {}
+        moves[person_id] = {
+            "x": point["x"], "z": point["z"],
+            "yaw": previous.get("yaw", 0.0),
+        }
 
     def _plan_meeting(self, meeting, members, runtime, npc_ids, intents, now):
         started_at = _meeting_started_at(meeting, now)
