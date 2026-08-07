@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import time
 import uuid
@@ -9,6 +10,8 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from PIL import Image, ImageOps, UnidentifiedImageError
+from pillow_heif import register_heif_opener
 from pydantic import BaseModel, Field
 
 from app.security.meetmind_jwt import caller_user_id
@@ -18,7 +21,13 @@ from app.packages.store import PackageNotFound
 router = APIRouter(prefix="/api/v1", tags=["mvp2-workflows"])
 
 MAX_GROUP_PHOTO_BYTES = 25 * 1024 * 1024
-GROUP_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+MAX_GROUP_PHOTO_PIXELS = 80_000_000
+GROUP_IMAGE_FORMATS = {
+    "AVIF", "BMP", "DIB", "GIF", "HEIC", "HEIF", "JPEG", "PNG", "TIFF", "WEBP",
+}
+GROUP_IMAGE_FORMAT_LABEL = "HEIC/HEIF、AVIF、JPEG、PNG、WebP、BMP、TIFF 或 GIF"
+
+register_heif_opener()
 
 
 def _parse_names(raw: str) -> list[str]:
@@ -42,11 +51,10 @@ async def group_onboarding(
     expected_count: int = Form(0),
     confirm_participants: bool = Form(True),
 ):
-    content = await photo.read()
-    _validate_group_photo(photo, content)
+    content, filename = _normalize_group_photo(await photo.read())
     try:
         return request.app.state.group_onboarding.run(
-            content, photo.filename or "group.jpg", _parse_names(participant_names),
+            content, filename, _parse_names(participant_names),
             expected_count=expected_count,
             confirm_participants=confirm_participants,
             owner_id=caller_user_id(request),
@@ -55,13 +63,44 @@ async def group_onboarding(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-def _validate_group_photo(photo: UploadFile, content: bytes) -> None:
-    if photo.content_type not in GROUP_IMAGE_TYPES:
-        raise HTTPException(status_code=415, detail="合照只支持 JPEG、PNG 或 WebP")
+def _normalize_group_photo(content: bytes) -> tuple[bytes, str]:
+    """按真实文件内容解码常见照片格式，并统一为纠正方向后的 JPEG。"""
     if not content:
         raise HTTPException(status_code=400, detail="合照为空")
     if len(content) > MAX_GROUP_PHOTO_BYTES:
         raise HTTPException(status_code=413, detail="合照超过 25MB")
+    try:
+        with Image.open(io.BytesIO(content)) as source:
+            image_format = str(source.format or "").upper()
+            if image_format not in GROUP_IMAGE_FORMATS:
+                raise HTTPException(
+                    status_code=415,
+                    detail=f"合照只支持 {GROUP_IMAGE_FORMAT_LABEL}",
+                )
+            width, height = source.size
+            if width <= 0 or height <= 0 or width * height > MAX_GROUP_PHOTO_PIXELS:
+                raise HTTPException(status_code=413, detail="合照像素尺寸过大，请缩小后重试")
+            source.seek(0)
+            image = ImageOps.exif_transpose(source)
+            image.load()
+            if "A" in image.getbands():
+                rgba = image.convert("RGBA")
+                canvas = Image.new("RGB", rgba.size, "white")
+                canvas.paste(rgba, mask=rgba.getchannel("A"))
+                image = canvas
+            else:
+                image = image.convert("RGB")
+    except HTTPException:
+        raise
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
+        raise HTTPException(
+            status_code=415,
+            detail=f"无法读取这张照片；支持 {GROUP_IMAGE_FORMAT_LABEL}",
+        ) from exc
+
+    output = io.BytesIO()
+    image.save(output, format="JPEG", quality=92, optimize=True)
+    return output.getvalue(), "group.jpg"
 
 
 @router.post("/group-onboarding/detect", status_code=201)
@@ -71,11 +110,10 @@ async def group_onboarding_detect(
     expected_count: int = Form(0),
 ):
     """两段式第一段：合照落事实层 + 人脸候选（bbox + face_ref），不建 Package。"""
-    content = await photo.read()
-    _validate_group_photo(photo, content)
+    content, filename = _normalize_group_photo(await photo.read())
     try:
         return request.app.state.group_onboarding.detect(
-            content, photo.filename or "group.jpg", expected_count=expected_count,
+            content, filename, expected_count=expected_count,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

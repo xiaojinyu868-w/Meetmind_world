@@ -129,6 +129,7 @@ def test_mobile_page_and_qr(client):
     page = client.get("/api/mobile/")
     assert page.status_code == 200
     assert "EchoWorld" in page.text
+    assert "HEIC / HEIF / AVIF" in page.text
     qr = client.get("/api/mobile/qr.png")
     assert qr.status_code == 200
     assert qr.headers["content-type"] == "image/png"

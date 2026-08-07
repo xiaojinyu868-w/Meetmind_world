@@ -9,6 +9,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
+from pillow_heif import register_heif_opener
 
 from app.agents.llm.base import LLMResponse
 from app.main import create_app
@@ -29,6 +30,14 @@ def _photo_bytes(width: int = 800, height: int = 600) -> bytes:
 
 
 PHOTO = _photo_bytes()
+register_heif_opener()
+
+
+def _encoded_photo(image_format: str) -> bytes:
+    image = Image.new("RGB", (800, 600), (240, 236, 228))
+    buffer = io.BytesIO()
+    image.save(buffer, format=image_format)
+    return buffer.getvalue()
 
 
 class FakeVision:
@@ -301,6 +310,26 @@ def test_detect_rejects_non_image(client):
     response = client.post("/api/v1/group-onboarding/detect",
                            files={"photo": ("a.txt", b"hi", "text/plain")})
     assert response.status_code == 415
+
+
+@pytest.mark.parametrize(("filename", "mime", "image_format"), [
+    ("group.heic", "image/heic", "HEIF"),
+    ("group.avif", "image/avif", "AVIF"),
+    ("group.bmp", "application/octet-stream", "BMP"),
+    ("group.tiff", "image/tiff", "TIFF"),
+])
+def test_detect_accepts_common_photo_formats_and_stores_jpeg(
+    client, filename, mime, image_format,
+):
+    response = client.post(
+        "/api/v1/group-onboarding/detect",
+        files={"photo": (filename, _encoded_photo(image_format), mime)},
+    )
+    assert response.status_code == 201, response.text
+    payload = response.json()
+    assert payload["source_ref"].endswith("/group.jpg")
+    stored = client.app.state.store.read_fact(payload["source_ref"])
+    assert stored[:2] == b"\xff\xd8"
 
 
 def test_confirm_booth_capacity_full_still_onboards(tmp_path):

@@ -298,7 +298,7 @@ actor_id / command_id / payload / occurred_at / correlation_id / causation_id`�
 
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
-| `photo` | file | 是 | 合照（JPEG/PNG/WebP，≤25MB），落事实层只增不改 |
+| `photo` | file | 是 | 合照（HEIC/HEIF、AVIF、JPEG、PNG、WebP、BMP、TIFF、GIF，≤25MB）；服务端按内容解码、纠正方向并规范化为 JPEG 后落事实层 |
 | `expected_count` | int | 否 | 预期人数（0 = 不限，仅用于提示不一致） |
 
 ```jsonc
@@ -472,6 +472,7 @@ actor_id / command_id / payload / occurred_at / correlation_id / causation_id`�
 - 2026-08-04 | v0.5（加性）：授权/组织接口顺延为 IF-10；新增 IF-9 `echo-field.v1` 关系场域、持久化世界事件与晨报；confirm 响应增加 `field_status` | AI
 - 2026-08-03 | v1：现场房间、WebSocket、Agent Intent/Command、圆桌/破冰、合照入场、第一印象、Field 和场景模块契约落地 | AI
 - 2026-08-04 | v1.1（加性）：IF-7 合照入场拆为两段式 `group-onboarding/detect` + `group-onboarding/confirm`（检测不建档、确认才批量建档+注册展位，支持逐脸 impression 推断）；一次性接口保留；人脸检测器升级为 qwen-vl 优先、OpenCV 兜底 | AI
+- 2026-08-07 | 合照上传扩展 HEIC/HEIF、AVIF、BMP、TIFF、GIF；服务端按文件内容解码、纠正 EXIF 方向并统一转 JPEG，兼容手机相册且不依赖客户端 MIME | AI
 - 2026-08-04 | 合并 codex/agent 两线：IF-6/7 同时登记 v0 预留项与 v1 rooms/group-onboarding 目标架构，IF-8 标注为 v0 过渡实现；v0 快照改为纯读（advance 默认 0，tick 由服务端 scheduler 心跳推进，advance=1 仅兼容旧客户端） | AI
 - 2026-08-04 | 行为变更（契约不变）：IF-9 关系场域生成升级为 LLM 艺术化映射（chat provider 把关系材料译为诗意空间参数，model 记为实际模型名）；provider 未配置或输出不合规时回退确定性规则模板（model="relationship-field-rules.v1"），echo-field.v1 schema 与缓存/regenerate 语义不变 | AI
 - 2026-08-04 | v0.6（加性）：IF-6 首个 v0 落地——玩家与 Agent 单聊 `POST /api/v0/agents/{id}/chat`（reply + cited_facts 来源指针 + suggestions 开场建议，generated_by 标记 mock/模型）与手动沉淀 `POST /api/v0/agents/{id}/chat/save-note`（player-note 推断，标注"来自玩家转述"）；对话不自动入库 | AI

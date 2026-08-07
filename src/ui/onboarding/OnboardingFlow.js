@@ -59,8 +59,9 @@ const PHASE_META = Object.freeze({
 
 const CRUMB_LABELS = Object.freeze(["上传合照", "认脸", "入场"]);
 
-const ACCEPT_STRING = ".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp";
-const ACCEPTED_MIME = /^image\/(jpeg|png|webp)$/;
+const ACCEPT_STRING = ".jpg,.jpeg,.png,.webp,.heic,.heif,.avif,.bmp,.dib,.tif,.tiff,.gif,image/*";
+const ACCEPTED_MIME = /^image\/(jpeg|png|webp|heic|heif|avif|bmp|x-ms-bmp|tiff|gif)$/;
+const ACCEPTED_SUFFIX = /\.(jpe?g|png|webp|heic|heif|avif|bmp|dib|tiff?|gif)$/i;
 const MAX_PHOTO_BYTES = 25 * 1024 * 1024;
 
 
@@ -204,7 +205,7 @@ export function mountOnboardingFlow(container, api, opts = {}) {
           ? `<img class="ob-preview" src="${state.previewUrl}" alt="合照预览" />`
           : `<span class="ob-dropzone-icon">${icon("image-plus")}</span>
              <strong>拖拽一张合照到这里</strong>
-             <small>或点击选择 · 支持 JPG / PNG / WebP · ≤ 25MB</small>`}
+             <small>或点击选择 · 支持 HEIC / HEIF / AVIF 等常见照片 · ≤ 25MB</small>`}
       </div>
       ${state.file ? `
         <p class="ob-file-line">${icon("users")}${escapeHtml(state.file.name)} · ${formatBytes(state.file.size)}
@@ -337,8 +338,8 @@ export function mountOnboardingFlow(container, api, opts = {}) {
   function setFile(file) {
     state.fileError = "";
     if (!file) return;
-    if (!ACCEPTED_MIME.test(file.type || "")) {
-      state.fileError = "合照只支持 JPG / PNG / WebP";
+    if (!ACCEPTED_MIME.test(file.type || "") && !ACCEPTED_SUFFIX.test(file.name || "")) {
+      state.fileError = "合照支持 HEIC / HEIF / AVIF / JPEG / PNG / WebP / BMP / TIFF / GIF";
       render();
       return;
     }

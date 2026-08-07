@@ -175,10 +175,12 @@ background:#eef2e7;color:var(--green-deep);margin-left:6px;vertical-align:2px}
     <div class="card" id="photo-step-1">
       <strong>导入合照</strong>
       <p class="muted" style="margin-top:6px">选一张大家的合照，世界会认出每一张脸。</p>
-      <input type="file" id="photo-input" accept="image/*" class="hidden">
+      <input type="file" id="photo-input"
+        accept="image/*,.heic,.heif,.avif,.bmp,.dib,.tif,.tiff,.gif" class="hidden">
       <button class="btn" id="photo-pick">选择照片</button>
       <img class="photo-preview hidden" id="photo-preview" alt="合照预览">
       <button class="btn hidden" id="photo-detect" disabled>认出每一张脸</button>
+      <p class="muted" style="margin-top:10px;text-align:center">支持 HEIC / HEIF / AVIF / JPEG / PNG / WebP / BMP / TIFF / GIF</p>
       <p class="status" id="photo-status-1"></p>
     </div>
     <div class="card hidden" id="photo-step-2">
@@ -231,7 +233,7 @@ var BASE = location.pathname.indexOf("/echoworld/") === 0 ? "/echoworld" : "";
 var TOKEN_KEY = "meetmind_access_token";
 var PAIR_KEY = "echo_pending_pair";
 var $ = function(id){ return document.getElementById(id); };
-var state = { me:null, people:[], groupId:null, faces:[], photoFile:null };
+var state = { me:null, people:[], groupId:null, faces:[], photoFile:null, photoPreviewUrl:null };
 
 // token / pair 从 URL 落 localStorage 后清掉地址栏
 // （pair 要熬过 OAuth 跳转：授权回来时凭 localStorage 里的它继续配对）
@@ -380,8 +382,17 @@ $("photo-input").addEventListener("change", function(){
   if (!file) return;
   state.photoFile = file;
   var preview = $("photo-preview");
-  preview.src = URL.createObjectURL(file);
-  preview.classList.remove("hidden");
+  if (state.photoPreviewUrl) URL.revokeObjectURL(state.photoPreviewUrl);
+  state.photoPreviewUrl = URL.createObjectURL(file);
+  preview.onload = function(){
+    preview.classList.remove("hidden");
+    $("photo-status-1").textContent = "";
+  };
+  preview.onerror = function(){
+    preview.classList.add("hidden");
+    $("photo-status-1").textContent = "已选择 " + file.name + "；当前浏览器不能预览此格式，但仍可识别。";
+  };
+  preview.src = state.photoPreviewUrl;
   var btn = $("photo-detect");
   btn.classList.remove("hidden");
   btn.disabled = false;
@@ -468,8 +479,11 @@ $("photo-confirm").addEventListener("click", function(){
 });
 $("photo-again").addEventListener("click", function(){ resetPhoto(); });
 function resetPhoto(){
+  if (state.photoPreviewUrl) URL.revokeObjectURL(state.photoPreviewUrl);
+  state.photoPreviewUrl = null;
   state.photoFile = null; state.groupId = null; state.faces = [];
   $("photo-input").value = "";
+  $("photo-preview").removeAttribute("src");
   $("photo-preview").classList.add("hidden");
   $("photo-detect").classList.add("hidden");
   ["photo-step-2","photo-step-3"].forEach(function(id){ $(id).classList.add("hidden"); });
