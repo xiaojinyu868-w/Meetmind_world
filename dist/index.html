@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1f5047" />
+    <meta
+      name="description"
+      content="EchoWorld：让真实关系化作可行走、交谈的体素 Agent，在持续生长的 3D 世界里重逢。"
+    />
+    <title>EchoWorld · Echo Cafe</title>
+    <script type="module" crossorigin src="/echoworld/assets/index-DWQrw1NP.js"></script>
+    <link rel="modulepreload" crossorigin href="/echoworld/assets/three.module-DD1yRDtP.js">
+    <link rel="stylesheet" crossorigin href="/echoworld/assets/index-B7e--Yao.css">
+  </head>
+  <body data-view="intro">
+    <main id="app">
+      <canvas id="world" tabindex="0" aria-label="EchoWorld 3D 关系咖啡厅"></canvas>
+      <div id="ui-root"></div>
+
+      <div id="player-label" class="player-label" aria-hidden="true">我</div>
+
+      <div id="loading" class="loading" role="status" aria-live="polite">
+        <div class="loading-mark">EW</div>
+        <div class="loading-copy">
+          <strong id="loading-copy">正在读取 Echo Cafe</strong>
+          <span id="loading-progress">0%</span>
+        </div>
+        <div class="loading-track" aria-hidden="true">
+          <div id="loading-bar"></div>
+        </div>
+      </div>
+
+      <div id="touch-stick" class="touch-stick" aria-label="触控移动">
+        <div class="touch-ring">
+          <div id="touch-knob" class="touch-knob"></div>
+        </div>
+      </div>
+
+      <div id="fatal-error" class="fatal-error" role="alert"></div>
+    </main>
+  </body>
+</html>
