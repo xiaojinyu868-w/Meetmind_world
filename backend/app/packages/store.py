@@ -18,6 +18,7 @@ import json
 import re
 from datetime import UTC, datetime
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 from app.config import get_data_dir
 from app.schemas.package_schema import SCHEMA_VERSION, validate_package
@@ -172,7 +173,19 @@ class PackageStore:
         name = _safe_part(name, "name")
         target = self.inferences_dir / person_id / f"{name}.json"
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        # 原子落盘（临时文件 + replace）：进程崩溃/断电瞬间不会留下写一半的
+        # 推断 JSON（推断层可重算，但损坏文件会 500 掉读取方，得不偿失）
+        encoded = json.dumps(payload, ensure_ascii=False, indent=2)
+        with NamedTemporaryFile(
+            "w", encoding="utf-8", dir=target.parent,
+            prefix=f".{target.name}.", suffix=".tmp", delete=False,
+        ) as handle:
+            handle.write(encoded)
+            temporary = Path(handle.name)
+        try:
+            temporary.replace(target)
+        finally:
+            temporary.unlink(missing_ok=True)
         return target.relative_to(self.root).as_posix()
 
     def read_inferences(self, person_id: str) -> dict:
