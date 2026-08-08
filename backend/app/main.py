@@ -25,7 +25,12 @@ from app.agents.roles import (
 )
 from app.agents.roles.person import PersonAgent
 from app.agents.contracts import PrivacyLevel
-from app.agents.runtime_v2 import AgentCoordinator, AgentRouter, ContextBuilder
+from app.agents.runtime_v2 import (
+    AgentCoordinator,
+    AgentRouter,
+    AgentRuntimeLimits,
+    ContextBuilder,
+)
 from app.agents.room_autonomy import RoomAutonomyService
 from app.agents.room_conductor import RoomConductor
 from app.agents.dialogue import build_pair_context
@@ -231,9 +236,15 @@ def create_app() -> FastAPI:
         ) for person_id in person_ids if person_id and person_id != "person-self")
 
     app.state.agent_router = AgentRouter(
-        context_builder, agent_factory=person_agent_factory
+        context_builder,
+        agent_factory=person_agent_factory,
+        # 真实 chat provider 的 HTTP 超时为 30 秒；Room v1 默认 2 秒预算只
+        # 适合纯规则 Agent，会在原圆桌链路返回前把有效结果丢弃。
+        limits=AgentRuntimeLimits(timeout_seconds=35.0),
     )
-    app.state.agent_router.register(RoundtableFacilitatorAgent())
+    app.state.agent_router.register(RoundtableFacilitatorAgent(
+        meeting_runtime=app.state.runtime,
+    ))
     app.state.agent_router.register(IcebreakerHostAgent())
     app.state.agent_router.register(BulletinComposerAgent())
     app.state.command_validator = CommandValidator(app.state.policy)

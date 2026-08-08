@@ -82,12 +82,16 @@ class RoomConductor:
     def tick_once(self) -> None:
         for room_id in self._rooms.room_ids():
             try:
-                snapshot = self._rooms.snapshot(room_id)
-                plan = self.plan(room_id, snapshot, self._clock())
-                if plan is not None:
-                    self._rooms.apply_conductor_plan(room_id, plan)
+                self.tick_room(room_id)
             except Exception:
                 logger.exception("room conductor tick failed: %s", room_id)
+
+    def tick_room(self, room_id: str) -> None:
+        """Apply one room immediately for user-driven transitions such as meeting start."""
+        snapshot = self._rooms.snapshot(room_id)
+        plan = self.plan(room_id, snapshot, self._clock())
+        if plan is not None:
+            self._rooms.apply_conductor_plan(room_id, plan)
 
     # ---------- 策略（纯函数，单测直接打这里） ----------
 

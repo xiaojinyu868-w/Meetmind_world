@@ -89,9 +89,18 @@ def test_roadmap_2i_group_roundtable_bulletin_and_feedback(tmp_path, monkeypatch
         client, room_id, "meeting-start", organizer, "meeting.start",
         {"invitation_id": invitation_id, "meeting_id": "acceptance-meeting"},
     )
-    assert [event["type"] for event in started["events"]] == [
-        "meeting.started", "meeting.topic-proposed",
-    ]
+    started_types = [event["type"] for event in started["events"]]
+    assert started_types[:2] == ["meeting.started", "meeting.topic-proposed"]
+    assert (
+        "meeting.message-created" in started_types
+        or "meeting.generation-unavailable" in started_types
+    )
+    if "meeting.generation-unavailable" in started_types:
+        unavailable = next(
+            event for event in started["events"]
+            if event["type"] == "meeting.generation-unavailable"
+        )
+        assert "不会使用 Mock" in unavailable["payload"]["text"]
     replayed_start = _command(
         client, room_id, "meeting-start", organizer, "meeting.start",
         {"invitation_id": invitation_id, "meeting_id": "acceptance-meeting"},

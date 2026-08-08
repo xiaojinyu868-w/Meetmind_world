@@ -24,6 +24,7 @@ export function slideStepAroundBlockers(
     moverMinY = -Infinity,
     moverMaxY = Infinity,
     ignore = null,
+    preferredSide = 1,
   } = {},
 ) {
   let sx = stepX;
@@ -70,8 +71,9 @@ export function slideStepAroundBlockers(
     const tangentZ = radialX;
     const tangentDot = sx * tangentX + sz * tangentZ;
     if (Math.abs(tangentDot) < 1e-4) {
-      const cross = (data.x - x) * stepZ - (data.z - z) * stepX;
-      const side = Math.abs(cross) < 1e-5 ? 1 : Math.sign(cross);
+      // Keep a stable traffic side for head-on encounters. Deriving the side
+      // from a near-zero cross product made it flip with floating-point noise.
+      const side = preferredSide < 0 ? -1 : 1;
       sx = tangentX * stepLength * side;
       sz = tangentZ * stepLength * side;
     } else {

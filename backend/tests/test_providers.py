@@ -7,6 +7,7 @@ from app.agents.llm import base as llm_base
 from app.agents.llm.base import LLMProvider
 from app.agents.llm.deepseek import DeepseekProvider
 from app.agents.llm.qwen import QwenProvider
+from app.config import get_role_config
 
 
 def _openai_payload(text: str) -> dict:
@@ -31,6 +32,15 @@ def test_registry_returns_role_providers():
     assert isinstance(llm_base.get_provider("vision"), QwenProvider)
     with pytest.raises(KeyError):
         llm_base.get_provider("no-such-role")
+
+
+def test_chat_model_accepts_legacy_llm_model_and_prefers_chat_model(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key-not-real")
+    monkeypatch.setenv("LLM_MODEL", "legacy-chat-model")
+    assert get_role_config("chat")["model"] == "legacy-chat-model"
+
+    monkeypatch.setenv("CHAT_MODEL", "role-chat-model")
+    assert get_role_config("chat")["model"] == "role-chat-model"
 
 
 def test_deepseek_chat_non_mock_via_mock_server():

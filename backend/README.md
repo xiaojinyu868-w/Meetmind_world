@@ -150,7 +150,7 @@ Runtime 对链深、单事件 Intent 数量、超时和重复 intent ID 有硬�
 
 | 角色 | 触发 | 当前作用 | 当前实现状态 |
 |---|---|---|---|
-| `RoundtableFacilitatorAgent` | `meeting.started` | 生成圆桌开场议题 | 模板生成，未接真实 LLM |
+| `RoundtableFacilitatorAgent` | `meeting.started`、`meeting.message-requested` | 生成圆桌开场与回应 | 真实 chat provider；失败时报告不可用，不生成 Mock 正文 |
 | `IcebreakerHostAgent` | `icebreaker.requested` | 生成并启动破冰内容 | 模板生成，状态机在 RoomService |
 | `BulletinComposerAgent` | `meeting.ended` | 生成房间公告 | 模板生成，只基于已提交事件 |
 | `PersonAgent` | `person.message-requested` | 人物回复 | 类已定义，但主应用尚未动态注册人物实例 |
@@ -232,19 +232,21 @@ icebreaker.request       icebreaker.submit
 icebreaker.finish
 ```
 
-`roundtable.propose-topic`、`bulletin.publish`、`icebreaker.start` 属于服务端 Agent/系统命令，前端不应直接提交。
+`roundtable.propose-topic`、`roundtable.speak`、`roundtable.status`、`bulletin.publish`、
+`icebreaker.start` 属于服务端 Agent/系统命令，前端不应直接提交。玩家在进行中的圆桌
+发言使用 `meeting.message`，后端会记录原话并触发下一轮模型回应。
 
 ## 7. 前端联调
 
 ### 7.1 当前状态
 
-- Three.js 当前轮询 `/api/v0/world/snapshot`，资料录入和人物面板使用 `/api/v0`。
-- 前端 `?api=live` 使用相对 `/api` 地址，但仓库目前没有 Vite `/api -> 8000` 代理。
-- 前端在后端失败时会降级本地 mock，画面正常不代表已经连到后端。
-- 前端目前没有 `/api/v1/rooms` 客户端，也没有消费 v1 WebSocket。
-- 圆桌邀请、人物入座和聊天回复目前仍有浏览器本地模拟逻辑。
+- Three.js 咖啡厅优先接入 `/api/v1/rooms`，由 RoomClient 消费 WebSocket 有序事件，
+  WebSocket 不可用时降级 HTTP 事件补拉。
+- Room v1 成功连接后，圆桌邀请、入座、玩家发言和模型回复都走后端命令/事件；
+  不再使用浏览器本地预置台词。
+- 后端完全不可达时仍可进入显式离线演示链，画面正常不代表已经连到后端。
 
-因此，当前前端可以展示 v0 世界，但尚不能展示完整 MVP2 房间 Agent 闭环。
+因此，联调时应检查画布的 `data-room-source="v1"` 与会议事件，而不是仅凭画面判断。
 
 ### 7.2 推荐的本地连接方式
 
@@ -446,8 +448,8 @@ python scripts/mvp2_acceptance.py --base-url http://127.0.0.1:8000
 - 当前只适合单 Uvicorn 进程现场演示；多实例需要 PostgreSQL 事务/outbox 与 Redis presence/pub-sub。
 - v1 房间没有登录和 room token，`actor_id` 仍由客户端提交；不要直接暴露到公网。
 - 公共命令入口与 Agent 内部系统命令还需要进一步隔离和鉴权。
-- Three.js 尚未接入 v1 房间/WebSocket，当前看到的 3D 活动可能来自 v0 或 mock。
-- v2 Agent 角色主要是确定性模板，`PersonAgent` 和自由圆桌对话尚未形成完整闭环。
+- Three.js 已接入 v1 房间/WebSocket，但完全离线时仍可能显示 v0 或 mock 世界。
+- v2 圆桌已形成真实模型消息闭环；未配置 chat provider 时会保持安静并报告不可用。
 - SQLite 事件和房间快照目前不是同一个数据库事务提交，多实例前需要重构一致性边界。
 - OpenCV 是可选裁剪能力，不等于可靠身份识别，最终 `person_id` 绑定必须人工确认。
 - Field 当前输出版本化环境参数 JSON，尚未生成最终 Three.js 场景资产。

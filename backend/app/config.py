@@ -36,7 +36,7 @@ _ROLE_ENV_MAP = {
     "chat": {
         "api_base": ("CHAT_API_BASE", "DEEPSEEK_BASE_URL"),
         "api_key": ("CHAT_API_KEY", "DEEPSEEK_API_KEY"),
-        "model": ("CHAT_MODEL",),
+        "model": ("CHAT_MODEL", "LLM_MODEL"),
         "default_base": DEFAULT_CHAT_API_BASE,
         "default_model": DEFAULT_CHAT_MODEL,
     },

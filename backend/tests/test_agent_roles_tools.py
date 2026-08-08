@@ -6,7 +6,9 @@ from pathlib import Path
 import pytest
 
 from app.agents.contracts import AgentContext, ContextFact, EventEnvelope, PrivacyLevel
-from app.agents.roles import BulletinComposerAgent, IcebreakerHostAgent
+from app.agents.llm.base import LLMResponse
+from app.agents.roles import BulletinComposerAgent, IcebreakerHostAgent, RoundtableFacilitatorAgent
+from app.agents.runtime import AgentRuntime, EventBus
 from app.agents.tools import EventSummaryTool, ToolRegistry, ToolResult, ToolSpec
 from app.skills import SkillRegistry
 
@@ -75,4 +77,66 @@ def test_all_versioned_skill_manifests_load():
     definitions = Path(__file__).parents[1] / "app" / "skills" / "definitions"
     loaded = registry.load_directory(definitions)
     assert {item.name for item in loaded} == {"bulletin", "icebreaker", "roundtable"}
-    assert registry.get("roundtable").allowed_intents == ("propose_topic",)
+    assert registry.get("roundtable").allowed_intents == (
+        "propose_topic", "speak_roundtable", "report_roundtable_status",
+    )
+
+
+def test_roundtable_reuses_original_meeting_runtime_chain():
+    class FakeChat:
+        config = {"configured": True}
+        model = "test-chat"
+
+        def chat(self, _messages, **_kwargs):
+            return LLMResponse(
+                text='{"lines":[{"speaker":"bob","text":"我先分享一个具体进展。"}]}',
+                model=self.model,
+                mock=False,
+            )
+
+    event = EventEnvelope(
+        type="meeting.started", room_id="room-a", actor_id="alice",
+        payload={
+            "meeting_id": "meeting-1", "topic": "下一步",
+            "participant_ids": ["alice", "bob", "carol"],
+        },
+    )
+    context = AgentContext(
+        agent_id="system.facilitator", room_id="room-a", trigger_event=event,
+        room_state={"meeting": {
+            "meeting_id": "meeting-1", "organizer_id": "alice",
+            "topic": "下一步", "participant_ids": ["alice", "bob", "carol"],
+            "messages": [],
+        }},
+        allowed_privacy_levels=frozenset({PrivacyLevel.PUBLIC, PrivacyLevel.ROOM}),
+    )
+    runtime = AgentRuntime(EventBus(), chat_provider=FakeChat(), memory=None)
+    decision = asyncio.run(RoundtableFacilitatorAgent(
+        meeting_runtime=runtime,
+    ).handle(event, context))
+    assert [intent.type for intent in decision.intents] == [
+        "propose_topic", "speak_roundtable",
+    ]
+    assert decision.intents[1].payload == {
+        "meeting_id": "meeting-1", "speaker_id": "bob",
+        "text": "我先分享一个具体进展。",
+        "generated_by": "llm", "model": "test-chat",
+    }
+    assert decision.model_metadata["mock"] is False
+    assert decision.model_metadata["generated_by"] == "llm"
+
+    class UnconfiguredChat:
+        config = {"configured": False}
+        model = "not-configured"
+
+    fallback_runtime = AgentRuntime(
+        EventBus(), chat_provider=UnconfiguredChat(), memory=None,
+    )
+    fallback = asyncio.run(RoundtableFacilitatorAgent(
+        meeting_runtime=fallback_runtime,
+    ).handle(event, context))
+    assert [intent.type for intent in fallback.intents] == [
+        "propose_topic", "speak_roundtable", "speak_roundtable",
+    ]
+    assert fallback.model_metadata["generated_by"] == "template"
+    assert fallback.model_metadata["mock"] is True

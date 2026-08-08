@@ -203,6 +203,49 @@ class AgentRuntime:
 
     # ---------- 用户发起的圆桌会议（IF-6：真实对话，围绕主题与发言人） ----------
 
+    def generate_user_meeting_turn(
+        self,
+        participant_ids: list,
+        *,
+        topic: str | None = None,
+        transcript: list | None = None,
+        player_message: str | None = None,
+        round_index: int = 0,
+    ) -> dict:
+        """通过原有会议链路生成一轮发言，供 legacy 与 Room v1 共用。
+
+        这里是会议模型调用的唯一编排入口：授权记忆组装、chat provider、
+        JSON 解析以及原有模板兜底都继续复用 dialogue 模块。调用方只负责
+        把返回的发言写入各自的事件模型，不得另建一套 prompt/provider 链路。
+        """
+        participants = [str(person_id) for person_id in participant_ids]
+        if len(participants) < 2:
+            return {
+                "lines": [],
+                "generated_by": "none",
+                "model": "meeting-runtime.v1",
+            }
+        context = build_meeting_context(
+            self._memory,
+            participants,
+            topic=topic,
+            transcript=transcript,
+            player_message=player_message,
+        )
+        if self._chat is not None and self._chat.config.get("configured"):
+            result = llm_meeting_turn(self._chat, context)
+            if result is not None and result.get("lines"):
+                return {
+                    "lines": result["lines"],
+                    "generated_by": "llm",
+                    "model": self._chat.model,
+                }
+        return {
+            "lines": template_meeting_turn(context, round_index),
+            "generated_by": "template",
+            "model": "meeting-template.v1",
+        }
+
     def _tick_user_meeting(self, agents: dict, participants: list) -> None:
         """用户会议的一轮：与会者围绕 topic + 发起人发言产出真实对话（dialogue
         机制），agent-talk 事件带 meeting_id 供前端归到会议线程；玩家发言在
@@ -211,25 +254,19 @@ class AgentRuntime:
             return
         meeting = self._meeting
         round_index = USER_MEETING_DURATION_TICKS - meeting["ticks_left"]
-        context = build_meeting_context(
-            self._memory, participants,
+        result = self.generate_user_meeting_turn(
+            participants,
             topic=meeting.get("topic"),
             transcript=meeting["transcript"],
             player_message=meeting.get("player_message"),
+            round_index=round_index,
         )
         # 发起人发言已进入本轮 prompt：无论 LLM 成败都消费掉，转入发言记录
         if meeting.get("player_message"):
             meeting["transcript"].append(("发起人（玩家）", meeting["player_message"]))
             meeting["player_message"] = None
-        lines = None
-        if self._chat is not None and self._chat.config.get("configured"):
-            result = llm_meeting_turn(self._chat, context)
-            if result is not None:
-                lines = result["lines"]
-        if not lines:
-            lines = template_meeting_turn(context, round_index)
         meeting["transcript"] = meeting["transcript"][-MEETING_TRANSCRIPT_KEEP:]
-        for speaker_id, text in lines:
+        for speaker_id, text in result["lines"]:
             if speaker_id not in participants:
                 continue  # 越权 speaker 一律丢弃
             speaker = agents[speaker_id]
