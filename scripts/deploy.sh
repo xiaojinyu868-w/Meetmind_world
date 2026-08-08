@@ -12,17 +12,20 @@ REPO=/root/meetmind_wt_main
 BACKEND="$REPO/backend"
 DATA_DIR=${ECHO_DATA_DIR:-/root/meetmind_go/backend/data}
 UVICORN_LOG=/var/log/echoworld-uvicorn.log
+DEPLOYED_MARKER=/var/lib/echoworld-deployed-commit
 
 cd "$REPO"
 git fetch origin main --quiet
-LOCAL=$(git rev-parse HEAD)
 REMOTE=$(git rev-parse origin/main)
-if [ "$LOCAL" = "$REMOTE" ] && [ "${1:-}" != "--force" ]; then
+# 注意：不能比较 HEAD==REMOTE——在本机 push 的场景下二者恒等，但运行中的
+# 后端还是旧代码。以「上次实际部署的 commit」为准：HEAD 或 REMOTE 超前即部署。
+DEPLOYED=$(cat "$DEPLOYED_MARKER" 2>/dev/null || echo "")
+if [ "$DEPLOYED" = "$REMOTE" ] && [ "$DEPLOYED" = "$(git rev-parse HEAD)" ] && [ "${1:-}" != "--force" ]; then
   echo "[deploy] up-to-date: $(git rev-parse --short HEAD)"
   exit 0
 fi
 
-echo "[deploy] $LOCAL -> $REMOTE"
+echo "[deploy] deployed=$DEPLOYED -> $REMOTE"
 git pull --ff-only origin main
 
 "$BACKEND/.venv/bin/pip" install -q -r "$BACKEND/requirements.txt"
@@ -44,4 +47,5 @@ curl -fsS http://127.0.0.1:8000/api/health > /dev/null
 rm -rf /var/www/echoworld
 cp -a "$REPO/dist" /var/www/echoworld
 
+git rev-parse HEAD > "$DEPLOYED_MARKER"
 echo "[deploy] deployed: $(git rev-parse --short HEAD)"
