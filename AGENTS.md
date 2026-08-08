@@ -59,6 +59,10 @@ node --test tests/booth-layout.test.mjs  # 展位槽位/交互半径（未挂 np
 ```
 
 - 没有配置 lint、格式化或类型检查工具。
+- **CI/CD（2026-08-08 起，见 docs/DEPLOYMENT.md）**：push/PR 到 `main` 触发 GitHub Actions
+  （后端 pytest 全量 + 前端生产构建）；生产服务器 cron 每分钟巡检 `origin/main`，
+  有更新即自动 `scripts/deploy.sh`（拉取 → 依赖 → 构建 → 重启后端 → 同步 dist）。
+  合并进 `main` 约 1–2 分钟后即上线，不要在工作区留未提交改动（会让自动部署 pull 失败）。
 - 没有通用测试框架；角色动作使用 Node 内置测试，其他验证仍为 `npm run build` 成功 + 浏览器手动走查体验闭环。
 - `dist/` 已提交进 Git（构建产物随仓库分发）。修改源码后如需更新分发产物，重新 `npm run build` 并提交 `dist/`。
 
