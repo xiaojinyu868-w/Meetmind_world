@@ -67,7 +67,9 @@ class WorldScheduler:
                 break
             except TimeoutError:
                 try:
-                    self.tick_once()
+                    # Legacy runtime/provider 是同步接口；启用真实模型后一次网络
+                    # 调用可能持续数十秒，必须离开 FastAPI 事件循环执行。
+                    await asyncio.to_thread(self.tick_once)
                     autonomy = getattr(self.app.state, "room_autonomy", None)
                     if autonomy is not None:
                         await autonomy.tick_once()

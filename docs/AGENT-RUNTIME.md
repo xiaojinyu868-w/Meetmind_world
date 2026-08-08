@@ -31,8 +31,11 @@ legacy 快照（`applyLiveSnapshot` → `applyRoomSnapshot`）。
 
 会议生命周期：`meeting.invite`（Agent 成员**即时自动应邀**并走向圆桌站位环
 ——MVP 产品决策，应邀不阻塞用户发起的会议）→ `meeting.start`（要求全员在
-hotspot 内）→ 对话（RoundtableFacilitatorAgent）→ `meeting.end` 或 conductor
-TTL 散会。stale meeting 不再可能锁死圆桌（409 修复，2026-08-06）。
+hotspot 内）→ `meeting.start` 触发 RoundtableFacilitatorAgent 调用真实 chat provider
+→ `meeting.message-created` 有序回流；玩家发言走 `meeting.message`，并触发下一轮模型
+回应 → `meeting.end` 或 conductor TTL 散会。模型不可用时只发
+`meeting.generation-unavailable` 状态事件，禁止模板冒充讨论正文。stale meeting 不再
+可能锁死圆桌（409 修复，2026-08-06）。
 
 ## 广场（hall）的哲学：无增量信息不演化
 

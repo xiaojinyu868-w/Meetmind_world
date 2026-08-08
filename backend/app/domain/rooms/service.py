@@ -232,7 +232,10 @@ class RoomService:
                 "meeting.respond": self._respond_meeting,
                 "meeting.start": self._start_meeting,
                 "meeting.end": self._end_meeting,
+                "meeting.message": self._message_meeting,
                 "roundtable.propose-topic": self._propose_meeting_topic,
+                "roundtable.speak": self._speak_at_meeting,
+                "roundtable.status": self._report_meeting_status,
                 "bulletin.publish": self._publish_bulletin,
                 "icebreaker.request": self._request_icebreaker,
                 "icebreaker.start": self._start_icebreaker,
@@ -244,7 +247,8 @@ class RoomService:
             if handler is None:
                 raise RoomError("unknown_command", f"Unsupported command '{command_type}'")
             system_commands = {
-                "roundtable.propose-topic", "bulletin.publish", "icebreaker.start",
+                "roundtable.propose-topic", "roundtable.speak", "roundtable.status",
+                "bulletin.publish", "icebreaker.start",
             }
             if command_type not in system_commands or not actor_id.startswith("system."):
                 self._member(room, actor_id)
@@ -562,6 +566,7 @@ class RoomService:
             "topic": invitation["topic"],
             "hotspot_id": hotspot.hotspot_id,
             "status": "active",
+            "messages": [],
         }
         invitation["status"] = "active"
         event = self._append_event(
@@ -732,6 +737,95 @@ class RoomService:
             room, "meeting.topic-proposed",
             {"meeting_id": meeting["meeting_id"], "text": text,
              "participant_count": payload.get("participant_count")},
+            actor_id=actor_id, command_id=command_id,
+        )]
+
+    def _message_meeting(
+        self, room: RoomState, actor_id: str, command_id: str, payload: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        meeting = room.active_meeting
+        if meeting is None:
+            raise RoomError("meeting_not_active", "There is no active meeting")
+        if payload.get("meeting_id") != meeting["meeting_id"]:
+            raise RoomError("meeting_not_found", "Active meeting id does not match")
+        if actor_id not in meeting["participant_ids"]:
+            raise RoomError("meeting_forbidden", "Only meeting participants can speak")
+        text = str(payload.get("text") or "").strip()
+        if not text or len(text) > 500:
+            raise RoomError("invalid_command", "meeting message must contain 1-500 characters")
+        created = self._append_event(
+            room, "meeting.message-created",
+            {"meeting_id": meeting["meeting_id"], "speaker_id": actor_id, "text": text},
+            actor_id=actor_id, command_id=command_id,
+        )
+        self._append_meeting_message(meeting, actor_id, text, created["sequence"])
+        requested = self._append_event(
+            room, "meeting.message-requested",
+            {
+                "meeting_id": meeting["meeting_id"],
+                "speaker_id": actor_id,
+                "text": text,
+                "participant_ids": list(meeting["participant_ids"]),
+                "topic": meeting.get("topic"),
+            },
+            actor_id=actor_id, command_id=command_id,
+        )
+        return [created, requested]
+
+    def _speak_at_meeting(
+        self, room: RoomState, actor_id: str, command_id: str, payload: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        meeting = room.active_meeting
+        if meeting is None:
+            raise RoomError("meeting_not_active", "There is no active meeting")
+        if payload.get("meeting_id") != meeting["meeting_id"]:
+            raise RoomError("meeting_not_found", "Active meeting id does not match")
+        speaker_id = str(payload.get("speaker_id") or "").strip()
+        if speaker_id not in meeting["participant_ids"]:
+            raise RoomError("meeting_forbidden", "Generated speaker is not a meeting participant")
+        text = str(payload.get("text") or "").strip()
+        if not text or len(text) > 500:
+            raise RoomError("invalid_command", "meeting message must contain 1-500 characters")
+        generated_by = str(payload.get("generated_by") or "").strip()
+        model = str(payload.get("model") or "").strip()
+        event_payload = {
+            "meeting_id": meeting["meeting_id"],
+            "speaker_id": speaker_id,
+            "text": text,
+        }
+        if generated_by:
+            event_payload["generated_by"] = generated_by
+        if model:
+            event_payload["model"] = model
+        event = self._append_event(
+            room, "meeting.message-created",
+            event_payload,
+            actor_id=actor_id, subject_id=speaker_id, command_id=command_id,
+        )
+        self._append_meeting_message(
+            meeting, speaker_id, text, event["sequence"],
+            generated_by=generated_by, model=model,
+        )
+        return [event]
+
+    def _report_meeting_status(
+        self, room: RoomState, actor_id: str, command_id: str, payload: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        meeting = room.active_meeting
+        if meeting is None:
+            raise RoomError("meeting_not_active", "There is no active meeting")
+        if payload.get("meeting_id") != meeting["meeting_id"]:
+            raise RoomError("meeting_not_found", "Active meeting id does not match")
+        text = str(payload.get("text") or "").strip()
+        if not text or len(text) > 500:
+            raise RoomError("invalid_command", "meeting status must contain 1-500 characters")
+        return [self._append_event(
+            room, "meeting.generation-unavailable",
+            {
+                "meeting_id": meeting["meeting_id"],
+                "status": str(payload.get("status") or "generation-unavailable"),
+                "text": text,
+            },
             actor_id=actor_id, command_id=command_id,
         )]
 
@@ -956,6 +1050,25 @@ class RoomService:
                 copy.deepcopy(room.agent_runtime[key]) for key in sorted(room.agent_runtime)
             ],
         }
+
+    @staticmethod
+    def _append_meeting_message(
+        meeting: dict[str, Any], speaker_id: str, text: str, sequence: int,
+        *, generated_by: str = "", model: str = "",
+    ) -> None:
+        messages = meeting.setdefault("messages", [])
+        message = {
+            "speaker_id": speaker_id,
+            "text": text,
+            "sequence": sequence,
+        }
+        if generated_by:
+            message["generated_by"] = generated_by
+        if model:
+            message["model"] = model
+        messages.append(message)
+        if len(messages) > MAX_CONVERSATION_MESSAGES:
+            del messages[:-MAX_CONVERSATION_MESSAGES]
 
     @staticmethod
     def _append_conversation_message(

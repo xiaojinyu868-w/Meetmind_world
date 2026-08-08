@@ -157,6 +157,16 @@ async def execute_command(room_id: str, body: CommandInput, request: Request):
                 result["events"].extend(generated)
                 result["sequence"] = latest
                 service.attach_generated_events(room_id, body.command_id, generated, latest)
+        # A user-started roundtable must be visible immediately. Waiting for the
+        # 15-second world heartbeat (plus the client's snapshot poll) made the UI
+        # time out while every participant still looked seated at their old table.
+        if (
+            not result.get("replayed")
+            and any(event.get("type") == "meeting.started" for event in result.get("events", []))
+        ):
+            conductor = getattr(request.app.state, "room_conductor", None)
+            if conductor is not None:
+                conductor.tick_room(room_id)
         return result
     except RoomError as exc:
         _raise_http(exc)

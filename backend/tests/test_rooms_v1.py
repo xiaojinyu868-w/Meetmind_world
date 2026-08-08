@@ -99,6 +99,31 @@ def test_meeting_lifecycle_is_ordered_idempotent_and_publishes_bulletin():
     )
     assert start.status_code == 200
     assert start.json()["events"][0]["type"] == "meeting.started"
+    started_snapshot = client.get("/api/v1/rooms/demo/snapshot").json()
+    runtime = {item["agent_id"]: item for item in started_snapshot["agent_runtime"]}
+    assert runtime["bob"]["status"] == "meeting"
+    started_sequence = started_snapshot["sequence"]
+    replayed_start = _command(
+        client,
+        "cmd-start",
+        "meeting.start",
+        {"invitation_id": "invite-1", "meeting_id": "meeting-1"},
+    )
+    assert replayed_start.json()["replayed"] is True
+    assert client.get("/api/v1/rooms/demo/snapshot").json()["sequence"] == started_sequence
+
+    message = _command(
+        client, "meeting-message", "meeting.message",
+        {"meeting_id": "meeting-1", "text": "我们先从最小实验开始。"},
+    )
+    assert [event["type"] for event in message.json()["events"]] == [
+        "meeting.message-created", "meeting.message-requested",
+    ]
+    assert client.get("/api/v1/rooms/demo/snapshot").json()["meeting"]["messages"] == [{
+        "speaker_id": "alice",
+        "text": "我们先从最小实验开始。",
+        "sequence": message.json()["events"][0]["sequence"],
+    }]
 
     end = _command(
         client,

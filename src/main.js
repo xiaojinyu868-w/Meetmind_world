@@ -18,6 +18,17 @@ import {
   navigateToCafeSceneVariant,
 } from "./runtime/CafeVariants.js";
 import { CharacterExpressionSystem } from "./runtime/CharacterExpressionSystem.js";
+import {
+  isMeetingActorReady,
+  roomMeetingSeatFor,
+  seatKeyForTarget,
+  shouldForceMeetingSeat,
+} from "./runtime/MeetingReadiness.js";
+import {
+  createMovementRecoveryState,
+  observeMovementRecovery,
+  steerRecoveryStep,
+} from "./runtime/MovementRecovery.js";
 import { CHARACTER_ACTIONS, CharacterSystem } from "./runtime/CharacterSystem.js";
 import {
   DEFAULT_CHARACTER_COLLIDER,
@@ -183,6 +194,9 @@ function hashString(value) {
 // 运行时注入（window.__ECHOWORLD_OPTIONS__）：api / onPersonSelected / live / snapshotPollMs
 const runtimeOptions = globalThis.__ECHOWORLD_OPTIONS__ ?? {};
 let worldAudio = null;
+// 登录态（MeetMind 共享 JWT，LOGIN-AND-OWNERSHIP）：先创建稳定对象引用，
+// 供 integrations / room panel 挂载；身份水合完成后再原位更新字段。
+const currentUser = { ...baseCurrentUser };
 // 注入的 api 必须覆盖录入流程三方法，否则回退内置 MockApi 适配层（避免集成模块挂载抛错导致白屏）
 const injectedApi = runtimeOptions.api ?? null;
 const usableApi =
@@ -382,6 +396,7 @@ heartSignalSystem.setVisible(false);
 const packageNames = new Map();
 const liveTargets = new Map();
 const liveMeetingOverrides = new Map();
+const liveMovementRecovery = new Map();
 const groupPresenceOverrides = new Map();
 const liveBubbles = new Map();
 const liveFacing = new THREE.Vector3();
@@ -406,6 +421,7 @@ let pendingSceneInviteId = people.some((person) => person.id === invitedPersonId
   : null;
 let roomMeetingId = null;
 let roomInvitationId = null;
+let meetingSeatAssignedAt = null;
 let nearbyHotspotId = null;
 let sceneHotspots = [];
 const hallGlances = new Map();
@@ -417,10 +433,6 @@ let hoverClientX = 0;
 let hoverClientY = 0;
 let hoverActive = false;
 let hoverBooth = null;
-
-// 登录态（MeetMind 共享 JWT，LOGIN-AND-OWNERSHIP）：有效的 MeetMind 登录会把
-//「我」从演示身份切换为真实用户（房间 actor / 包 owner / 世界归属过滤的锚点）
-const currentUser = { ...baseCurrentUser };
 
 async function hydrateAuthIdentity() {
   const token = localStorage.getItem("meetmind_access_token");
@@ -479,6 +491,7 @@ const appShell = createCafeShell({
   onLocatePerson: (person) => selectWorldPerson(person.id),
   onMeetingStart: startMeeting,
   onMeetingEnd: endMeeting,
+  onMeetingMessage: sendMeetingMessage,
   onNotification: () => worldAudio?.playNotification(),
   resolveMediaUrl,
   world: activeWorld.id,
@@ -769,13 +782,14 @@ async function spawnCharacters() {
 
   npcSystem = new NpcAgentSystem({
     people: visiblePeople,
-    resolveMovement: ({ agent, entity, stepX, stepZ, targetX, targetZ }) =>
+    resolveMovement: ({ agent, entity, stepX, stepZ, targetX, targetZ, preferredSide }) =>
       resolveCharacterMovement(entity, stepX, stepZ, {
         targetX,
         targetZ,
         approachRadius: LIVE_SEAT_APPROACH_DISTANCE,
         targetApproach: true,
         targetBlockerId: agent.tableId,
+        preferredSide,
       }),
     onConversation: (event) => {
       appShell.showNpcConversation(event);
@@ -1060,13 +1074,17 @@ function meetingActorsReady(personIds) {
 
   return personIds.every((personId) => {
     const entity = npcSystem.getEntity(personId);
-    if (!entity || !seatedAnimationComplete(entity)) return false;
+    if (!entity) return false;
     if (liveEnabled) {
-      const target = liveMeetingOverrides.get(personId);
-      return Boolean(
-        target &&
-        entity.root.userData.characterSeatKey === liveSeatKey(target),
-      );
+      // 本地演示会议使用 liveMeetingOverrides；真实 v0/v1 会议则由后端
+      // 快照写入 liveTargets。两条路径必须用同一个座位就绪判定。
+      const target = liveMeetingOverrides.get(personId) ?? liveTargets.get(personId);
+      return isMeetingActorReady({
+        target,
+        currentSeatKey: entity.root.userData.characterSeatKey,
+        animationReady: seatedAnimationComplete(entity),
+        roundtableId: CAFE_LAYOUT.roundtable.id,
+      });
     }
     const state = npcSystem.getState(personId);
     return state?.status === "in-meeting" && state.tableId === CAFE_LAYOUT.roundtable.id;
@@ -1176,6 +1194,7 @@ async function startMeeting(personIds, topic = null) {
     ? [0]
     : [0, ...accepted.map((_, index) => index + 1)];
   meetingMode = true;
+  meetingSeatAssignedAt = elapsed;
   const playerSeat = CAFE_LAYOUT.roundtable.seats[0];
   beginPlayerSeatApproach(CAFE_LAYOUT.roundtable.id, playerSeat);
   canvas.dataset.meetingActive = "true";
@@ -1209,6 +1228,7 @@ function teardownMeetingLocalState() {
     roomMeetingId = null;
     roomInvitationId = null;
   }
+  meetingSeatAssignedAt = null;
   playerSeatTarget = null;
   playerSeatedAt = null;
   canvas.dataset.playerSeatTarget = "";
@@ -1277,28 +1297,6 @@ async function endMeeting() {
     participants,
     { table_id: CAFE_LAYOUT.roundtable.id },
   );
-}
-
-
-async function sendMeetingMessage(personId, text) {
-  if (!roomClient) {
-    // v0 后端会议：玩家发言注入下一轮会议 prompt（回复经快照事件流回显）
-    if (meetingBackendLive) {
-      await api.postMeetingMessage(text);
-      return null;
-    }
-    const person = people.find((item) => item.id === personId);
-    const replies = person?.conversation?.replies ?? [];
-    if (!replies.length) return null;
-    return { personId, text: replies[hashString(text) % replies.length] };
-  }
-  const response = await roomClient.message(personId, text);
-  const event = [...(response.events ?? [])].reverse().find((item) => item.type === "person.message-created");
-  if (!event) return null;
-  return {
-    personId: event.payload?.speaker_id ?? personId,
-    text: event.payload?.text ?? "",
-  };
 }
 
 
@@ -2213,11 +2211,85 @@ function hallGlanceFor(personId) {
 
 
 function liveSeatKey(target) {
-  const tableId = target.seat?.tableId;
-  const seatIndex = target.seat?.seatIndex;
-  if (tableId && Number.isInteger(seatIndex)) return `${tableId}:${seatIndex}`;
-  if (!["seated", "talking", "in-meeting"].includes(target.state)) return null;
-  return `position:${target.x.toFixed(1)}:${target.z.toFixed(1)}`;
+  return seatKeyForTarget(target);
+}
+
+
+async function sendMeetingMessage(text) {
+  if (roomClient && roomMeetingId) {
+    return roomClient.send("meeting.message", {
+      meeting_id: roomMeetingId,
+      text,
+    });
+  }
+  if (meetingBackendLive) return api.postMeetingMessage(text);
+  throw new Error("圆桌后端当前不可用");
+}
+
+
+function liveRecoveryFor(personId) {
+  let state = liveMovementRecovery.get(personId);
+  if (!state) {
+    // All walkers follow the same keep-right convention. Two agents meeting
+    // head-on therefore choose opposite world-space sides instead of mirroring
+    // each other's hesitation forever.
+    state = createMovementRecoveryState();
+    liveMovementRecovery.set(personId, state);
+  }
+  return state;
+}
+
+
+function resolveLiveMovementStep(personId, entity, dx, dz, distance, delta, options) {
+  if (distance <= 1e-8) return [0, 0];
+  const stepLength = Math.min(distance, LIVE_WALK_SPEED * delta);
+  const directX = (dx / distance) * stepLength;
+  const directZ = (dz / distance) * stepLength;
+  const recovery = liveRecoveryFor(personId);
+  const wasRecovering = elapsed < recovery.recoveryUntil;
+  let [requestX, requestZ] = steerRecoveryStep(
+    directX,
+    directZ,
+    recovery,
+    elapsed,
+  );
+  let resolved = resolveCharacterMovement(entity, requestX, requestZ, {
+    ...options,
+    preferredSide: recovery.side,
+  });
+  let actualLength = Math.hypot(resolved[0], resolved[1]);
+  let distanceAfter = Math.hypot(
+    dx - resolved[0],
+    dz - resolved[1],
+  );
+  const recoveryStarted = observeMovementRecovery(recovery, {
+    delta,
+    now: elapsed,
+    distanceBefore: distance,
+    distanceAfter,
+    requestedLength: stepLength,
+    actualLength,
+  });
+
+  // Do not spend one more frame pushing into a blocker once the stall threshold
+  // has been reached; immediately try the persistent side route.
+  if (recoveryStarted && !wasRecovering) {
+    [requestX, requestZ] = steerRecoveryStep(
+      directX,
+      directZ,
+      recovery,
+      elapsed,
+    );
+    resolved = resolveCharacterMovement(entity, requestX, requestZ, {
+      ...options,
+      preferredSide: recovery.side,
+    });
+    actualLength = Math.hypot(resolved[0], resolved[1]);
+  }
+
+  // Tiny alternating corrections read as visible shivering while making no
+  // useful progress. Let the recovery timer choose a real detour instead.
+  return actualLength < 1e-4 ? [0, 0] : resolved;
 }
 
 
@@ -2239,12 +2311,14 @@ function updateLiveAgents(delta) {
       const dx = target.x - root.position.x;
       const dz = target.z - root.position.z;
       const distance = Math.hypot(dx, dz);
-      const stepLength = Math.min(distance, LIVE_WALK_SPEED * delta);
-      const [stepX, stepZ] = distance > 1e-5
-        ? resolveCharacterMovement(
+      const [stepX, stepZ] = distance > 0.05
+        ? resolveLiveMovementStep(
+            personId,
             entity,
-            (dx / distance) * stepLength,
-            (dz / distance) * stepLength,
+            dx,
+            dz,
+            distance,
+            delta,
             {
               targetX: target.x,
               targetZ: target.z,
@@ -2314,18 +2388,39 @@ function updateLiveAgents(delta) {
       root.userData.characterSeatKey === targetSeatKey &&
       distance <= LIVE_SEAT_EXIT_DISTANCE
     );
-    const moving = !holdingSeat && distance > arrivalDistance;
+    const forceMeetingSeat = Boolean(roomClient) && shouldForceMeetingSeat({
+      state: target.state,
+      elapsed,
+      assignedAt: meetingSeatAssignedAt,
+    });
+    const moving = !forceMeetingSeat && !holdingSeat && distance > arrivalDistance;
     const seated = targetWantsSeat && !moving;
     let movedThisFrame = false;
 
-    if (moving) {
+    if (forceMeetingSeat && distance > arrivalDistance) {
+      // A committed Room v1 meeting is authoritative. Characters normally walk
+      // into place, but dense crowds can keep capsule recovery oscillating. After
+      // a bounded grace period, settle on the reserved seat instead of aborting
+      // the real meeting and sending everyone back out.
+      root.position.x = target.x;
+      root.position.z = target.z;
+      entity.collider?.sync(entity);
+      liveFacing.set(Math.sin(target.yaw), 0, Math.cos(target.yaw));
+      const recovery = liveMovementRecovery.get(personId);
+      if (recovery) {
+        recovery.stalledFor = 0;
+        recovery.recoveryUntil = 0;
+      }
+    } else if (moving) {
       // 匀速逼近快照目标：轮询节拍之间保持连续走动，而不是脉冲式追赶
-      const stepLength = Math.min(distance, LIVE_WALK_SPEED * delta);
       // The live target remains authoritative; local capsule sliding only resolves render overlap.
-      const [stepX, stepZ] = resolveCharacterMovement(
+      const [stepX, stepZ] = resolveLiveMovementStep(
+        personId,
         entity,
-        (dx / distance) * stepLength,
-        (dz / distance) * stepLength,
+        dx,
+        dz,
+        distance,
+        delta,
         {
           targetX: target.x,
           targetZ: target.z,
@@ -2345,21 +2440,14 @@ function updateLiveAgents(delta) {
         liveFacing.set(Math.sin(target.yaw), 0, Math.cos(target.yaw));
       }
     } else {
-      const [snapX, snapZ] = resolveCharacterMovement(
-        entity,
-        target.x - root.position.x,
-        target.z - root.position.z,
-        {
-          targetX: target.x,
-          targetZ: target.z,
-          approachRadius: targetWantsSeat ? LIVE_SEAT_APPROACH_DISTANCE : 0,
-          targetApproach: targetWantsSeat,
-          targetBlockerId: target.seat?.tableId ?? null,
-        },
-      );
-      root.position.x += snapX;
-      root.position.z += snapZ;
-      entity.collider?.sync(entity);
+      // The actor is already inside the arrival tolerance. Do not keep snapping
+      // toward an exact server coordinate: nearby capsules/furniture can make
+      // that correction alternate by a few centimetres every frame.
+      const recovery = liveMovementRecovery.get(personId);
+      if (recovery) {
+        recovery.stalledFor = 0;
+        recovery.recoveryUntil = 0;
+      }
       liveFacing.set(Math.sin(target.yaw), 0, Math.cos(target.yaw));
     }
     targetQuaternion.setFromUnitVectors(MODEL_FORWARD, liveFacing);
@@ -2625,12 +2713,15 @@ async function startRoomWorld() {
   try {
     await Promise.race([roomClient.start(), timeout]);
     canvas.dataset.roomSource = "v1";
+    // v1 房间同时负责入座与后端模型圆桌事件；禁止回落到前端预置台词。
+    appShell.setMeetingLive?.(true);
     pushLiveToast("已进入实时 Echo Cafe 房间");
   } catch (error) {
     console.warn("[EchoWorld] v1 房间连接失败，保留 v0 世界", error);
     roomClient.stop();
     roomClient = null;
     canvas.dataset.roomSource = "unavailable";
+    appShell.setMeetingLive?.(meetingBackendLive);
     startLiveWorld({ force: true });
     // 启动期超时多与首屏资源加载竞争有关：60s 后自动重试（成功前每 60s 一次，
     // startRoomWorld 开头有 roomClient 守卫，成功后不再触发）
@@ -2692,7 +2783,24 @@ function applyRoomSnapshot(snapshot) {
     const entity = npcSystem?.getEntity(member.member_id);
     const runtime = runtimeById.get(member.member_id) ?? {};
     const inMeeting = meetingParticipants.includes(member.member_id);
-    const seatInfo = runtime.seat?.node ? CAFE_SEAT_BY_NODE.get(runtime.seat.node) : null;
+    const conductorSeatInfo = runtime.seat?.node
+      ? CAFE_SEAT_BY_NODE.get(runtime.seat.node)
+      : null;
+    // meeting.started is authoritative immediately, while RoomConductor normally
+    // assigns physical seat nodes on its next heartbeat. Map the participant
+    // order to those same anchors so the UI never waits 15s on the old table.
+    const fallbackMeetingSeat = inMeeting
+      ? roomMeetingSeatFor(
+          member.member_id,
+          meetingParticipants,
+          CAFE_LAYOUT.roundtable.seats,
+        )
+      : null;
+    const seatInfo = conductorSeatInfo ?? (fallbackMeetingSeat ? {
+      seat: fallbackMeetingSeat.seat,
+      table: CAFE_LAYOUT.roundtable,
+      index: fallbackMeetingSeat.seatIndex,
+    } : null);
     const seat = seatInfo ? {
       x: seatInfo.seat.x,
       z: seatInfo.seat.z,
@@ -2779,6 +2887,22 @@ function handleRoomEvent(event) {
           ? `${nameOf(payload.speaker_id)}回复了你`
           : `${nameOf(payload.speaker_id)}与${nameOf(payload.listener_id)}正在交谈`,
       );
+    }
+    return;
+  }
+  if (event?.type === "meeting.message-created") {
+    const payload = event.payload ?? {};
+    if (payload.meeting_id !== roomMeetingId || !payload.speaker_id || !payload.text) return;
+    // 自己的发言已在提交时乐观写入，事件回流只负责确认，避免重复显示。
+    if (payload.speaker_id !== currentUser.id) {
+      appShell.ingestMeetingMessage?.({ personId: payload.speaker_id, text: payload.text });
+      showLiveTalk(payload.speaker_id, payload.text, 7);
+    }
+    return;
+  }
+  if (event?.type === "meeting.generation-unavailable") {
+    if (event.payload?.meeting_id === roomMeetingId) {
+      appShell.ingestMeetingStatus?.({ text: event.payload?.text });
     }
     return;
   }
@@ -2880,6 +3004,7 @@ function resolveCharacterMovement(
     approachRadius = 0,
     targetApproach = false,
     targetBlockerId = null,
+    preferredSide = 1,
   } = {},
 ) {
   if (!entity?.collider) return [stepX, stepZ];
@@ -2891,7 +3016,7 @@ function resolveCharacterMovement(
   const ignoredBlocker = targetApproach && remaining < approachRadius
     ? targetBlockerFor(entity, blockers, targetBlockerId, targetX, targetZ)
     : null;
-  const options = { ignore: ignoredBlocker };
+  const options = { ignore: ignoredBlocker, preferredSide };
   const penetrationOptions = { ...options, bounds: worldBounds };
   const currentPenetration = capsulePenetrationAt(
     entity.collider,
@@ -2977,6 +3102,14 @@ function commitCandidatePosition(nextPosition) {
 
 function updatePlayer(delta) {
   if (playerSeatTarget) {
+    if (meetingMode && shouldForceMeetingSeat({
+      state: "in-meeting",
+      elapsed,
+      assignedAt: meetingSeatAssignedAt,
+    })) {
+      finishPlayerSeatApproach();
+      return;
+    }
     const dx = playerSeatTarget.x - player.position.x;
     const dz = playerSeatTarget.z - player.position.z;
     const distance = Math.hypot(dx, dz);
@@ -3311,6 +3444,15 @@ function refreshDiagnostics() {
   canvas.dataset.pointerLocked = String(input.pointerLocked);
   canvas.dataset.npcAssignments = states
     .map((state) => `${state.personId}:${state.tableId}:${state.status}`)
+    .join("|");
+  canvas.dataset.npcPositions = [...(npcSystem?.agents ?? [])]
+    .map(([personId, agent]) => (
+      `${personId}:${agent.entity.root.position.x.toFixed(3)}:${agent.entity.root.position.z.toFixed(3)}`
+    ))
+    .join("|");
+  canvas.dataset.npcRecovering = [...liveMovementRecovery]
+    .filter(([, recovery]) => elapsed < recovery.recoveryUntil)
+    .map(([personId]) => personId)
     .join("|");
   canvas.dataset.centralNpcCount = String(centralCount);
   canvas.dataset.meetingCount = String(meetingMode ? centralCount + 1 : 0);

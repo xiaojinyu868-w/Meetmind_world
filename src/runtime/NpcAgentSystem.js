@@ -1,5 +1,10 @@
 import * as THREE from "three";
 import { CAFE_LAYOUT, tableById } from "./CafeLayout.js";
+import {
+  createMovementRecoveryState,
+  observeMovementRecovery,
+  steerRecoveryStep,
+} from "./MovementRecovery.js";
 
 
 const WALK_SPEED = 1.65;
@@ -111,10 +116,7 @@ export class NpcAgentSystem {
       distance,
       distanceTraveled: 0,
       stalledFor: 0,
-      recoverySide:
-        [...personId].reduce((hash, character) => hash + character.charCodeAt(0), 0) % 2
-          ? 1
-          : -1,
+      recovery: createMovementRecoveryState(),
     };
     this.#notify(agent);
     return true;
@@ -148,12 +150,18 @@ export class NpcAgentSystem {
       const root = agent.entity.root;
       const remainingBeforeMove = distance2D(root.position, transition.end);
       const rawStepLength = Math.min(remainingBeforeMove, WALK_SPEED * Math.max(0, delta));
-      const rawStepX = remainingBeforeMove > 1e-8
+      let rawStepX = remainingBeforeMove > 1e-8
         ? ((transition.end.x - root.position.x) / remainingBeforeMove) * rawStepLength
         : 0;
-      const rawStepZ = remainingBeforeMove > 1e-8
+      let rawStepZ = remainingBeforeMove > 1e-8
         ? ((transition.end.z - root.position.z) / remainingBeforeMove) * rawStepLength
         : 0;
+      [rawStepX, rawStepZ] = steerRecoveryStep(
+        rawStepX,
+        rawStepZ,
+        transition.recovery,
+        elapsed,
+      );
       let resolved = this.resolveMovement({
         agent,
         entity: agent.entity,
@@ -161,14 +169,20 @@ export class NpcAgentSystem {
         stepZ: rawStepZ,
         targetX: transition.end.x,
         targetZ: transition.end.z,
+        preferredSide: transition.recovery.side,
       });
       let stepX = Number.isFinite(resolved?.[0]) ? resolved[0] : 0;
       let stepZ = Number.isFinite(resolved?.[1]) ? resolved[1] : 0;
       if (Math.hypot(stepX, stepZ) <= 1e-6 && rawStepLength > 1e-6) {
         transition.stalledFor += Math.max(0, delta);
-        if (transition.stalledFor >= 0.35) {
-          const recoveryX = -(rawStepZ / rawStepLength) * rawStepLength * transition.recoverySide;
-          const recoveryZ = (rawStepX / rawStepLength) * rawStepLength * transition.recoverySide;
+        if (transition.stalledFor >= 0.28) {
+          transition.recovery.recoveryUntil = elapsed + 1.05;
+          const [recoveryX, recoveryZ] = steerRecoveryStep(
+            rawStepX,
+            rawStepZ,
+            transition.recovery,
+            elapsed,
+          );
           resolved = this.resolveMovement({
             agent,
             entity: agent.entity,
@@ -176,6 +190,7 @@ export class NpcAgentSystem {
             stepZ: recoveryZ,
             targetX: transition.end.x,
             targetZ: transition.end.z,
+            preferredSide: transition.recovery.side,
           });
           stepX = Number.isFinite(resolved?.[0]) ? resolved[0] : 0;
           stepZ = Number.isFinite(resolved?.[1]) ? resolved[1] : 0;
@@ -184,9 +199,17 @@ export class NpcAgentSystem {
       root.position.x += stepX;
       root.position.z += stepZ;
       const actualStep = Math.hypot(stepX, stepZ);
-      if (actualStep > 1e-6) transition.stalledFor = 0;
       transition.distanceTraveled += actualStep;
       const remaining = distance2D(root.position, transition.end);
+      observeMovementRecovery(transition.recovery, {
+        delta,
+        now: elapsed,
+        distanceBefore: remainingBeforeMove,
+        distanceAfter: remaining,
+        requestedLength: rawStepLength,
+        actualLength: actualStep,
+      });
+      transition.stalledFor = transition.recovery.stalledFor;
       transition.progress = transition.distance > 1e-8
         ? Math.max(0, Math.min(1, 1 - remaining / transition.distance))
         : 1;

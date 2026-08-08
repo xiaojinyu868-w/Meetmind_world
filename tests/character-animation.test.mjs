@@ -18,6 +18,11 @@ import { CAFE_LAYOUT } from "../src/runtime/CafeLayout.js";
 import { CAFE_TABLE_COLLIDERS } from "../src/runtime/ColliderRegistry.js";
 import { createEntrySpawnScatter } from "../src/runtime/EntrySpawnScatter.js";
 import { eventIdentityKey } from "../src/runtime/LiveWorld.js";
+import {
+  createMovementRecoveryState,
+  observeMovementRecovery,
+  steerRecoveryStep,
+} from "../src/runtime/MovementRecovery.js";
 import { NpcAgentSystem } from "../src/runtime/NpcAgentSystem.js";
 import { normalizeEvent } from "../src/runtime/SnapshotAdapter.js";
 import {
@@ -393,6 +398,57 @@ test("seat approach slides around blockers but can enter the final seat radius",
     { ignore: blocker },
   );
   assert.deepEqual(finalStep, [0.1, 0]);
+});
+
+
+test("head-on walkers keep right instead of flipping into each other", () => {
+  const [, leftWalkerZ] = slideStepAroundBlockers(
+    -0.2,
+    0,
+    0.12,
+    0,
+    [{ x: 0.2, z: 0, r: 0.35 }],
+    { preferredSide: 1 },
+  );
+  const [, rightWalkerZ] = slideStepAroundBlockers(
+    0.2,
+    0,
+    -0.12,
+    0,
+    [{ x: -0.2, z: 0, r: 0.35 }],
+    { preferredSide: 1 },
+  );
+
+  assert.notEqual(leftWalkerZ, 0);
+  assert.notEqual(rightWalkerZ, 0);
+  assert.ok(leftWalkerZ * rightWalkerZ < 0);
+});
+
+
+test("a stalled walker commits to a persistent lateral recovery route", () => {
+  const recovery = createMovementRecoveryState();
+  assert.equal(observeMovementRecovery(recovery, {
+    delta: 0.14,
+    now: 0.14,
+    distanceBefore: 2,
+    distanceAfter: 2,
+    requestedLength: 0.1,
+    actualLength: 0,
+  }), false);
+  assert.equal(observeMovementRecovery(recovery, {
+    delta: 0.14,
+    now: 0.28,
+    distanceBefore: 2,
+    distanceAfter: 2,
+    requestedLength: 0.1,
+    actualLength: 0,
+  }), true);
+
+  const first = steerRecoveryStep(0.1, 0, recovery, 0.3);
+  const second = steerRecoveryStep(0.1, 0, recovery, 0.8);
+  assert.ok(first[1] > 0);
+  assert.ok(second[1] > 0);
+  assert.deepEqual(steerRecoveryStep(0.1, 0, recovery, 2), [0.1, 0]);
 });
 
 

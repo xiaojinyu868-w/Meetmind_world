@@ -53,6 +53,8 @@ DEFAULT_RULES: tuple[PolicyRule, ...] = (
     _rule("join_roundtable", "roundtable.join"),
     _rule("leave_roundtable", "roundtable.leave"),
     _rule("propose_topic", "roundtable.propose-topic"),
+    _rule("speak_roundtable", "roundtable.speak"),
+    _rule("report_roundtable_status", "roundtable.status"),
     _rule("publish_bulletin", "bulletin.publish"),
     _rule("start_icebreaker", "icebreaker.start"),
     _rule("submit_icebreaker", "icebreaker.submit"),

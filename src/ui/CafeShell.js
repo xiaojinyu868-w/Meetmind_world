@@ -435,6 +435,7 @@ export function createCafeShell({
   onLocatePerson = () => {},
   onMeetingStart = async () => {},
   onMeetingEnd = async () => {},
+  onMeetingMessage = async () => {},
   onNotification = () => {},
   resolveMediaUrl = (ref) => ref,
   world = "cafe",
@@ -451,6 +452,7 @@ export function createCafeShell({
   let meetingSheetOpen = false;
   // live 会议模式由 boot() 后端探测后回填（setMeetingLive），决定会议台词走真实后端
   let meetingLive = false;
+  let meetingStarting = false;
   let meetingActive = false;
   let meetingEndedState = false;
   let meetingTopic = null;
@@ -861,6 +863,30 @@ export function createCafeShell({
     scrollMeetingThread();
   }
 
+  function renderMeetingStarting() {
+    const participants = people.filter((person) => invitedIds.has(person.id));
+    meetingSheetOpen = true;
+    shell.classList.add("has-meeting-sheet");
+    meetingSheet.innerHTML = `
+      <header class="meeting-header active">
+        <div class="meeting-party-faces">
+          ${avatarImg(currentUser)}
+          ${participants.map((person) => avatarImg(person)).join("")}
+        </div>
+        <div><small>${participants.length + 1} 人正在前往中央圆桌</small><h2>大家正在入座</h2></div>
+        <button class="glass-icon-button" type="button" disabled title="正在入座" aria-label="正在入座">${icon("clock-3")}</button>
+      </header>
+      <div class="meeting-thread" data-meeting-thread>
+        <div class="meeting-message is-system"><p>${meetingTopic
+          ? `议题「${escapeHtml(meetingTopic)}」已经定下，等大家坐稳后开始讨论。`
+          : "邀请已经发出，等大家坐稳后开始讨论。"}</p></div>
+        ${meetingMessages.map(meetingMessageMarkup).join("")}
+      </div>`;
+    meetingSheet.setAttribute("aria-hidden", "false");
+    notifyMeetingPanelFocus();
+    hydrateIcons(meetingSheet);
+  }
+
   function renderMeetingEnded() {
     const participants = people.filter((person) => invitedIds.has(person.id));
     meetingSheet.innerHTML = `
@@ -1065,22 +1091,22 @@ export function createCafeShell({
       target.disabled = true;
       try {
         const topic = String(meetingTopic ?? "").trim().slice(0, 80) || null;
+        meetingTopic = topic;
+        meetingMessages.length = 0;
+        meetingStarting = true;
+        renderMeetingStarting();
         const acceptedIds = await onMeetingStart([...invitedIds], topic);
         invitedIds.clear();
         acceptedIds.forEach((personId) => invitedIds.add(personId));
+        meetingStarting = false;
         meetingActive = true;
         meetingEndedState = false;
-        meetingTopic = topic;
         meetingCursor = 0;
-        meetingMessages.length = 0;
         if (meetingLive) {
-          // live：会议对话由后端 LLM 产出，经快照事件回流；这里没有预制台词
-          pushMeetingMessage({
-            system: true,
-            text: topic
-              ? `议题「${topic}」已定下，大家正在入座，讨论马上开始。`
-              : "大家正在入座，讨论马上开始。",
-          });
+          // live：只显示后端事件；若响应尚未到达，仅显示状态，不伪造人物台词。
+          if (meetingMessages.length === 0) {
+            pushMeetingMessage({ system: true, text: "已入座，正在等待后端圆桌模型回应。" });
+          }
         } else {
           pushMeetingMessage({
             personId: [...invitedIds][0],
@@ -1091,10 +1117,15 @@ export function createCafeShell({
             duration: 4.5,
           });
         }
+        meetingSheetOpen = true;
+        shell.classList.add("has-meeting-sheet");
         renderMeetingActive();
       } catch (error) {
         console.error(error);
-        target.disabled = false;
+        meetingStarting = false;
+        meetingSheetOpen = true;
+        shell.classList.add("has-meeting-sheet");
+        renderMeetingSetup();
         showToast(error?.message || "圆桌暂时没有准备好");
       }
       return;
@@ -1193,7 +1224,7 @@ export function createCafeShell({
       meetingLive = Boolean(value);
     },
     openMeeting(personIds = []) {
-      if (meetingActive || meetingSheetOpen || world !== "cafe") return false;
+      if (meetingActive || meetingStarting || meetingSheetOpen || world !== "cafe") return false;
       meetingSheetOpen = true;
       meetingEndedState = false;
       meetingTopic = null;
@@ -1213,9 +1244,9 @@ export function createCafeShell({
       return true;
     },
     requestCloseMeeting,
-    // live 模式：快照事件里的会议台词（agent-talk 带本场 meeting_id）进入会议线程
+    // live 模式：后端权威会议事件进入线程；入座阶段先缓存，转为 active 后统一呈现。
     ingestMeetingMessage({ personId, text } = {}) {
-      if (!meetingActive || !meetingSheetOpen) return false;
+      if ((!meetingActive && !meetingStarting) || !meetingSheetOpen) return false;
       const person = people.find((candidate) => candidate.id === personId);
       if (!person || !text) return false;
       pushMeetingMessage({ personId, text: String(text) });
@@ -1224,7 +1255,15 @@ export function createCafeShell({
         text: String(text),
         duration: 4.5,
       });
-      renderMeetingActive();
+      if (meetingActive) renderMeetingActive();
+      else renderMeetingStarting();
+      return true;
+    },
+    ingestMeetingStatus({ text } = {}) {
+      if ((!meetingActive && !meetingStarting) || !meetingSheetOpen || !text) return false;
+      pushMeetingMessage({ system: true, text: String(text) });
+      if (meetingActive) renderMeetingActive();
+      else renderMeetingStarting();
       return true;
     },
     // live 模式：后端会议散场（meeting-ended 事件）→ 线程定格为"会议结束"
