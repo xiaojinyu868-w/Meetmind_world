@@ -88,6 +88,9 @@ src/runtime/
   VillageMarketEnvironment.js 村落市集视觉层包装：GLB 整体上移对齐 y=0、透明行走平面为唯一地面射线目标、咖啡厅门锚点
   HubBlockout.js            大厅几何 blockout 占位环境（environment.hub-blockout.v1，开发调试用）
   ThirdPersonCamera.js      第三人称相机控制器（轨道/跟随、边界钳制、指针锁定视角）
+  OverviewCamera.js         2.5D 俯瞰相机（正交投影、固定方位角+轻微俯视、视野随世界尺度、
+                            相机距离贴雾起点防雾化；与第三人称热切换，?view=overview|immersive，
+                            默认 overview；会议/运镜/大屏只读仍走透视相机）
   Input.js                  键盘/触屏/指针输入统一采集
   CameraRelativeMovement.js 相机相对移动向量解算（纯函数）
   NpcAgentSystem.js         普通桌随机分配、入座、同桌对话与会议调度（本地 mock；live 模式下由 main.js 注入开关停用）

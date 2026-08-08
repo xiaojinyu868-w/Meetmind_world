@@ -13,6 +13,7 @@ import {
   MapPin,
   MessageCircle,
   Network,
+  Orbit,
   Plus,
   Pencil,
   Save,
@@ -46,6 +47,7 @@ const ICONS = {
   MapPin,
   MessageCircle,
   Network,
+  Orbit,
   Plus,
   Pencil,
   Save,
@@ -442,10 +444,13 @@ export function createCafeShell({
   fieldPerson = null,
   onExpressionChange = () => {},
   onProfileChange = () => {},
+  onViewModeChange = () => {},
+  initialViewMode = "overview",
   signalStore = null,
   signalByPersonId = null,
 }) {
   let currentView = "intro";
+  let currentViewMode = initialViewMode === "immersive" ? "immersive" : "overview";
   let worldReady = false;
   let selectedWorldPerson = null;
   let selectedMapPerson = null;
@@ -543,10 +548,16 @@ export function createCafeShell({
             </div>
             <span><strong id="presence-count">${world === "field" ? 1 : people.length}</strong> Agent 在线</span>
           </div>
-          <button class="glass-control map-control" type="button" data-action="open-map">
-            ${icon("network")}
-            <span><small>人物关系</small><strong>关系 Map</strong></span>
-          </button>
+          <div class="hud-right-controls">
+            <button class="glass-control map-control" type="button" data-action="open-map">
+              ${icon("network")}
+              <span><small>人物关系</small><strong>关系 Map</strong></span>
+            </button>
+            <button class="glass-control map-control view-mode-control" type="button" data-action="toggle-view-mode" aria-label="切换俯瞰/沉浸视角" title="切换视角（V）">
+              ${icon("orbit")}
+              <span><small>视角 · V</small><strong id="view-mode-label">${currentViewMode === "overview" ? "俯瞰全局" : "沉浸漫游"}</strong></span>
+            </button>
+          </div>
         </header>
 
         ${activeSceneVariant && activeCharacterVariant && world !== "field" ? variantControlsMarkup({
@@ -1044,6 +1055,10 @@ export function createCafeShell({
       setView("map");
       return;
     }
+    if (target.dataset.action === "toggle-view-mode") {
+      onViewModeChange(currentViewMode === "overview" ? "immersive" : "overview");
+      return;
+    }
     if (target.dataset.action === "back-cafe") {
       setView("cafe");
       return;
@@ -1189,6 +1204,14 @@ export function createCafeShell({
       button.classList.toggle("is-ready", worldReady);
     },
     setView,
+    setViewMode(mode) {
+      if (mode !== "overview" && mode !== "immersive") return;
+      currentViewMode = mode;
+      const label = root.querySelector("#view-mode-label");
+      if (label) label.textContent = mode === "overview" ? "俯瞰全局" : "沉浸漫游";
+      const button = root.querySelector('[data-action="toggle-view-mode"]');
+      button?.classList.toggle("is-immersive", mode === "immersive");
+    },
     selectWorldPerson(personId) {
       selectedWorldPerson = people.find((person) => person.id === personId) ?? null;
       inspectorModes.world = "profile";

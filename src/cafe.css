@@ -440,6 +440,17 @@ svg {
   padding-left: 17px;
 }
 
+.hud-right-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-self: end;
+}
+
+.hud-right-controls .map-control {
+  justify-self: auto;
+}
+
 .map-control > svg {
   width: 21px;
   height: 21px;

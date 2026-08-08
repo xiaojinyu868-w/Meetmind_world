@@ -72,6 +72,7 @@ import { useLiveMode } from "./runtime/mock/MockApi.js";
 import { slideCapsuleStepAroundBlockers, slideStepAroundBlockers } from "./runtime/WalkSlide.js";
 import { CameraRelativeMovement } from "./runtime/CameraRelativeMovement.js";
 import { Input } from "./runtime/Input.js";
+import { OverviewCamera, defaultOverviewViewSize } from "./runtime/OverviewCamera.js";
 import { ThirdPersonCamera } from "./runtime/ThirdPersonCamera.js";
 import {
   CAFE_WORLD,
@@ -279,6 +280,40 @@ const cameraController = new ThirdPersonCamera({
 });
 const camera = cameraController.camera;
 camera.position.set(6.7, 4.6, 8.2);
+// 2.5D 总览视角（正交相机，无透视变形）：浏览/点选的第一入口；
+// ?view=immersive 回到第三人称沉浸漫游，两种视角热切换（V 键 / 顶栏按钮）
+const viewParam = new URLSearchParams(window.location.search).get("view");
+let viewMode = viewParam === "immersive" ? "immersive" : "overview";
+// 相机距离按雾起点收（正交下距离不影响画面大小，只决定雾深与裁剪），
+// 否则 60m 外的物体会被雾整个吞掉
+let overviewCamera = null;
+// 会议/运镜/大屏只读仍走透视相机；总览只在自由漫游时接管
+function isOverviewActive() {
+  return viewMode === "overview" &&
+    experienceMode === "cafe" &&
+    !meetingMode &&
+    !screenMode;
+}
+function activeCamera() {
+  return isOverviewActive() && overviewCamera ? overviewCamera.camera : camera;
+}
+function setViewMode(mode) {
+  if (mode !== "overview" && mode !== "immersive") return;
+  if (mode === viewMode) return;
+  viewMode = mode;
+  canvas.dataset.viewMode = mode;
+  appShell.setViewMode?.(mode);
+  if (mode === "overview" && player) {
+    overviewCamera?.snapTo(player.position, { bounds: worldBounds });
+  }
+  // 视角选择随 URL 走（整页刷新型世界切换后仍保留，navigateToWorld 只改 world/scene）
+  const nextUrl = new URL(window.location.href);
+  nextUrl.searchParams.set("view", mode);
+  window.history.replaceState(window.history.state, "", nextUrl);
+  pushLiveToast(mode === "overview" ? "俯瞰全局视角 · 点选浏览" : "沉浸漫游视角 · 指针锁定环顾");
+  syncControlAvailability();
+}
+canvas.dataset.viewMode = viewMode;
 worldAudio = new WorldAudioSystem({
   camera,
   worldId: activeWorld.id,
@@ -319,6 +354,14 @@ const renderer = new THREE.WebGLRenderer({
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.shadowMap.enabled = true;
 installVisualProfile(scene, renderer, activeVisualProfile);
+// 总览相机在视觉档案之后创建：距离贴着雾起点，物件不被雾化
+overviewCamera = new OverviewCamera({
+  canvas,
+  yaw: 0,
+  aspect: 1,
+  viewSize: defaultOverviewViewSize(worldBounds),
+  distance: scene.fog ? Math.max(14, scene.fog.near * 0.9) : 40,
+});
 
 const timer = new THREE.Timer();
 timer.connect(document);
@@ -480,6 +523,8 @@ const appShell = createCafeShell({
   activeCharacterVariant,
   signalStore: personSignalStore,
   onViewChange: setExperienceMode,
+  onViewModeChange: setViewMode,
+  initialViewMode: viewMode,
   onSceneVariantChange: (variantId) => {
     if (variantId === activeSceneVariant?.id) return;
     if (isHallWorld) navigateToSceneVariant(variantId);
@@ -569,8 +614,10 @@ function resizeRenderer() {
   const height = window.innerHeight;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
   renderer.setSize(width, height, false);
-  camera.aspect = width / Math.max(height, 1);
+  const aspect = width / Math.max(height, 1);
+  camera.aspect = aspect;
   camera.updateProjectionMatrix();
+  overviewCamera?.resize(aspect);
 }
 
 
@@ -945,6 +992,9 @@ function setExperienceMode(mode) {
         blockers: currentBlockers(),
         bounds: cameraBounds,
       });
+      if (viewMode === "overview") {
+        overviewCamera?.snapTo(player.position, { bounds: worldBounds });
+      }
     }
     showControlsHintOnce();
   }
@@ -966,7 +1016,9 @@ function showControlsHintOnce() {
     "font-size:11px;font-weight:600;letter-spacing:.05em;white-space:nowrap;" +
     "box-shadow:0 12px 30px rgba(18,45,39,.22);opacity:0;transition:opacity .5s ease;" +
     "pointer-events:none;";
-  hint.textContent = "WASD 走动 · 点击画面后移动鼠标环顾 · 滚轮缩放 · Shift 加速 · E 互动";
+  hint.textContent = viewMode === "overview"
+    ? "WASD 走动 · 滚轮缩放 · E 互动 · V 切换沉浸漫游"
+    : "WASD 走动 · 点击画面后移动鼠标环顾 · 滚轮缩放 · Shift 加速 · E 互动 · V 切换俯瞰全局";
   document.body.append(hint);
   requestAnimationFrame(() => { hint.style.opacity = "1"; });
   setTimeout(() => {
@@ -1021,8 +1073,9 @@ function syncControlAvailability() {
     !playerSeatTarget &&
     !uiBlocked
   );
-  input.setPointerLockEnabled(freeCamera);
-  cameraController.setEnabled(freeCamera);
+  input.setPointerLockEnabled(freeCamera && viewMode !== "overview");
+  cameraController.setEnabled(freeCamera && viewMode !== "overview");
+  overviewCamera?.setEnabled(freeCamera && viewMode === "overview");
 }
 
 
@@ -2003,7 +2056,7 @@ function updateLiveBubbles() {
     }
     projected.copy(entity.root.position);
     projected.y += 1.55 * entity.root.scale.y;
-    projected.project(camera);
+    projected.project(activeCamera());
     const visible =
       experienceMode === "cafe" &&
       projected.z > -1 && projected.z < 1 &&
@@ -2021,7 +2074,7 @@ function updateHallHover() {
   if (!boothSystem) return;
   let booth = null;
   if (hoverActive && experienceMode === "cafe" && !meetingMode) {
-    raycaster.setFromCamera(hoverNdc, camera);
+    raycaster.setFromCamera(hoverNdc, activeCamera());
     const pickTargets = [
       ...boothSystem.pickRoots,
       ...characterSystem.entities.map((entity) => entity.root),
@@ -3179,7 +3232,7 @@ function updatePlayer(delta) {
   const movementState = playerMovement.update(
     delta,
     movementInput,
-    cameraController.getHorizontalAngle(),
+    isOverviewActive() ? (overviewCamera?.getHorizontalAngle() ?? 0) : cameraController.getHorizontalAngle(),
     { run: sprinting },
   );
   const wantsToMove = movementState.moving;
@@ -3374,7 +3427,7 @@ function updatePlayerLabel() {
   }
   projected.copy(player.position);
   projected.y += 1.78;
-  projected.project(camera);
+  projected.project(activeCamera());
   const visible = projected.z > -1 && projected.z < 1;
   playerLabel.style.opacity = visible ? "1" : "0";
   playerLabel.style.left = `${(projected.x * 0.5 + 0.5) * window.innerWidth}px`;
@@ -3388,7 +3441,7 @@ function updateSpeechPositions() {
     if (!entity) continue;
     projected.copy(entity.root.position);
     projected.y += 1.55 * entity.root.scale.y;
-    projected.project(camera);
+    projected.project(activeCamera());
     const visible =
       experienceMode === "cafe" &&
       projected.z > -1 && projected.z < 1 &&
@@ -3433,7 +3486,12 @@ function refreshDiagnostics() {
   canvas.dataset.playerPosition = [player.position.x, player.position.y, player.position.z]
     .map((value) => value.toFixed(4))
     .join(",");
-  canvas.dataset.cameraPosition = [camera.position.x, camera.position.y, camera.position.z]
+  const diagnosticCamera = activeCamera();
+  canvas.dataset.cameraPosition = [
+    diagnosticCamera.position.x,
+    diagnosticCamera.position.y,
+    diagnosticCamera.position.z,
+  ]
     .map((value) => value.toFixed(4))
     .join(",");
   canvas.dataset.cameraOrbit = [
@@ -3449,6 +3507,15 @@ function refreshDiagnostics() {
     .map(([personId, agent]) => (
       `${personId}:${agent.entity.root.position.x.toFixed(3)}:${agent.entity.root.position.z.toFixed(3)}`
     ))
+    .join("|");
+  // NPC 在当前活动相机下的屏幕像素坐标（验收脚本做点选用）
+  canvas.dataset.npcScreenPositions = [...(npcSystem?.agents ?? [])]
+    .map(([personId, agent]) => {
+      projected.copy(agent.entity.root.position);
+      projected.y += 0.9;
+      projected.project(activeCamera());
+      return `${personId}:${((projected.x * 0.5 + 0.5) * window.innerWidth).toFixed(0)}:${((-projected.y * 0.5 + 0.5) * window.innerHeight).toFixed(0)}`;
+    })
     .join("|");
   canvas.dataset.npcRecovering = [...liveMovementRecovery]
     .filter(([, recovery]) => elapsed < recovery.recoveryUntil)
@@ -3510,7 +3577,12 @@ function animate(timestamp) {
       updateFieldCompanion(delta);
       syncRoomPlayerPosition();
       if (meetingMode) updateMeetingCamera(delta);
-      else updateFollowCamera(delta);
+      else if (isOverviewActive()) {
+        // 透视 rig 继续静默跟随：AudioListener 挂在它上面（空间音频衰减仍正确），
+        // 且切回沉浸视角时臂长/平滑状态无需重新收敛
+        updateFollowCamera(delta);
+        overviewCamera?.update(player.position, { delta, bounds: worldBounds });
+      } else updateFollowCamera(delta);
       updatePlayerLabel();
       updateRoundtablePrompt();
       updateSceneInteraction();
@@ -3526,7 +3598,7 @@ function animate(timestamp) {
     if (isHallWorld) updateHallHover();
   }
 
-  renderer.render(scene, camera);
+  renderer.render(scene, activeCamera());
   if (worldReady && diagnosticFrame++ % 15 === 0) refreshDiagnostics();
   input.endFrame();
   requestAnimationFrame(animate);
@@ -3599,12 +3671,35 @@ canvas.addEventListener("pointerup", (event) => {
     ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
     -((event.clientY - bounds.top) / bounds.height) * 2 + 1,
   );
-  raycaster.setFromCamera(pointerNdc, camera);
+  raycaster.setFromCamera(pointerNdc, activeCamera());
   const pickTargets = characterSystem.entities.map((entity) => entity.root);
   if (boothSystem) pickTargets.push(...boothSystem.pickRoots);
   const hits = raycaster.intersectObjects(pickTargets, true);
   const root = hits.length > 0 ? personRootFromHit(hits[0].object) : null;
-  const personId = root?.userData.personId;
+  // 网格射线对 SkinnedMesh 不可靠（包围球停留在绑定姿态），人物改用
+  // 屏幕空间最近邻拾取：投影每个角色胸口，取阈值内最近者（展位等静态
+  // 网格仍走上面的射线）。阈值 0.09 NDC ≈ 540p 屏幕上约 25px
+  let personId = root?.userData.personId;
+  let pickSource = personId ? "mesh" : (hits.length > 0 ? "non-person" : "miss");
+  if (!personId) {
+    let bestDistance = 0.09;
+    for (const entity of characterSystem.entities) {
+      if (entity === playerEntity) continue;
+      projected.copy(entity.root.position);
+      projected.y += 0.9 * (entity.root.scale.y || 1);
+      projected.project(activeCamera());
+      if (projected.z < -1 || projected.z > 1) continue;
+      const distance = Math.hypot(projected.x - pointerNdc.x, projected.y - pointerNdc.y);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        personId = entity.root.userData.personId ?? null;
+        pickSource = "proximity";
+      }
+    }
+  }
+  // 验收诊断：点击拾取结果（人物 id / 命中非人物 / 未命中）与通道（mesh/proximity）
+  canvas.dataset.lastClickPick = personId ?? pickSource;
+  canvas.dataset.lastClickHitCount = String(hits.length);
   if (isHallWorld) {
     // 大厅：点击展位或其人 → 资料包面板；新人不在世界实体中时直接开面板
     if (personId && personId !== currentUser.id) {
@@ -3646,6 +3741,18 @@ window.addEventListener("keydown", (event) => {
       if ((playerSeatedAt ?? playerSeatTarget?.id) === "campfire") integrations.groupPlay?.close();
       leavePlayerSeat();
     }
+    event.preventDefault();
+    return;
+  }
+  if (
+    event.code === "KeyV" &&
+    !event.repeat &&
+    experienceMode === "cafe" &&
+    !meetingMode &&
+    !screenMode &&
+    !event.target.closest?.("input, textarea")
+  ) {
+    setViewMode(viewMode === "overview" ? "immersive" : "overview");
     event.preventDefault();
     return;
   }
@@ -3704,6 +3811,7 @@ window.addEventListener("beforeunload", () => {
   input.destroy();
   worldAudio?.dispose();
   cameraController.dispose();
+  overviewCamera?.dispose();
   appShell.destroy();
   sceneInteraction.destroy();
   relationshipFieldSystem?.dispose();
