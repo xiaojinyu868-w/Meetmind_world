@@ -2,7 +2,7 @@
 
 ## 事实源
 
-- 代码唯一事实源：GitHub `main`（xiaojinyu868-w/Meetmind_world）
+- 代码唯一事实源：GitHub `main`（xiaojinyu868-w/Meetmind_world）；服务器上的权威 checkout 是 `/root/meetmind_go`
 - 线上 = `main`：所有改动合并进 `main` 后自动上线，不允许"线上跑旧代码"
 
 ## CI：GitHub Actions（`.github/workflows/ci.yml`）
@@ -20,7 +20,7 @@
 生产服务器上 cron 每分钟执行一次：
 
 ```
-* * * * * flock -n /tmp/echoworld-deploy.lock /root/meetmind_wt_main/scripts/deploy.sh >> /var/log/echoworld-deploy.log 2>&1
+* * * * * flock -n /tmp/echoworld-deploy.lock /root/meetmind_go/scripts/deploy.sh >> /var/log/echoworld-deploy.log 2>&1
 ```
 
 `scripts/deploy.sh` 的行为（幂等）：
@@ -29,7 +29,7 @@
 2. `git pull --ff-only`（非 fast-forward 会失败并留日志，需人工处理）
 3. `pip install -r backend/requirements.txt`（新依赖自动补）
 4. `npm install && npm run build`
-5. 重启后端 uvicorn（`ECHO_DATA_DIR=/root/meetmind_go/backend/data`，:8000）
+5. 重启后端 uvicorn（`ECHO_DATA_DIR=<repo>/backend/data（部署脚本自动取自身所在 checkout）`，:8000）
 6. 健康检查通过后 `dist/` 同步到 `/var/www/echoworld`
 
 日志：`/var/log/echoworld-deploy.log`（每次巡检）、`/var/log/echoworld-uvicorn.log`（后端运行）。

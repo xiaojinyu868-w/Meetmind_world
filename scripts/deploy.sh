@@ -8,9 +8,9 @@
 # CI（.github/workflows/ci.yml）已在同一 commit 上跑过全量测试，这里不重复跑。
 set -euo pipefail
 
-REPO=/root/meetmind_wt_main
+REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 BACKEND="$REPO/backend"
-DATA_DIR=${ECHO_DATA_DIR:-/root/meetmind_go/backend/data}
+DATA_DIR=${ECHO_DATA_DIR:-$BACKEND/data}
 UVICORN_LOG=/var/log/echoworld-uvicorn.log
 DEPLOYED_MARKER=/var/lib/echoworld-deployed-commit
 
