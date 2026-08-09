@@ -170,9 +170,11 @@ export class RoomClient {
   }
 
   async #request(path, options = {}) {
-    // 15s 超时：慢网关/大回放不许把 start()/轮询永久挂起
+    // 60s 超时：为真实模型首轮响应留出空间，同时避免请求永久挂起
     const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), 15000);
+    // Real roundtable startup waits for the model's first responses. Keep a hard
+    // timeout, but do not abort a healthy provider merely because it needs >15s.
+    const timer = window.setTimeout(() => controller.abort(), 60000);
     const token = window.localStorage?.getItem("meetmind_access_token");
     try {
       const response = await fetch(`${this.baseUrl}/${path}`, {
