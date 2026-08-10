@@ -6,6 +6,7 @@ import { mountPackagePanel } from "../ui/package-panel/PackagePanel.js";
 import { mountPipelineFlow } from "../ui/pipeline/PipelineFlow.js";
 import { mountGroupPlay } from "../ui/group/GroupPlay.js";
 import { mountOnboardingFlow } from "../ui/onboarding/OnboardingFlow.js";
+import { createPairSession, LOGIN_TOKEN_KEY } from "../ui/pairLogin.js";
 
 /**
  * integrations —— 咖啡厅/大厅视图的统一集成层。
@@ -108,6 +109,7 @@ body[data-view="cafe"] .echo-integrations .record-fab { display: flex; }
   border-radius: 12px;
   border: 1px solid rgb(25 61 54 / 12%);
 }
+.echo-mobile-qr-panel .echo-mobile-qr-status { margin: 10px 0 0; min-height: 15px; }
 .echo-mobile-qr-panel .echo-mobile-qr-close {
   position: absolute;
   top: 8px;
@@ -450,8 +452,10 @@ export function mountIntegrations({
   onboardFab.addEventListener("click", () => onboardingFlow.open());
   mountRoot.append(onboardFab);
 
-  // 「手机录入」：扫码在手机上导入合照/记录相遇（移动页由后端 /api/mobile/ 提供，
-  // 与桌面共用 localStorage token，微信内打开会自动走 EchoWorld 自建 OAuth 登录）
+  // 「手机录入」：扫码在手机上导入合照/记录相遇（移动页由后端 /api/mobile/ 提供）。
+  // 二维码走与登录面板相同的配对挑战（pairLogin.js）：手机确认后桌面同步登录、
+  // 整页刷新进水合后的世界；挑战过期自动轮换，屏幕上永远不会是死码。
+  // （2026-08-10 前这里是无 pair 的静态码：扫码后桌面零反馈，文案承诺却无法兑现。）
   const mobileFab = document.createElement("button");
   mobileFab.className = "record-fab mobile-fab";
   mobileFab.type = "button";
@@ -465,13 +469,39 @@ export function mountIntegrations({
   mobileQrPanel.innerHTML =
     `<button class="echo-mobile-qr-close" type="button" aria-label="关闭">×</button>` +
     `<h3>手机打开 EchoWorld</h3>` +
-    `<p>微信扫一扫，在手机上导入合照、记录相遇；<br>登录后这里的世界同步可见。</p>` +
-    `<img src="${import.meta.env.BASE_URL}api/mobile/qr.png" alt="EchoWorld 手机端二维码">`;
+    `<p>微信扫一扫，手机登录后在手机上导入合照、<br>记录相遇；这里的世界同步可见。</p>` +
+    `<img alt="EchoWorld 手机端二维码">` +
+    `<p class="echo-mobile-qr-status" data-status>正在获取二维码…</p>`;
+  let mobilePairSession = null;
+  const stopMobilePair = () => {
+    mobilePairSession?.stop();
+    mobilePairSession = null;
+  };
+  const setMobileQrVisible = (visible) => {
+    mobileQrPanel.hidden = !visible;
+    stopMobilePair();
+    if (!visible) return;
+    const imgEl = mobileQrPanel.querySelector("img");
+    const statusEl = mobileQrPanel.querySelector("[data-status]");
+    mobilePairSession = createPairSession({
+      onChallenge(challengeId) {
+        imgEl.src = `${import.meta.env.BASE_URL}api/mobile/qr.png?pair=${encodeURIComponent(challengeId)}`;
+      },
+      onStatus(text) {
+        statusEl.textContent = text;
+      },
+      onAuthorized(token, nickname) {
+        statusEl.textContent = `欢迎，${nickname ?? "朋友"}！正在同步你的世界…`;
+        localStorage.setItem(LOGIN_TOKEN_KEY, token);
+        window.setTimeout(() => window.location.reload(), 600);
+      },
+    });
+  };
   mobileFab.addEventListener("click", () => {
-    mobileQrPanel.hidden = !mobileQrPanel.hidden;
+    setMobileQrVisible(mobileQrPanel.hidden);
   });
   mobileQrPanel.querySelector(".echo-mobile-qr-close")
-    .addEventListener("click", () => { mobileQrPanel.hidden = true; });
+    .addEventListener("click", () => { setMobileQrVisible(false); });
   mountRoot.append(mobileFab, mobileQrPanel);
 
   // 空广场引导：大厅快照同步后仍无展位时，提示合照入场（一次性）
