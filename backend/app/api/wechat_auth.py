@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import threading
 import time
 from pathlib import Path
 from urllib.parse import urlencode
@@ -39,6 +40,11 @@ pair_router = APIRouter(prefix="/api/v0/auth/pair", tags=["auth-pair"])
 # → 桌面轮询 GET ?id= 拿到 token。全程不经过服务号会话（区别于 MeetMind 的
 # 带参二维码流程），与教育产品零交互。
 PAIR_TTL_SECONDS = 600
+
+# pair_challenges.json 的读-改-写会并发发生（FastAPI 同步端点跑在线程池，
+# 桌面轮询/新建与手机确认会交叉），无锁会丢更新甚至把文件写坏——
+# 2026-08-10 线上事故：挑战记录被并发写覆盖，手机 confirm 全部 404。
+_PAIRS_LOCK = threading.Lock()
 
 AUTHORIZE_URL = "https://open.weixin.qq.com/connect/oauth2/authorize"
 TOKEN_URL = "https://api.weixin.qq.com/sns/oauth2/access_token"
@@ -229,9 +235,15 @@ def _load_pairs(request: Request) -> dict:
         return {}
 
 
-def _save_pairs(request: Request, pairs: dict) -> None:
-    _pairs_path(request).write_text(
-        json.dumps(pairs, ensure_ascii=False, indent=2), encoding="utf-8")
+def _save_pairs_unlocked(request: Request, pairs: dict) -> None:
+    """原子写：先写临时文件再 replace，避免并发读到写了一半的 JSON。
+
+    调用方必须持有 _PAIRS_LOCK。
+    """
+    path = _pairs_path(request)
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(pairs, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def _prune_pairs(pairs: dict) -> dict:
@@ -243,30 +255,42 @@ def _prune_pairs(pairs: dict) -> dict:
 @pair_router.post("", status_code=201)
 def pair_create(request: Request):
     """桌面端建配对挑战，随后把 pair=<id> 编进移动页二维码。"""
-    pairs = _prune_pairs(_load_pairs(request))
-    challenge_id = secrets.token_urlsafe(12)
-    pairs[challenge_id] = {"created": time.time(), "status": "pending"}
-    _save_pairs(request, pairs)
+    with _PAIRS_LOCK:
+        pairs = _prune_pairs(_load_pairs(request))
+        challenge_id = secrets.token_urlsafe(12)
+        pairs[challenge_id] = {"created": time.time(), "status": "pending"}
+        _save_pairs_unlocked(request, pairs)
     return {"challenge_id": challenge_id, "expires_in": PAIR_TTL_SECONDS}
 
 
 @pair_router.get("")
-def pair_poll(request: Request, id: str = ""):
-    """桌面端轮询；authorized 时一次性返回 token 并销毁挑战。"""
-    pairs = _load_pairs(request)
-    entry = pairs.get(id)
-    if entry is None:
-        return {"status": "expired"}
-    if time.time() - float(entry.get("created", 0)) >= PAIR_TTL_SECONDS:
+def pair_poll(request: Request, id: str = "", peek: bool = False):
+    """桌面端轮询；authorized 时一次性返回 token 并销毁挑战。
+
+    peek=true 只查状态不消费（手机端在确认前预检挑战是否仍有效），
+    避免手机把 authorized 状态的 token 抢走导致桌面永远轮不到。
+    手机端 peek 会把 pending 标记为 scanned，让桌面面板显示「已扫码」。
+    """
+    with _PAIRS_LOCK:
+        pairs = _load_pairs(request)
+        entry = pairs.get(id)
+        if entry is None:
+            return {"status": "expired"}
+        if time.time() - float(entry.get("created", 0)) >= PAIR_TTL_SECONDS:
+            pairs.pop(id, None)
+            _save_pairs_unlocked(request, pairs)
+            return {"status": "expired"}
+        if entry.get("status") != "authorized":
+            if peek and entry.get("status") == "pending":
+                entry["status"] = "scanned"
+                _save_pairs_unlocked(request, pairs)
+            return {"status": entry.get("status", "pending")}
+        if peek:
+            return {"status": "authorized", "nickname": entry.get("nickname")}
         pairs.pop(id, None)
-        _save_pairs(request, pairs)
-        return {"status": "expired"}
-    if entry.get("status") != "authorized":
-        return {"status": "pending"}
-    pairs.pop(id, None)
-    _save_pairs(request, _prune_pairs(pairs))
-    return {"status": "authorized", "token": entry.get("token"),
-            "nickname": entry.get("nickname")}
+        _save_pairs_unlocked(request, _prune_pairs(pairs))
+        return {"status": "authorized", "token": entry.get("token"),
+                "nickname": entry.get("nickname")}
 
 
 @pair_router.post("/confirm")
@@ -278,11 +302,6 @@ def pair_confirm(request: Request, body: dict):
     if payload is None:
         return JSONResponse(status_code=401, content={"detail": "需要有效登录态"})
     challenge_id = str((body or {}).get("challenge_id") or "")
-    pairs = _load_pairs(request)
-    entry = pairs.get(challenge_id)
-    if entry is None or time.time() - float(entry.get("created", 0)) >= PAIR_TTL_SECONDS:
-        return JSONResponse(status_code=404,
-                            content={"detail": "配对请求已过期，请回电脑端重新获取二维码"})
     nickname = payload.get("username") or payload["sub"]
     user_file = Path(request.app.state.store.root) / "users" / f"{payload['sub']}.json"
     if user_file.is_file():
@@ -290,6 +309,12 @@ def pair_confirm(request: Request, body: dict):
             nickname = json.loads(user_file.read_text(encoding="utf-8")).get("nickname") or nickname
         except json.JSONDecodeError:
             pass
-    entry.update({"status": "authorized", "token": token, "nickname": nickname})
-    _save_pairs(request, pairs)
+    with _PAIRS_LOCK:
+        pairs = _load_pairs(request)
+        entry = pairs.get(challenge_id)
+        if entry is None or time.time() - float(entry.get("created", 0)) >= PAIR_TTL_SECONDS:
+            return JSONResponse(status_code=404,
+                                content={"detail": "配对请求已过期，请回电脑端重新获取二维码"})
+        entry.update({"status": "authorized", "token": token, "nickname": nickname})
+        _save_pairs_unlocked(request, pairs)
     return {"ok": True, "nickname": nickname}

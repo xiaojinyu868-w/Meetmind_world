@@ -75,6 +75,8 @@ export function mountLoginPanel() {
           statusEl.textContent = `欢迎，${result.nickname ?? "朋友"}！正在进入你的世界…`;
           localStorage.setItem(TOKEN_KEY, result.token);
           window.setTimeout(() => window.location.reload(), 600);
+        } else if (result.status === "scanned") {
+          statusEl.textContent = "手机已扫码 ✅ 请在手机上点「确认登录到电脑」";
         } else if (result.status === "expired") {
           stopPolling();
           statusEl.textContent = "二维码已过期，点击重新获取";

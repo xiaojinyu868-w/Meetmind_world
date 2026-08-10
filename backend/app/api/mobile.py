@@ -139,6 +139,7 @@ background:#eef2e7;color:var(--green-deep);margin-left:6px;vertical-align:2px}
     <div class="card" id="login-wechat">
       <p class="muted" style="text-align:center">登录后，你录入的人会出现在只属于你的世界里。</p>
       <a class="btn" id="btn-wechat-login" style="text-align:center;text-decoration:none">微信一键登录</a>
+      <p class="status" id="login-status"></p>
     </div>
     <div class="card qrbox hidden" id="login-qr">
       <p class="muted">请用微信扫一扫，在手机上打开 EchoWorld</p>
@@ -269,6 +270,19 @@ function api(path, opts){
 
 // ---------- 启动 ----------
 function boot(){
+  // 扫码落地即预检并标记 scanned：桌面面板能立刻看到「手机已扫码」，
+  // 二维码已过期则在登录前就告知，不让用户白走授权流程
+  var pendingPair = localStorage.getItem(PAIR_KEY);
+  if (pendingPair) {
+    api("/api/v0/auth/pair?id=" + encodeURIComponent(pendingPair) + "&peek=1")
+      .then(function(r){
+        if (r.status === "expired") {
+          localStorage.removeItem(PAIR_KEY);
+          var el = $("login-status");
+          if (el) el.textContent = "电脑端的二维码已过期，请回到电脑重新获取后再扫一次";
+        }
+      }).catch(function(){});
+  }
   if (!token()) { renderLogin(); return; }
   api("/api/v0/auth/me", { headers: authHeaders() }).then(function(me){
     state.me = me;
@@ -284,7 +298,25 @@ function boot(){
 // ---------- 配对登录到电脑 ----------
 function renderPair(){
   show("pair");
-  $("pair-status").textContent = "";
+  var challengeId = localStorage.getItem(PAIR_KEY);
+  var btn = $("pair-confirm");
+  btn.classList.remove("hidden");
+  btn.disabled = true;
+  $("pair-status").textContent = "正在核对电脑端的二维码…";
+  // 预检挑战有效性（peek 不消费）：二维码 10 分钟过期，过期就别让用户白点
+  api("/api/v0/auth/pair?id=" + encodeURIComponent(challengeId) + "&peek=1").then(function(r){
+    if (r.status === "expired") {
+      $("pair-status").textContent = "电脑端的二维码已过期，请回到电脑重新获取后再扫一次";
+      btn.classList.add("hidden");
+      return;
+    }
+    $("pair-status").textContent = "";
+    btn.disabled = false;
+  }).catch(function(){
+    // 网络抖动不阻塞：仍允许尝试确认
+    $("pair-status").textContent = "";
+    btn.disabled = false;
+  });
 }
 $("pair-confirm").addEventListener("click", function(){
   var challengeId = localStorage.getItem(PAIR_KEY);
