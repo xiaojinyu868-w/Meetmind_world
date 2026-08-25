@@ -8,6 +8,10 @@
 # CI（.github/workflows/ci.yml）已在同一 commit 上跑过全量测试，这里不重复跑。
 set -euo pipefail
 
+# cron 默认 PATH 只有 /usr/bin:/bin，ss/kill 等网络诊断工具在 /usr/sbin；
+# 补全 sbin，否则重启段检测不到 :8000 旧进程（PID 永远为空，旧进程杀不掉）。
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 BACKEND="$REPO/backend"
 DATA_DIR=${ECHO_DATA_DIR:-$BACKEND/data}
