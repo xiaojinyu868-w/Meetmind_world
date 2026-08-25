@@ -44,6 +44,8 @@ from app.group.service import GroupSessionService
 from app.api.v1 import rooms as rooms_v1_api
 from app.api.v1 import workflows as workflows_v1_api
 from app.api.v1 import scenes as scenes_v1_api
+from app.api.v1 import islands as islands_v1_api
+from app.api.v1.islands import IslandStore
 from app.config import (
     get_data_dir,
     get_physical_ai_package_schema,
@@ -275,6 +277,7 @@ def create_app() -> FastAPI:
     app.state.group_onboarding = GroupOnboardingService(store, hall=hall_world)
     app.state.physical_ai = PhysicalAIReceiver(store, hall=hall_world, memory=memory)
     app.state.field_generation = FieldGenerationService(store)
+    app.state.islands = IslandStore()
     app.state.scene_modules = SceneModuleRegistry(default_scene_modules())
     app.state.world_scheduler = WorldScheduler(
         app, interval_seconds=get_world_heartbeat_seconds()
@@ -317,6 +320,8 @@ def create_app() -> FastAPI:
     app.include_router(rooms_v1_api.router)
     app.include_router(workflows_v1_api.router)
     app.include_router(scenes_v1_api.router)
+    # 每人一岛：浮岛小世界数据模型与 API（MeetMind「每人一岛」P0）
+    app.include_router(islands_v1_api.router)
     app.include_router(physical_ai.router)
     app.include_router(dev_lab.router)
     app.include_router(auth_api.router)
