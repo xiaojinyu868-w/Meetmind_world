@@ -131,8 +131,8 @@ if (replaceCanonicalUrl) {
   window.history.replaceState(window.history.state, "", canonicalUrl);
 }
 
-const fieldTargetPersonId = fieldPersonFromLocation() ?? people[0].id;
-const fieldTargetPerson = people.find((person) => person.id === fieldTargetPersonId) ?? people[0];
+const fieldTargetPersonId = fieldPersonFromLocation() ?? people[0]?.id ?? baseCurrentUser.id;
+const fieldTargetPerson = people.find((person) => person.id === fieldTargetPersonId) ?? people[0] ?? baseCurrentUser;
 const invitedPersonId = new URLSearchParams(window.location.search).get("invite");
 // 大屏只读视角（TBD-H1 已决：大屏只读）：?role=screen 或 ?groupScreen=1，
 // 无本地玩家、镜头绕场环视，远端成员由 v1 房间事件流驱动

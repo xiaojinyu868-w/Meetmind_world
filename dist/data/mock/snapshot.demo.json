@@ -1,166 +1,48 @@
 {
   "schema": "echo-snapshot.v1",
   "tick": 12345,
-  "agents": [
-    {
-      "id": "lin-che",
-      "position": { "x": -4.53, "z": -1.55, "yaw": 1.5708 },
-      "state": "talking",
-      "avatar": {
-        "palette": {
-          "hair": "#252a31",
-          "jacket": "#315d83",
-          "MAT_Jacket_Light": "#527ea2",
-          "shirt": "#f0e7cf",
-          "pants": "#313d4a",
-          "shoes": "#d07444",
-          "skin": "#d79a73"
-        }
-      }
-    },
-    {
-      "id": "chen-mo",
-      "position": { "x": -2.77, "z": -1.55, "yaw": -1.5708 },
-      "state": "talking",
-      "avatar": {
-        "palette": {
-          "hair": "#242829",
-          "jacket": "#667443",
-          "MAT_Jacket_Light": "#89965c",
-          "shirt": "#e4dec8",
-          "pants": "#3d4442",
-          "shoes": "#a45d3c",
-          "skin": "#d79a73"
-        }
-      }
-    },
-    {
-      "id": "zhou-ning",
-      "position": { "x": -4.53, "z": 1.55, "yaw": 1.5708 },
-      "state": "talking",
-      "avatar": {
-        "palette": {
-          "hair": "#56352b",
-          "jacket": "#b85f50",
-          "MAT_Jacket_Light": "#d27a68",
-          "shirt": "#f0dfc5",
-          "pants": "#344957",
-          "shoes": "#d0a95d",
-          "skin": "#d79a73"
-        }
-      }
-    },
-    {
-      "id": "xu-an",
-      "position": { "x": -2.77, "z": 1.55, "yaw": -1.5708 },
-      "state": "talking",
-      "avatar": {
-        "palette": {
-          "hair": "#67392e",
-          "jacket": "#c18b39",
-          "MAT_Jacket_Light": "#d4a85d",
-          "shirt": "#f0e5c9",
-          "pants": "#315d59",
-          "shoes": "#715040",
-          "skin": "#d79a73"
-        }
-      }
-    },
-    {
-      "id": "su-he",
-      "position": { "x": 2.89, "z": 0.83, "yaw": 0.4398 },
-      "state": "seated",
-      "avatar": {
-        "palette": {
-          "hair": "#29282b",
-          "jacket": "#8b4a62",
-          "MAT_Jacket_Light": "#af6680",
-          "shirt": "#dce8e5",
-          "pants": "#3d4552",
-          "shoes": "#b98945",
-          "skin": "#d79a73"
-        }
-      }
-    },
-    {
-      "id": "tang-ke",
-      "position": { "x": 1.1, "z": 3.1, "yaw": -2.35 },
-      "state": "walking",
-      "avatar": {
-        "palette": {
-          "hair": "#4a352d",
-          "jacket": "#2f7d7b",
-          "MAT_Jacket_Light": "#52a09b",
-          "shirt": "#efe5ca",
-          "pants": "#383e48",
-          "shoes": "#cc7548",
-          "skin": "#d79a73"
-        }
-      }
-    }
-  ],
+  "agents": [],
   "modules": [
-    { "id": "roundtable-six", "type": "roundtable", "position": { "x": 0, "z": 0 } },
-    { "id": "table-window-two", "type": "table", "position": { "x": -3.65, "z": -1.55 } },
-    { "id": "table-poster-two", "type": "table", "position": { "x": -3.65, "z": 1.55 } },
-    { "id": "table-library-four", "type": "table", "position": { "x": 3.28, "z": -1.35 } },
-    { "id": "table-counter-four", "type": "table", "position": { "x": 3.28, "z": 1.65 } }
-  ],
-  "events": [
     {
-      "type": "meeting-start",
-      "tick": 12270,
-      "meeting_id": "meet_01",
-      "topic": "关系世界的下一步",
-      "participants": ["lin-che", "zhou-ning", "su-he"]
+      "id": "roundtable-six",
+      "type": "roundtable",
+      "position": {
+        "x": 0,
+        "z": 0
+      }
     },
     {
-      "type": "meeting-end",
-      "tick": 12310,
-      "meeting_id": "meet_01",
-      "summary": "约定下周各自带一份关系草图，再来圆桌对照。"
+      "id": "table-window-two",
+      "type": "table",
+      "position": {
+        "x": -3.65,
+        "z": -1.55
+      }
     },
     {
-      "type": "agent-move",
-      "tick": 12321,
-      "agent_id": "tang-ke",
-      "from": { "x": 2.89, "z": 0.83 },
-      "to": { "x": 1.1, "z": 3.1 }
+      "id": "table-poster-two",
+      "type": "table",
+      "position": {
+        "x": -3.65,
+        "z": 1.55
+      }
     },
     {
-      "type": "agent-state",
-      "tick": 12324,
-      "agent_id": "su-he",
-      "state": "seated",
-      "seat": "SEAT_4_02_03"
+      "id": "table-library-four",
+      "type": "table",
+      "position": {
+        "x": 3.28,
+        "z": -1.35
+      }
     },
     {
-      "type": "agent-talk",
-      "tick": 12330,
-      "agent_id": "lin-che",
-      "target_id": "chen-mo",
-      "text": "上次那张关系世界的草图，我一直留着。"
-    },
-    {
-      "type": "agent-talk",
-      "tick": 12333,
-      "agent_id": "chen-mo",
-      "target_id": "lin-che",
-      "text": "场景加载得比我们当年的测试环境快，这次不用等到凌晨三点。"
-    },
-    {
-      "type": "agent-talk",
-      "tick": 12336,
-      "agent_id": "zhou-ning",
-      "target_id": "xu-an",
-      "text": "这里的路比我记忆里短了一点，不过风还是从礼堂后面吹过来。"
-    },
-    {
-      "type": "agent-talk",
-      "tick": 12339,
-      "agent_id": "xu-an",
-      "target_id": "zhou-ning",
-      "text": "你看窗边的光，很像早晨六点只停三分钟的那一条。"
+      "id": "table-counter-four",
+      "type": "table",
+      "position": {
+        "x": 3.28,
+        "z": 1.65
+      }
     }
-  ]
+  ],
+  "events": []
 }

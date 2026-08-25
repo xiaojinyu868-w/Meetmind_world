@@ -209,7 +209,12 @@ export class LiveWorld {
   }
 
   async #fetchJson(url) {
-    const response = await this.fetchImpl(url, { headers: { accept: "application/json" } });
+    // 登录态（LOGIN-AND-OWNERSHIP）：快照出口按 owner 过滤，带上 Bearer token
+    // 才能看到自己上传的人物；无 token 保持匿名行为。与 MockApi.authHeaders 同源。
+    const headers = { accept: "application/json" };
+    const token = globalThis.localStorage?.getItem("meetmind_access_token");
+    if (token) headers.authorization = `Bearer ${token}`;
+    const response = await this.fetchImpl(url, { headers });
     if (!response || !response.ok) throw new Error(`HTTP ${response?.status ?? "error"}`);
     return response.json();
   }

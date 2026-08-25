@@ -36,13 +36,38 @@ npm run build
 PID=$(ss -ltnp 2>/dev/null | grep ':8000' | grep -oP 'pid=\K[0-9]+' | head -1 || true)
 if [ -n "${PID:-}" ]; then
   kill "$PID" || true
-  sleep 2
+  # 等旧进程真正退出（最多 10s），否则新进程 bind 失败而健康检查仍命中旧进程
+  for _ in $(seq 1 10); do
+    kill -0 "$PID" 2>/dev/null || break
+    sleep 1
+  done
+  kill -9 "$PID" 2>/dev/null || true
+  sleep 1
 fi
 cd "$BACKEND"
 ECHO_DATA_DIR="$DATA_DIR" nohup .venv/bin/uvicorn app.main:app \
   --host 127.0.0.1 --port 8000 >> "$UVICORN_LOG" 2>&1 &
 sleep 4
 curl -fsS http://127.0.0.1:8000/api/health > /dev/null
+
+# 重启盲区防护（2026-08-25）：健康检查可能命中尚未退出的旧进程，必须确认
+# :8000 的监听者确为本次启动的新进程（pid 已更换且进程年龄在本轮部署内），
+# 否则不写 marker、非零退出，让下次 cron 重试而不是永久报 up-to-date。
+LISTENER_PID=$(ss -ltnp 2>/dev/null | grep ':8000' | grep -oP 'pid=\K[0-9]+' | head -1 || true)
+if [ -z "${LISTENER_PID:-}" ]; then
+  echo "[deploy] ERROR: :8000 无监听进程，新后端未启动（见 $UVICORN_LOG）" >&2
+  exit 1
+fi
+if [ "$LISTENER_PID" = "${PID:-}" ]; then
+  echo "[deploy] ERROR: :8000 仍被旧进程 $LISTENER_PID 占用，新进程未接管" >&2
+  exit 1
+fi
+LISTENER_AGE=$(ps -o etimes= -p "$LISTENER_PID" 2>/dev/null | tr -d ' ' || echo "")
+if [ -z "${LISTENER_AGE:-}" ] || [ "$LISTENER_AGE" -gt 300 ]; then
+  echo "[deploy] ERROR: :8000 监听进程 $LISTENER_PID 已运行 ${LISTENER_AGE:-?}s，非本次部署启动" >&2
+  exit 1
+fi
+echo "[deploy] backend restarted: pid $LISTENER_PID (age ${LISTENER_AGE}s)"
 
 rm -rf /var/www/echoworld
 cp -a "$REPO/dist" /var/www/echoworld

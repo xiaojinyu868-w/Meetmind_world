@@ -2,19 +2,18 @@
 
 面向 AI 编码代理的项目说明。阅读本文件即可了解 EchoWorld 前端的结构、命令与约定。
 
-## 开发与部署规范（2026-08-06，先读再动手）
+## 开发与部署规范（2026-08-25 更新，先读再动手）
 
-- **权威代码 = GitHub `main` = `/root/meetmind_wt_main`**（生产检出）。所有改动在这里做、
+- **权威代码 = GitHub `main` = `/root/meetmind_go`**（唯一事实源）。所有改动在这里做、
   在这里构建、从这里推送（SSH：`git@github.com:xiaojinyu868-w/Meetmind_world.git`）。
-- `/root/meetmind_go` 是**共享工作区**（用户与其他代理都在里面）：不在那里做 git 操作
-  和构建；它的 `backend/data/` 是线上数据目录（`ECHO_DATA_DIR`），不要动数据结构。
-- 合并协作者分支：fetch 后在 wt_main 里 merge，**临时 worktree 用完即删**
-  （`git worktree remove` + 删分支），不留第二个长期工作区。
-- 部署流程：改代码 → `npm run build` → 提交推送 →（改过后端才）重启 uvicorn
-  （127.0.0.1:8000，日志 `/var/log/echoworld-uvicorn.log`）→
-  `rm -rf /var/www/echoworld && cp -a dist /var/www/echoworld`。
+  不要再新建其他 worktree/检出；历史 `meetmind_wt_main` 已废弃删除。
+- `backend/data/` 是线上数据目录（`ECHO_DATA_DIR`）：不要动数据结构，删改前先备份。
+- 部署流程：改代码 → 后端测试全绿 → `npm run build` → 提交推送 `main` →
+  服务器 cron 每分钟巡检 `origin/main` 自动执行 `scripts/deploy.sh`
+  （拉取 → 依赖 → 构建 → 重启后端 127.0.0.1:8000 → 同步 dist 到 /var/www/echoworld）。
+  想立即生效可手动 `scripts/deploy.sh --force`。
 - 后端测试：`cd backend && PHYSICAL_AI_PACKAGE_SCHEMA="" .venv/bin/python -m pytest tests/ -q`。
-- `.env` 不进 git：线上后端读 `/root/meetmind_wt_main/.env`（chat 已切百炼托管
+- `.env` 不进 git：线上后端读 `/root/meetmind_go/.env`（chat 走百炼托管
   `deepseek-v4-flash`——与 DeepSeek 官方同价 1元/2元 每百万 Token，比 qwen3.7-plus
   便宜一半以上且更快；DeepSeek 官方 402 余额不足，恢复后改回 CHAT_* 即可）。
 - 梳理文档：`docs/AGENT-RUNTIME.md`（Agent 运行机制）、`docs/PRODUCT-STATUS.md`
@@ -74,7 +73,7 @@ src/main.js                 应用装配：Three.js 场景/灯光/阴影、第�
                             圆形桌面碰撞（TABLE_BLOCKERS）、射线选择、会议编排（约 800 行）；
                             场域：splat 加载后 worldBounds/cameraBounds 重设为实测边界，field companion
                             同伴随行（updateFieldCompanion），场域内世界快照不驱动站位也不生成新面孔
-src/data/demoPeople.js      mock 数据：currentUser、6 个 NPC（含 palette 调色板、资料、关系图坐标）、relationships
+src/data/demoPeople.js      currentUser 定义（2026-08-25 起 mock NPC/relationships 已清空，世界人物以后端 Package 为准）
 src/runtime/
   WorldSpec.js              world-spec.json 的加载与 schema 校验（echo-world.v1）、publicUrl() 处理 BASE_URL
   AssetCatalog.js           asset-catalog.json 白名单加载与校验（echo-assets.v1）
@@ -131,7 +130,7 @@ src/ui/
   SceneInteraction.js       统一 E/F 与触屏情境互动（一键一动作，E 主/F 次即时触发；
                             模态 sheet 为右下单例卡片，JS 与 scene-interaction.css 类名必须成套对齐——
                             2026-08-05 曾因 JS/CSS 分属两套设计导致 sheet 裸奔堆叠，改一侧必须同步另一侧）
-  RelationshipGraph.js      关系 Map：7 个节点 + 12 条边的 SVG/DOM 渲染
+  RelationshipGraph.js      关系 Map：currentUser + people 节点、relationships 边的 SVG/DOM 渲染
   pipeline/PipelineFlow.js  相遇「录入 → 处理 → 确认」三屏流程（IF-1/2/3，自带 pipeline.css）
   onboarding/OnboardingFlow.js  合照入场三屏流程（FR-2.12，/api/v1/group-onboarding 两段式，自带 onboarding.css）
   package-panel/            资料包面板 + 顶部检索条（IF-5，自带 panel.css）
@@ -155,7 +154,7 @@ scripts/                    node 自测与冒烟：room-client.test.mjs（RoomCl
 
 ### 数据流
 
-`world-spec.json`（schema `echo-world.v1`）→ 引用 `asset-catalog.json`（schema `echo-assets.v1`）→ 白名单内的 GLB/JSON 资产经 `AssetStore` 加载。运行时人物数据来自 `src/data/demoPeople.js`，两个 schema 版本字符串是硬校验，改动 JSON 结构时必须同步更新 `WorldSpec.js` / `AssetCatalog.js` 中的版本常量。
+`world-spec.json`（schema `echo-world.v1`）→ 引用 `asset-catalog.json`（schema `echo-assets.v1`）→ 白名单内的 GLB/JSON 资产经 `AssetStore` 加载。运行时人物数据以后端 Package 为准（`src/data/demoPeople.js` 仅提供 currentUser），两个 schema 版本字符串是硬校验，改动 JSON 结构时必须同步更新 `WorldSpec.js` / `AssetCatalog.js` 中的版本常量。
 
 人物动态默认由世界快照驱动（ROADMAP 1.C.2）：`LiveWorld` 纯读轮询 `/api/v0/world/snapshot`（契约见 docs/API.md IF-4、docs/ARCHITECTURE.md §4，schema `echo-snapshot.v1`），旧世界由后端服务端 heartbeat 推进；经 `SnapshotAdapter` 映射后由 main.js 插值渲染，后端不可用时自动降级 `data/mock/snapshot.demo.json` → 内置兜底快照（本地演化保持世界运转）。`window.__ECHOWORLD_OPTIONS__ = { api, onPersonSelected, live, snapshotPollMs }` 可注入真实 api、选人回调或关回 NpcAgentSystem 本地调度（`live: false`）。
 
