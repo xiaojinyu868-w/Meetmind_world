@@ -55,6 +55,7 @@ class IslandUpsert(BaseModel):
     objects: list[IslandObject] = Field(default_factory=list)
     bridges: list[IslandBridge] = Field(default_factory=list)
     build_status: Literal["pending", "building", "ready", "failed"] | None = None
+    build_error: str | None = None  # failed 时的错误摘要（输出尾部截断）
 
     @field_validator("spec")
     @classmethod
@@ -121,16 +122,31 @@ class IslandStore:
             payload["created_at"] = (existing or {}).get("created_at", now)
             payload["updated_at"] = now
             island = Island.model_validate(payload).model_dump()
-            path = self._path(body.person_id)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = path.with_name(
-                f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
-            )
-            tmp.write_text(
-                json.dumps(island, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-            os.replace(tmp, path)
+            self._write(body.person_id, island)
             return island
+
+    def update(self, person_id: str, **fields) -> dict | None:
+        """局部更新已存在的岛（不动未提及字段）；不存在返回 None。"""
+        with self._lock:
+            existing = self.get(person_id)
+            if not existing:
+                return None
+            existing.update(fields)
+            existing["updated_at"] = datetime.now(timezone.utc).isoformat()
+            island = Island.model_validate(existing).model_dump()
+            self._write(person_id, island)
+            return island
+
+    def _write(self, person_id: str, island: dict) -> None:
+        path = self._path(person_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(
+            f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+        )
+        tmp.write_text(
+            json.dumps(island, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        os.replace(tmp, path)
 
     def list_by_owner(self, owner_id: str) -> list[dict]:
         if not self._root.is_dir():
@@ -156,6 +172,36 @@ def upsert_island(request: Request, body: IslandUpsert):
     return _store(request).upsert(body, owner_id=caller)
 
 
+class IslandBuildRequest(BaseModel):
+    """POST /api/v1/islands/build 请求体。"""
+
+    person_id: str = Field(pattern=PERSON_ID_PATTERN)
+    group_id: str | None = None  # 给了就从该 group 的 detect 生成物里取合照
+
+
+@router.post("/build", status_code=200)
+def build_island(request: Request, body: IslandBuildRequest):
+    """触发岛屿构建：记录置 building → 串行队列后台跑 build.py → ready/failed。
+
+    幂等：building 中重复调用直接返回当前状态，不重复触发。
+    """
+    caller = caller_user_id(request)
+    if not caller:
+        raise HTTPException(status_code=401, detail="需要登录")
+    photo = None
+    if body.group_id:
+        try:
+            detection = request.app.state.group_onboarding._load_detection(body.group_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        source_ref = detection.get("source_ref")
+        if source_ref:
+            photo = str(request.app.state.store.root / source_ref)
+    return request.app.state.island_builds.trigger(
+        body.person_id, owner_id=caller, group_id=body.group_id, photo=photo,
+    )
+
+
 @router.get("/me")
 def list_my_islands(request: Request):
     """调用者名下的岛列表。"""
@@ -176,6 +222,7 @@ def get_island_card(person_id: str, request: Request):
         "schema": "meetmind.island-card.v1",
         "person_id": island["person_id"],
         "build_status": island["build_status"],
+        "build_error": island.get("build_error"),
         "source_group_id": island.get("source_group_id"),
         "assets_base": island["assets_base"],
         "object_count": len(island.get("objects") or []),

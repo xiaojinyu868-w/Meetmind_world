@@ -46,6 +46,7 @@ from app.api.v1 import workflows as workflows_v1_api
 from app.api.v1 import scenes as scenes_v1_api
 from app.api.v1 import islands as islands_v1_api
 from app.api.v1.islands import IslandStore
+from app.pipelines.island_builder import IslandBuildQueue
 from app.config import (
     get_data_dir,
     get_physical_ai_package_schema,
@@ -278,6 +279,7 @@ def create_app() -> FastAPI:
     app.state.physical_ai = PhysicalAIReceiver(store, hall=hall_world, memory=memory)
     app.state.field_generation = FieldGenerationService(store)
     app.state.islands = IslandStore()
+    app.state.island_builds = IslandBuildQueue(app.state.islands)
     app.state.scene_modules = SceneModuleRegistry(default_scene_modules())
     app.state.world_scheduler = WorldScheduler(
         app, interval_seconds=get_world_heartbeat_seconds()

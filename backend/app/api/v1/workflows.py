@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import time
 import uuid
 from datetime import datetime, timezone
@@ -19,6 +20,8 @@ from app.security.meetmind_jwt import caller_user_id
 from app.packages.store import PackageNotFound
 
 router = APIRouter(prefix="/api/v1", tags=["mvp2-workflows"])
+
+logger = logging.getLogger(__name__)
 
 MAX_GROUP_PHOTO_BYTES = 25 * 1024 * 1024
 MAX_GROUP_PHOTO_PIXELS = 80_000_000
@@ -136,7 +139,7 @@ class GroupConfirmRequest(BaseModel):
 def group_onboarding_confirm(request: Request, body: GroupConfirmRequest):
     """两段式第二段：按确认的人脸-姓名指派批量建档 + 注册展位大厅。"""
     try:
-        return request.app.state.group_onboarding.confirm(
+        result = request.app.state.group_onboarding.confirm(
             body.group_id, [item.model_dump() for item in body.assignments],
             owner_id=caller_user_id(request),
         )
@@ -144,6 +147,33 @@ def group_onboarding_confirm(request: Request, body: GroupConfirmRequest):
         detail = str(exc)
         status = 404 if detail.startswith("未知的 group_id") else 422
         raise HTTPException(status_code=status, detail=detail) from exc
+    _trigger_island_builds(request, body.group_id, result,
+                           owner_id=caller_user_id(request))
+    return result
+
+
+def _trigger_island_builds(request: Request, group_id: str, result: dict,
+                           owner_id: str | None) -> None:
+    """confirm 成功后为每位人物自动触发岛屿构建；任何失败都不阻断 confirm。"""
+    queue = getattr(request.app.state, "island_builds", None)
+    if queue is None:
+        return
+    store = request.app.state.store
+    photo_ref = result.get("source_ref")
+    photo = str(store.root / photo_ref) if photo_ref else None
+    for participant in result.get("participants", []):
+        try:
+            queue.trigger(
+                participant["person_id"],
+                owner_id=owner_id or "system",
+                group_id=group_id,
+                photo=photo,
+            )
+        except Exception:
+            logger.exception(
+                "岛屿构建触发失败：person_id=%s group_id=%s",
+                participant.get("person_id"), group_id,
+            )
 
 
 class ImpressionRequest(BaseModel):

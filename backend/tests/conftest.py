@@ -52,3 +52,20 @@ def _isolate_llm_env(request, monkeypatch):
     yield
     llm_base.reset_providers()
     world_gen.reset_worldgen_provider()
+
+
+@pytest.fixture(autouse=True)
+def _stub_island_builder(request, monkeypatch):
+    """非 live 用例：stub 掉岛屿构建器，绝不真的起 build.py 子进程
+    （它会从 /root/meetmind_go/.env 读真实 key 调生图/VL API）。
+    需要具体行为的用例在测试内自行 monkeypatch 覆盖。"""
+    if request.node.get_closest_marker("live"):
+        yield
+        return
+    from app.pipelines import island_builder
+
+    def _fake_runner(photo, person_id, workdir, publish_root):
+        raise RuntimeError("测试环境不执行真实岛屿构建（conftest stub）")
+
+    monkeypatch.setattr(island_builder, "run_island_build", _fake_runner)
+    yield
