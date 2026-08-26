@@ -7,9 +7,12 @@
 验收：tests/ 全绿；uvicorn 启动后 /api/health 与 /api/v0/world/snapshot 200。
 """
 
+import logging
 import random
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+logger = logging.getLogger("echoworld")
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -102,6 +105,10 @@ def _warm_start_worlds(cafe, hall, bus, hall_bus, memory) -> None:
 def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI):
+        orphaned = application.state.islands.reset_stale_building()
+        if orphaned:
+            logger.warning("重置 %d 座卡死在 building 的岛：%s",
+                           len(orphaned), ", ".join(orphaned))
         await application.state.world_scheduler.start()
         try:
             yield

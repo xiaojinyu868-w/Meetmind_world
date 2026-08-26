@@ -112,3 +112,21 @@ def test_island_upsert_preserves_created_at(client):
     # 仍是一条记录
     mine = client.get("/api/v1/islands/me", headers=_auth()).json()["islands"]
     assert len(mine) == 1
+
+
+def test_reset_stale_building(client):
+    """启动自愈：卡死在 building 的岛（进程重启孤儿）重置为 failed，可重新触发。"""
+    created = _create(client, spec=None, build_status="building")
+    assert created.json()["build_status"] == "building"
+    _create(client, person_id="person_b")  # ready 岛不受影响
+
+    store = client.app.state.islands
+    reset = store.reset_stale_building()
+    assert reset == ["person_a"]
+
+    island = store.get("person_a")
+    assert island["build_status"] == "failed"
+    assert "重启" in island["build_error"]
+    assert store.get("person_b")["build_status"] == "ready"
+    # 再跑一次无副作用
+    assert store.reset_stale_building() == []

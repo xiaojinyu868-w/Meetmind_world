@@ -149,6 +149,27 @@ class IslandStore:
         )
         os.replace(tmp, path)
 
+    def reset_stale_building(self) -> list[str]:
+        """启动自愈：把卡死在 building 的岛重置为 failed。
+
+        构建在后端进程内后台执行，进程一重启 building 就成了无人认领的孤儿，
+        不会再有人把它推进到 ready/failed。重置为 failed 让前端能展示失败态、
+        用户可重新触发构建。返回被重置的 person_id 列表。
+        """
+        if not self._root.is_dir():
+            return []
+        reset = []
+        for child in sorted(self._root.iterdir()):
+            island = self.get(child.name)
+            if island and island.get("build_status") == "building":
+                self.update(
+                    child.name,
+                    build_status="failed",
+                    build_error="服务重启，构建中断，请重新触发",
+                )
+                reset.append(child.name)
+        return reset
+
     def list_by_owner(self, owner_id: str) -> list[dict]:
         if not self._root.is_dir():
             return []
