@@ -37,10 +37,11 @@ class IslandObject(BaseModel):
 
 
 class IslandBridge(BaseModel):
-    """通往另一座岛的桥。"""
+    """通往另一座岛的桥。name 为对方岛主显示名（提示卡文案用，可选）。"""
 
     to_person_id: str | None = None
     at: tuple[float, float] | None = None
+    name: str | None = None
 
 
 class IslandUpsert(BaseModel):
@@ -247,4 +248,10 @@ def get_island_spec(person_id: str, request: Request):
                 "build_status": island["build_status"],
             },
         )
-    return island["spec"]
+    spec = island["spec"]
+    # P2 桥：Island.bridges 是权威数据，serve 时合并进 spec 给引擎消费
+    # （spec 里存的是占位空数组；无桥时不动，保持原样）
+    bridges = island.get("bridges") or []
+    if bridges:
+        spec = {**spec, "bridges": bridges}
+    return spec

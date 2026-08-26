@@ -68,7 +68,8 @@ def test_island_full_chain(client):
 
     spec = client.get("/api/v1/islands/person_a/spec")
     assert spec.status_code == 200
-    assert spec.json() == VALID_SPEC
+    # Island.bridges（权威）serve 时合并进 spec 给引擎消费（P2 桥）
+    assert spec.json() == {**VALID_SPEC, "bridges": [{"to_person_id": "person_b", "at": [10.0, 0.0], "name": None}]}
 
 
 def test_island_requires_auth(client):
