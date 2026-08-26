@@ -161,13 +161,14 @@ def _trigger_island_builds(request: Request, group_id: str, result: dict,
     store = request.app.state.store
     photo_ref = result.get("source_ref")
     photo = str(store.root / photo_ref) if photo_ref else None
-    for participant in result.get("participants", []):
+    for i, participant in enumerate(result.get("participants", [])):
         try:
             queue.trigger(
                 participant["person_id"],
                 owner_id=owner_id or "system",
                 group_id=group_id,
                 photo=photo,
+                person_index=i,  # assignments 顺序 == detect 人脸顺序 == sheet 行序
             )
         except Exception:
             logger.exception(

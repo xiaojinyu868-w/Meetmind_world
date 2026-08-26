@@ -64,7 +64,7 @@ def _stub_island_builder(request, monkeypatch):
         return
     from app.pipelines import island_builder
 
-    def _fake_runner(photo, person_id, workdir, publish_root):
+    def _fake_runner(photo, person_id, workdir, publish_root, person_index=None):
         raise RuntimeError("测试环境不执行真实岛屿构建（conftest stub）")
 
     monkeypatch.setattr(island_builder, "run_island_build", _fake_runner)

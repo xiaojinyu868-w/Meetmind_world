@@ -57,8 +57,8 @@ def _auth(sub: str = "u-island-builder") -> dict:
 
 def _ready_runner(calls: list):
     """模拟构建成功：写 spec.json 到 publish 目录。"""
-    def run(photo, person_id, workdir, publish_root):
-        calls.append({"photo": photo, "person_id": person_id})
+    def run(photo, person_id, workdir, publish_root, person_index=None):
+        calls.append({"photo": photo, "person_id": person_id, "person_index": person_index})
         target = Path(publish_root) / person_id
         target.mkdir(parents=True, exist_ok=True)
         (target / "spec.json").write_text(json.dumps(READY_SPEC))
@@ -100,7 +100,7 @@ def test_build_upserts_objects_from_publish_dir(client, monkeypatch):
          "story": "江边放起来的那只"},
     ]
 
-    def runner(photo, person_id, workdir, publish_root):
+    def runner(photo, person_id, workdir, publish_root, person_index=None):
         target = Path(publish_root) / person_id
         target.mkdir(parents=True, exist_ok=True)
         (target / "spec.json").write_text(json.dumps(READY_SPEC))
@@ -132,7 +132,7 @@ def test_build_idempotent_while_building(client, monkeypatch):
     entered = threading.Event()
     release = threading.Event()
 
-    def blocking_runner(photo, person_id, workdir, publish_root):
+    def blocking_runner(photo, person_id, workdir, publish_root, person_index=None):
         calls.append(person_id)
         entered.set()
         assert release.wait(10), "测试卡住：未等到释放信号"
@@ -159,7 +159,7 @@ def test_build_idempotent_while_building(client, monkeypatch):
 
 
 def test_build_failure_marks_failed(client, monkeypatch):
-    def boom_runner(photo, person_id, workdir, publish_root):
+    def boom_runner(photo, person_id, workdir, publish_root, person_index=None):
         raise RuntimeError("build.py 退出码 3：[sheet] 投影切带失败 boom-tail")
 
     monkeypatch.setattr(island_builder, "run_island_build", boom_runner)
@@ -177,7 +177,7 @@ def test_build_failure_marks_failed(client, monkeypatch):
 
 
 def test_build_timeout_marks_failed(client, monkeypatch):
-    def timeout_runner(photo, person_id, workdir, publish_root):
+    def timeout_runner(photo, person_id, workdir, publish_root, person_index=None):
         raise RuntimeError("构建超时（20 分钟）")
 
     monkeypatch.setattr(island_builder, "run_island_build", timeout_runner)
@@ -245,7 +245,7 @@ def test_confirm_auto_triggers_island_builds(client, monkeypatch):
 
 
 def test_confirm_not_blocked_by_build_failure(client, monkeypatch):
-    def boom_runner(photo, person_id, workdir, publish_root):
+    def boom_runner(photo, person_id, workdir, publish_root, person_index=None):
         raise RuntimeError("构建爆炸")
 
     monkeypatch.setattr(island_builder, "run_island_build", boom_runner)
@@ -304,7 +304,7 @@ def test_run_build_nonzero_exit_tail(tmp_path, monkeypatch):
             _real_photo(tmp_path), "person_a", tmp_path / "wd", tmp_path / "pub")
     message = str(excinfo.value)
     assert "退出码 3" in message and "boom-stderr" in message
-    assert len(message) < 1200  # 只留尾部，不整段进记录
+    assert len(message) < 1700  # 只留尾部（1500 上限+前缀），不整段进记录
 
 
 def test_run_build_timeout_conversion(tmp_path, monkeypatch):

@@ -177,6 +177,7 @@ class IslandBuildRequest(BaseModel):
 
     person_id: str = Field(pattern=PERSON_ID_PATTERN)
     group_id: str | None = None  # 给了就从该 group 的 detect 生成物里取合照
+    person_index: int | None = None  # 岛主在合照/sheet 行中的序号（0 起）；给了只烘岛主 persona
 
 
 @router.post("/build", status_code=200)
@@ -199,6 +200,7 @@ def build_island(request: Request, body: IslandBuildRequest):
             photo = str(request.app.state.store.root / source_ref)
     return request.app.state.island_builds.trigger(
         body.person_id, owner_id=caller, group_id=body.group_id, photo=photo,
+        person_index=body.person_index,
     )
 
 
