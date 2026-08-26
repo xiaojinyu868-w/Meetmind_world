@@ -873,6 +873,29 @@ export async function groupOnboardingConfirm(groupId, assignments) {
 }
 
 /**
+ * 「每人一岛」岛卡片：`GET /api/v1/islands/<personId>`（公开卡片，含 build_status）。
+ * 认领成功页轮询用：ready 后点亮"进入 TA 的小岛"入口。
+ * 404（岛尚未建档）返回 null；mock 模式没有岛构建概念，也返回 null（调用方不挡路）。
+ * @param {string} personId
+ * @returns {Promise<{person_id: string, build_status: string} | null>}
+ */
+export async function getIslandCard(personId) {
+  if (!personId) return null;
+  if (await useLiveMode()) {
+    const response = await fetch(
+      `${LIVE_V1_BASE_URL}/islands/${encodeURIComponent(personId)}`,
+      { headers: { ...authHeaders() } },
+    );
+    if (response.status === 404) return null;
+    if (!response.ok) {
+      throw new Error(`GET /islands/${personId} failed: HTTP ${response.status}`);
+    }
+    return response.json();
+  }
+  return null;
+}
+
+/**
  * IF-4 世界快照：`GET /api/v0/world/snapshot`（echo-snapshot.v1，前端唯一渲染数据源）。
  *
  * mock 模式：fetch `snapshot.demo.json`，失败（文件缺失/格式错误/schema 不符）

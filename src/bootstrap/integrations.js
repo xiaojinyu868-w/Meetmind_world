@@ -212,6 +212,12 @@ export function createUnifiedApi(base = MockApi) {
     confirmGroupPhoto(groupId, assignments) {
       return base.groupOnboardingConfirm(groupId, assignments);
     },
+    // 「每人一岛」岛卡片轮询（认领成功页"进入 TA 的小岛"点亮用）；mock 返回 null
+    getIslandCard(personId) {
+      return typeof base.getIslandCard === "function"
+        ? base.getIslandCard(personId)
+        : Promise.resolve(null);
+    },
     // IF-4
     fetchSnapshot() {
       return base.fetchSnapshot();

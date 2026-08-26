@@ -1,4 +1,5 @@
 import {
+  ArrowUpRight,
   Check,
   CircleAlert,
   ImagePlus,
@@ -26,6 +27,8 @@ import "./onboarding.css";
  *   confirmGroupPhoto(groupId, assignments) => Promise<{ status, participants: [{ person_id, name, booth_id }] }>
  *     assignments = [{ face_id, face_ref, name, impression? }]；确认后才批量建档 + 注册展位。
  *   assetUrl?(ref) => string  可选：face_ref → 可加载 URL（人脸裁剪回显用；缺省用本地预览 CSS 裁剪）。
+ *   getIslandCard?(personId) => Promise<{ build_status } | null>  可选：岛卡片轮询
+ *     （成功屏"进入 TA 的小岛"入口：building 灰显"世界生长中"，ready 点亮；缺省不轮询、入口直接可用）。
  *
  * opts：
  *   onComplete({ count, names, participants })  入场成功回调（恰好一次）
@@ -36,6 +39,7 @@ import "./onboarding.css";
  */
 
 const ICONS = {
+  ArrowUpRight,
   Check,
   CircleAlert,
   ImagePlus,
@@ -63,6 +67,14 @@ const ACCEPT_STRING = ".jpg,.jpeg,.png,.webp,.heic,.heif,.avif,.bmp,.dib,.tif,.t
 const ACCEPTED_MIME = /^image\/(jpeg|png|webp|heic|heif|avif|bmp|x-ms-bmp|tiff|gif)$/;
 const ACCEPTED_SUFFIX = /\.(jpe?g|png|webp|heic|heif|avif|bmp|dib|tiff?|gif)$/i;
 const MAX_PHOTO_BYTES = 25 * 1024 * 1024;
+
+// 「每人一岛」成功屏入口：v6 浮岛页（intro=1 播开场），build_status 轮询间隔
+const ISLAND_URL_TMPL = "https://capture.meetmind.online/me/v6.html?world={id}&intro=1";
+const ISLAND_POLL_MS = 10000;
+
+function islandUrl(personId) {
+  return ISLAND_URL_TMPL.replace("{id}", encodeURIComponent(personId));
+}
 
 
 function escapeHtml(value) {
@@ -105,6 +117,7 @@ export function mountOnboardingFlow(container, api, opts = {}) {
   let open = false;
   let runId = 0;
   let completedFired = false;
+  let islandTimer = null;
 
   const state = {
     phase: "upload",
@@ -116,6 +129,7 @@ export function mountOnboardingFlow(container, api, opts = {}) {
     faces: [], // [{ face_id, bbox, face_ref, name, skipped }]
     issues: [],
     result: null,
+    islandStatus: {}, // person_id → build_status（"pending"=未查到；ready 点亮入口）
     submitting: false,
     error: null,
     fileError: "",
@@ -140,6 +154,7 @@ export function mountOnboardingFlow(container, api, opts = {}) {
 
   function resetState() {
     revokePreview();
+    clearIslandPolling();
     state.phase = "upload";
     state.file = null;
     state.groupId = null;
@@ -148,10 +163,44 @@ export function mountOnboardingFlow(container, api, opts = {}) {
     state.faces = [];
     state.issues = [];
     state.result = null;
+    state.islandStatus = {};
     state.submitting = false;
     state.error = null;
     state.fileError = "";
     completedFired = false;
+  }
+
+  function clearIslandPolling() {
+    if (islandTimer) {
+      window.clearTimeout(islandTimer);
+      islandTimer = null;
+    }
+  }
+
+  /* 小岛构建状态轮询：confirm 已触发后台构建，ready 后点亮"进入 TA 的小岛"。
+     api 无 getIslandCard（纯 mock 宿主）时不轮询，入口直接可用。 */
+  function startIslandPolling(participants) {
+    clearIslandPolling();
+    const run = runId;
+    const ids = participants.map((item) => item?.person_id).filter(Boolean);
+    state.islandStatus = {};
+    if (!ids.length || typeof api.getIslandCard !== "function") return;
+    for (const id of ids) state.islandStatus[id] = "pending";
+    const tick = async () => {
+      let waiting = false;
+      for (const id of ids) {
+        if (state.islandStatus[id] === "ready") continue;
+        try {
+          const card = await api.getIslandCard(id);
+          state.islandStatus[id] = card?.build_status ?? "ready"; // 查不到不挡路
+        } catch { /* 网络抖动，下轮再试 */ }
+        if (state.islandStatus[id] !== "ready") waiting = true;
+      }
+      if (!alive || run !== runId || state.phase !== "success") return;
+      render();
+      if (waiting) islandTimer = window.setTimeout(tick, ISLAND_POLL_MS);
+    };
+    tick();
   }
 
   function namedFaces() {
@@ -310,6 +359,20 @@ export function mountOnboardingFlow(container, api, opts = {}) {
     const duplicateNames = participants
       .filter((item) => item.possible_duplicate_of)
       .map((item) => item.name);
+    const islandRows = participants
+      .filter((item) => item.person_id)
+      .map((item) => {
+        const status = state.islandStatus[item.person_id];
+        const entrance = !status || status === "ready"
+          ? `<a class="ob-island-link" href="${islandUrl(item.person_id)}" target="_blank" rel="noopener">进入 TA 的小岛${icon("arrow-up-right")}</a>`
+          : status === "failed"
+            ? `<span class="ob-island-link is-pending">生长失败，稍后再来看看</span>`
+            : `<span class="ob-island-link is-pending">${icon("loader-circle", "ob-spin")}世界生长中…</span>`;
+        return `<li class="ob-island-row">
+          <span class="ob-island-name">${escapeHtml(item.name || item.person_id)}</span>
+          ${entrance}
+        </li>`;
+      }).join("");
     body.innerHTML = `
       <div class="ob-success">
         <span class="ob-success-halo"></span>
@@ -319,6 +382,7 @@ export function mountOnboardingFlow(container, api, opts = {}) {
         <div class="ob-chip-row">
           ${names.map((name) => `<span class="ob-chip">${icon("check")}${escapeHtml(name)}</span>`).join("")}
         </div>
+        ${islandRows ? `<ul class="ob-island-list" aria-label="每位朋友的小岛入口">${islandRows}</ul>` : ""}
         <p>${queued > 0
           ? (queued === participants.length
             ? "广场暂时坐满了，TA 们排队中，扩容后自动入场"
@@ -411,6 +475,7 @@ export function mountOnboardingFlow(container, api, opts = {}) {
       state.result = result;
       state.submitting = false;
       state.phase = "success";
+      startIslandPolling(result.participants);
       render();
       if (!completedFired) {
         completedFired = true;
@@ -452,6 +517,7 @@ export function mountOnboardingFlow(container, api, opts = {}) {
     if (!open) return;
     runId += 1;
     open = false;
+    clearIslandPolling();
     rootEl.classList.remove("is-open");
     rootEl.setAttribute("aria-hidden", "true");
     onClose();
@@ -461,6 +527,7 @@ export function mountOnboardingFlow(container, api, opts = {}) {
     if (!alive) return;
     alive = false;
     runId += 1;
+    clearIslandPolling();
     revokePreview();
     rootEl.remove();
   }

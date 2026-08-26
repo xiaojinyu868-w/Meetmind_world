@@ -668,6 +668,58 @@
   color: #8fc7b3;
 }
 
+/* 小岛入口（每人一岛 P1）：ready 点亮新标签页链接；生长中/失败灰显 */
+
+.ob-island-list {
+  display: grid;
+  gap: 6px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ob-island-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 250px;
+  padding: 7px 12px;
+  border: 1px solid rgb(143 199 179 / 28%);
+  border-radius: 10px;
+  background: rgb(47 138 112 / 10%);
+}
+
+.ob-island-name {
+  font-size: 11px;
+  font-weight: 750;
+  color: #cde8dc;
+}
+
+.ob-island-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #f0d49a;
+  text-decoration: none;
+}
+
+.ob-island-link:hover { text-decoration: underline; }
+
+.ob-island-link svg {
+  width: 12px;
+  height: 12px;
+}
+
+.ob-island-link.is-pending {
+  color: rgb(244 241 226 / 45%);
+  cursor: default;
+}
+
+.ob-island-link.is-pending:hover { text-decoration: none; }
+
 @keyframes ob-spin {
   to { transform: rotate(360deg); }
 }

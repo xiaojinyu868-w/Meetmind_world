@@ -9,8 +9,9 @@
   计划里写的 --dry-run-publish 只是"改发布目录"的调试开关；生产发布根默认即
   /var/www/lihao-me/worlds（与 Island.assets_base="/me/worlds/<id>" 对应），
   所以这里显式传 --publish-root，不用 dry-run。CLI 若再变，只改这一个函数。
-- 完成后读 <publish_root>/<person_id>/spec.json 写回 Island（ready）；
-  失败/超时置 failed，错误摘要（stdout/stderr 尾部）进 build_error 字段。
+- 完成后读 <publish_root>/<person_id>/spec.json（及 objects.json，物件层 v1）
+  写回 Island（ready）；失败/超时置 failed，错误摘要（stdout/stderr 尾部）进
+  build_error 字段。
 """
 
 from __future__ import annotations
@@ -142,8 +143,14 @@ class IslandBuildQueue:
                    self.workdir_root / person_id, self.publish_root)
             spec_path = self.publish_root / person_id / "spec.json"
             spec = json.loads(spec_path.read_text(encoding="utf-8"))
-            self._store.update(person_id, spec=spec, build_status="ready",
-                               build_error=None)
+            # 物件层 v1：build.py 发布 objects.json（VL objects → 热点故事卡点位），
+            # 随构建完成一并 upsert 进 Island.objects；没有该文件视为无物件。
+            objects_path = self.publish_root / person_id / "objects.json"
+            objects = []
+            if objects_path.is_file():
+                objects = json.loads(objects_path.read_text(encoding="utf-8"))
+            self._store.update(person_id, spec=spec, objects=objects,
+                               build_status="ready", build_error=None)
             logger.info("岛屿构建完成：%s", person_id)
         except Exception as exc:
             summary = str(exc)[-ERROR_TAIL_CHARS:]

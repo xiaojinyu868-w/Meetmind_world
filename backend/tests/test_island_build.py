@@ -91,6 +91,42 @@ def test_build_requires_auth(client):
     assert response.status_code == 401
 
 
+def test_build_upserts_objects_from_publish_dir(client, monkeypatch):
+    """物件层 v1：build.py 发布的 objects.json 随 ready 一并写进 Island.objects。"""
+    objects = [
+        {"id": "object-01", "name": "吉他", "at": [640.0, 480.0],
+         "story": "那晚弹的第一首歌"},
+        {"id": "object-02", "name": "风筝", "at": [1280.0, 900.0],
+         "story": "江边放起来的那只"},
+    ]
+
+    def runner(photo, person_id, workdir, publish_root):
+        target = Path(publish_root) / person_id
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "spec.json").write_text(json.dumps(READY_SPEC))
+        (target / "objects.json").write_text(json.dumps(objects))
+
+    monkeypatch.setattr(island_builder, "run_island_build", runner)
+    client.post("/api/v1/islands/build", json={"person_id": "person_a"},
+                headers=_auth())
+    client.app.state.island_builds.wait_idle()
+
+    card = client.get("/api/v1/islands/person_a").json()
+    assert card["build_status"] == "ready"
+    assert card["object_count"] == 2
+    mine = client.get("/api/v1/islands/me", headers=_auth()).json()
+    stored = mine["islands"][0]["objects"]
+    assert [o["name"] for o in stored] == ["吉他", "风筝"]
+    assert list(stored[0]["at"]) == [640.0, 480.0]
+
+    # 没有 objects.json 的旧产物：objects 为空，不影响 ready
+    monkeypatch.setattr(island_builder, "run_island_build", _ready_runner([]))
+    client.post("/api/v1/islands/build", json={"person_id": "person_b"},
+                headers=_auth())
+    client.app.state.island_builds.wait_idle()
+    assert client.get("/api/v1/islands/person_b").json()["object_count"] == 0
+
+
 def test_build_idempotent_while_building(client, monkeypatch):
     calls = []
     entered = threading.Event()
