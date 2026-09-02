@@ -25,7 +25,19 @@ REMOTE=$(git rev-parse origin/main)
 # 后端还是旧代码。以「上次实际部署的 commit」为准：HEAD 或 REMOTE 超前即部署。
 DEPLOYED=$(cat "$DEPLOYED_MARKER" 2>/dev/null || echo "")
 if [ "$DEPLOYED" = "$REMOTE" ] && [ "$DEPLOYED" = "$(git rev-parse HEAD)" ] && [ "${1:-}" != "--force" ]; then
-  echo "[deploy] up-to-date: $(git rev-parse --short HEAD)"
+  if ss -ltn 2>/dev/null | grep -q ':8000'; then
+    echo "[deploy] up-to-date: $(git rev-parse --short HEAD)"
+    exit 0
+  fi
+  # 进程级自愈：仓库没变但后端死了（机器重启等）也要拉起——否则 cron 每分钟
+  # 报 up-to-date 而服务永远 502（2026-08-31 服务器重启后实测踩中）。
+  echo "[deploy] up-to-date 但 :8000 无监听，直接拉起后端"
+  cd "$BACKEND"
+  ECHO_DATA_DIR="$DATA_DIR" nohup .venv/bin/uvicorn app.main:app \
+    --host 127.0.0.1 --port 8000 >> "$UVICORN_LOG" 2>&1 &
+  sleep 4
+  curl -fsS http://127.0.0.1:8000/api/health > /dev/null
+  echo "[deploy] backend revived: pid $(ss -ltnp 2>/dev/null | grep ':8000' | grep -oP 'pid=\K[0-9]+' | head -1)"
   exit 0
 fi
 
