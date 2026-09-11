@@ -50,11 +50,13 @@ def calendar_event_to_envelope(dto: Mapping, *, sequence: int, room_id: str, act
         raise ValueError("calendar interval is reversed")
     participants = dto.get("participant_ids")
     _unique_ids(participants, "participant_ids")
+    if not _text(source_ref):
+        raise ValueError("source_ref is required for an external event")
     return _envelope(event_id=f"source:calendar:{event_id}", sequence=sequence,
         room_id=room_id, actor_id=actor_id, subject_id=f"experience:{event_id}",
         payload={"title": title, "participant_ids": participants, "provider": provider,
                  "starts_at": starts_at, "ends_at": ends_at},
-        audience=audience, source_refs=[source_ref] if source_ref else [], occurred_at=ends_at)
+        audience=audience, source_refs=[source_ref], occurred_at=ends_at)
 
 def checkin_to_envelope(dto: Mapping, *, sequence: int, room_id: str, actor_id: str,
                         audience: list[str], source_ref: str | None = None) -> dict:
@@ -65,8 +67,10 @@ def checkin_to_envelope(dto: Mapping, *, sequence: int, room_id: str, actor_id: 
     if not _text(event_id) or not _text(location):
         raise ValueError("check-in event_id and location are required")
     at = _iso(dto.get("occurred_at"))
+    if not _text(source_ref):
+        raise ValueError("source_ref is required for an external event")
     return _envelope(event_id=f"source:checkin:{event_id}", sequence=sequence,
         room_id=room_id, actor_id=actor_id, subject_id=f"experience:checkin:{event_id}",
         payload={"title": f"在 {location} 的签到", "participant_ids": [actor_id],
                  "location": location, "provider": dto.get("provider", "explicit")},
-        audience=audience, source_refs=[source_ref] if source_ref else [], occurred_at=at)
+        audience=audience, source_refs=[source_ref], occurred_at=at)
