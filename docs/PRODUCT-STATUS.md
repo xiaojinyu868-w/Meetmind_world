@@ -129,3 +129,14 @@ examples/shared_experience/lab 提供 loopback-only Three.js 适配器和操作�
 105项Python（含访问存储及真实HTTP）、8项Node、两个隔离浏览器桌面/手机验收和旧单人回归通过。
 详见 [双端验收](PAIR-LAB-VERIFICATION.md)。仍是合成身份与本机入口，不是真人认领、微信登录或公网多人产品。
 这一进展让独立参与者的选择可验证，不能替代真实用户动机或付费实验。
+
+
+## 2026-09-12：动机证据与下一段空间实验规格
+
+已核对关系沟通、线下活动、沟通训练、纪念物与空间设计产品的官方交付和收费说明，
+并梳理SceneCraft、Holodeck、Scene Language、ProcFunc的实际表示边界。
+见[付费任务研究](MOTIVATION-EVIDENCE-2026-09-12.md)、[符号化3D证据](SYMBOLIC-3D-EVIDENCE-2026-09-12.md)。
+
+建议用[两人共同布置空间](SHARED-SPACE-EXPERIMENT.md)检验语义约束、局部编辑和版本决策；
+这是技术样例规格，尚未实现、尚非家装产品转型。4196仍为纸桥/行动的合成框架实验。
+未开展真人访谈、购买或2D/3D任务对照；未证明任何候选同时具备大市场、低获客成本和强付费。
