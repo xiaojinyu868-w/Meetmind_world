@@ -20,7 +20,20 @@ python -m unittest examples.shared_experience.test_replay -v
 
 服务器 /root/meetmind_go 的系统 python3 较旧，使用 backend/.venv/bin/python 替代上面的 python。
 输出为确定性的 meetmind.world-state.v1 JSON；前端未来可以把相同对象投影为时间线或 3D 交互物件。
-当前没有实现 3D 适配器，也没有加载任何模型资产。
+当前的 loopback 实验室提供一个 Three.js 语义对象适配器和操作面板；它使用程序化实验物件，不加载人物或环境模型，也不代表游戏大厂人物质量。
+
+## 启动可操作实验室
+
+在仓库根目录执行：
+
+```bash
+npm exec vite build -- --config examples/shared_experience/lab/vite.config.js
+python -m examples.shared_experience.serve --port 4191
+```
+
+然后打开 `http://127.0.0.1:4191/`。服务只监听 `127.0.0.1`，会话在内存中隔离，页面可切换查看身份、回放阶段、点击对象、纠正作品标题、逐人接受或拒绝行动、填写本人结果并撤回。实验室不会发送消息、报名或调用模型。
+
+浏览器验收脚本（需要本机 Playwright）位于 `lab/browser-test.cjs`，会覆盖桌面和 390px 手机视口并输出截图与 JSON 诊断；它不是产品登录或线上验收。
 
 ## 按事件观察
 
