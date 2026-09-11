@@ -3,7 +3,8 @@
 这是 MeetMind world 开源框架探索的第一段可独立运行的契约样例。目标是让真实事件进入世界后，
 人物、经历、对象和后续行动有稳定身份，变化可以解释，现实结果可以明确记录和撤回。
 
-本示例仅使用虚构文本和人物。它不读取环境密钥、后端数据、照片或声音，不连接模型或线上 API。
+本示例默认使用虚构文本和人物，不读取后端数据、照片或声音。纯回放和默认服务不调用模型；
+显式以 --enable-model 启动后，用户点击生成才通过既有 app.config 读取 CHAT 配置并调用模型，密钥不返回浏览器。
 它不替代现有产品，也不代表完成了框架发布、3D 实验或需求验证。
 
 ## 运行
@@ -80,9 +81,41 @@ python -m examples.shared_experience.serve --port 4191
 
 然后打开 `http://127.0.0.1:4191/`。服务只监听 `127.0.0.1`，会话在内存中隔离，页面可切换查看身份、回放阶段、点击对象、纠正作品标题、逐人接受或拒绝行动、填写本人结果并撤回。“导入一条本人签到”可载入合成示例，或填入最小 JSON；须勾选本人确认并选择可见范围。
 导入可重复重试，撤回后不会因旧重试重新出现。重放阶段会重置本会话的实验输入。
-服务可能通过 SSH 运行于远程主机，数据在实验服务内存中，不写生产数据目录。实验室不会发送消息、报名或调用模型。
+服务可能通过 SSH 运行于远程主机，数据在实验服务内存中，不写生产数据目录。实验室不会发送消息或报名。默认不会调用模型；启用模型的说明见下一节。
 
 浏览器验收脚本（需要本机 Playwright）位于 `lab/browser-test.cjs`，会覆盖桌面和 390px 手机视口、2D/3D 切换、同一对象选择和操作，并输出截图与 JSON 诊断；它不是产品登录或线上验收。
+
+## 模型生成语义物件（可选）
+
+使用既有后端运行环境和仓库根 .env 的 CHAT 配置，不需要向浏览器提供密钥：
+
+~~~bash
+backend/.venv/bin/python -m examples.shared_experience.serve --port 4191 --enable-model
+~~~
+
+选中本人创建的经历或作品 → 填写生成要求 → 生成视觉提案 → 检查部件含义 → 应用。
+仅发送所选对象的 ID、类型、标题和明确填写的要求；不会附带来源元数据、其他人物或结果记录。
+这是一次外部模型调用，要求里填写的内容会发往所配置服务。
+
+模型输出 meetmind.scene-recipe.v1 的 JSON 数据，支持 box/sphere/cylinder/cone/torus 和五类材质，
+1–40 部件，每件含稳定 ID、几何、尺寸、位置、旋转、颜色、材质及 meaning。
+服务端严格检查字段、尺寸与唯一 ID，浏览器按同一范围创建 Three.js 几何；不执行模型代码或加载模型指定的 URL。
+当前只支持纪念物外观，不生成角色动作、碰撞规则或完整场景。
+
+提案不会自动改变世界。应用才追加 visual.recipe.applied；恢复默认追加 visual.recipe.removed。
+外观修改保持原对象 ID、位置、标题、来源、关系及个人结果。纠错/重置后旧提案不可应用；
+生成期间重置，即使对象恢复成相同内容也拒绝旧结果。模型错误明确返回，不用 mock 代替，也不自动重试。
+当前请求上限 90 秒，本轮成功样本约 75 秒，延迟和有效率仍不适合声称即时体验。
+
+~~~bash
+python -m unittest discover -s examples/shared_experience -t . -v
+node --test examples/shared_experience/lab/scene.test.mjs examples/shared_experience/lab/recipe.test.mjs
+# 单次实时模型浏览器验收；需要 Playwright 和已经启用模型的实验服务，会产生 API 用量
+RUN_LIVE_RECIPE=1 node examples/shared_experience/lab/recipe-browser-test.cjs
+~~~
+
+详见 [生成验收](../../docs/SEMANTIC-RECIPE-VERIFICATION.md)。测试中的固定响应与实时调用分别标记，
+CI 不访问模型。该实验没有证明 3D 的任务收益或付费价值。
 
 ## 按事件观察
 

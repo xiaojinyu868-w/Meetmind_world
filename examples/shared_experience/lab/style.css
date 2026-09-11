@@ -110,3 +110,11 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 340px; overflo
   .toolbar-controls { flex-wrap: wrap; gap: 10px; }
   .view-toolbar label { gap: 6px; }
 }
+
+.recipe-panel { border-top: 1px solid #d8dccf; padding-top: 16px; margin-top: 18px; }
+.recipe-panel h3 { font-weight: 500; font-size: 14px; margin: 0; }
+.recipe-proposal { border: 1px solid #c5d2bf; background: #f1f5e9; padding: 12px; margin-top: 12px; border-radius: 8px; }
+.recipe-proposal p, .recipe-proposal li { font-size: 11px; line-height: 1.8; }
+.recipe-proposal small { font-size: 10px; color: #78856f; display: block; }
+.recipe-proposal ul { padding-left: 20px; }
+.recipe-proposal pre { max-height: 200px; }

@@ -39,6 +39,7 @@ const eventNames = {
   "inference.superseded": "纠正作品标题", "action.proposed": "提出下一步",
   "action.accepted": "接受行动", "action.declined": "拒绝行动",
   "action.outcome.recorded": "自报现实结果", "action.outcome.revoked": "撤回自报",
+  "visual.recipe.applied": "应用生成外观", "visual.recipe.removed": "恢复默认外观",
 };
 const stages = [[5, "共同经历"], [6, "作品初稿"], [7, "完成纠错"], [8, "提出行动"], [10, "不同选择"], [11, "自报完成"], [12, "撤回结果"], [13, "撤回经历"]];
 const stageRoot = document.querySelector(".stages");
@@ -102,6 +103,10 @@ let sessionId, state, selectedId = "artifact-1", viewer = "alice", busy = false,
 let rendering = true;
 let activeThrough = 8;
 let presentationMode = "3d";
+let modelEnabled = false;
+let generatingId = null;
+const proposals = new Map();
+const recipeDrafts = new Map();
 let renderedFrames = 0;
 
 function notice(text, error = false) {
@@ -128,6 +133,12 @@ async function command(command, fields = {}) {
       session_id: sessionId, viewer, expected_sequence: state.basis.through_sequence,
       subject_id: selectedId, command, ...fields,
     });
+    if (command === "reset") {
+      proposals.clear();
+      recipeDrafts.clear();
+    } else if (["visual.recipe.applied", "visual.recipe.removed", "inference.superseded", "experience.revoked"].includes(command)) {
+      proposals.delete(viewer + ":" + selectedId);
+    }
     activeThrough = command === "reset" ? fields.through : null;
     apply(next);
     notice(command === "reset" ? "已回放到所选时刻；本会话的后续实验操作已重置。" : command === "checkin.import" ? "签到已确认并导入。相同记录重复提交不会重复造物。" : "事件已记录，2D 与 3D 已同步。");
@@ -177,6 +188,10 @@ function renderBaseline() {
       card.append(node("small", "baseline-relation",
         titleOf(edge.from) + " → " + titleOf(edge.to) + " · " +
         (names[edge.reported_by] ?? edge.reported_by) + "记录的参与"));
+    }
+    if (item.appearance) {
+      card.append(node("small", "", "生成外观：" + item.appearance.title + " · " + item.appearance.parts.length + " 个部件"));
+      card.append(node("small", "", item.appearance.rationale));
     }
     for (const entry of item.provenance ?? []) {
       card.append(node("small", "baseline-event",
@@ -289,6 +304,71 @@ function renderDetail() {
       root.append(actions);
     }
     root.append(node("p", "footnote", "意愿、自报与外部验证分别表达。这个实验不会验证现实发生，也不会替任何人报名。"));
+  }
+  if (["artifact", "memory-object"].includes(item.kind)) {
+    const generator = node("section", "recipe-panel");
+    generator.append(node("h3", "", "把经历变成一件物品"));
+    generator.append(node("p", "muted", "模型只接收当前物件的标题和你的要求，生成结构化视觉提案。应用后保持身份、来源和现实结果。"));
+    if (item.created_by === viewer && modelEnabled) {
+      const label = node("label", "field", "生成要求");
+      const input = node("textarea");
+      input.setAttribute("aria-label", "生成要求");
+      input.maxLength = 1200;
+      const draftKey = viewer + ":" + item.id;
+      input.value = recipeDrafts.get(draftKey) ?? ("把“" + item.title + "”做成有清楚轮廓、支撑合理的纸艺纪念物，部件含义与这段经历有关。");
+      input.addEventListener("input", () => recipeDrafts.set(draftKey, input.value));
+      label.append(input);
+      generator.append(label);
+      const generate = button(generator, generatingId ? "模型正在生成…" : "生成视觉提案", async () => {
+        if (generatingId) return;
+        const subject = item.id;
+        const requestedViewer = viewer;
+        const instruction = input.value;
+        generatingId = subject;
+        renderDetail();
+        try {
+          const proposal = await request("/lab-api/proposals", {
+            session_id: sessionId, viewer: requestedViewer, subject_id: subject, instruction,
+          });
+          for (const key of proposals.keys()) {
+            if (key.startsWith(requestedViewer + ":")) proposals.delete(key);
+          }
+          proposals.set(requestedViewer + ":" + subject, proposal);
+          notice("生成提案已返回。查看组成和含义后，可以应用到物件。");
+        } catch (error) { notice(error.message, true); }
+        finally {
+          generatingId = null;
+          renderDetail();
+        }
+      }, "primary");
+      generate.disabled = Boolean(generatingId) || busy;
+      generator.append(node("p", "footnote", "点击会调用当前配置的模型服务。未配置或调用失败会显示错误，不替换成预设模型结果。"));
+    } else if (!modelEnabled) generator.append(node("p", "muted", "当前服务未开启模型生成。"));
+    const proposal = proposals.get(viewer + ":" + item.id);
+    if (proposal) {
+      const card = node("div", "recipe-proposal");
+      card.append(node("strong", "", proposal.recipe.title),
+        node("p", "", proposal.recipe.rationale),
+        node("small", "", proposal.model + " · " + proposal.recipe.parts.length + " 个部件"));
+      const review = node("details");
+      review.append(node("summary", "", "查看配方与部件含义"));
+      const list = node("ul");
+      for (const part of proposal.recipe.parts) list.append(node("li", "", part.id + " · " + part.meaning));
+      review.append(list, node("pre", "", JSON.stringify(proposal.recipe, null, 2)));
+      card.append(review);
+      button(card, "应用这个提案", () => command("visual.recipe.applied", { proposal_id: proposal.proposal_id }), "primary");
+      generator.append(card);
+    }
+    if (item.appearance) {
+      generator.append(node("p", "muted", "当前外观：" + item.appearance.title + " · " + item.appearance_model));
+      generator.append(node("p", "muted", item.appearance.rationale));
+      const parts = node("details");
+      parts.append(node("summary", "", "当前部件与含义"));
+      for (const part of item.appearance.parts) parts.append(node("p", "muted", part.id + "：" + part.meaning));
+      generator.append(parts);
+      if (item.created_by === viewer) button(generator, "恢复默认外观", () => command("visual.recipe.removed"));
+    }
+    root.append(generator);
   }
   const details = node("details", "provenance");
   details.append(node("summary", "", "为什么它会在这里 · " + item.provenance.length + " 次变化"));
@@ -426,13 +506,16 @@ function updateDiagnostic() {
     mode: presentationMode, renderedFrames,
     drawCalls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
     createdObjects: objects.created, removedObjects: objects.removed,
-    objects: [...objects.objects].map(([id, object]) => ({ id, uuid: object.uuid, position: object.position.toArray() })),
+    objects: [...objects.objects].map(([id, object]) => ({ id, uuid: object.uuid, position: object.position.toArray(),
+      recipeError: object.userData.recipeError ?? null,
+      recipeParts: object.userData.recipeVisual?.children.length ?? 0 })),
   }, null, 2);
 }
 const diagnosticTimer = setInterval(updateDiagnostic, 1000);
 try {
   const session = await request("/lab-api/sessions", {});
   sessionId = session.session_id;
+  modelEnabled = session.model_generation === true;
   apply(await request("/lab-api/state?session_id=" + sessionId + "&viewer=" + viewer));
 } catch (error) {
   notice("实验服务连接失败：" + error.message, true);

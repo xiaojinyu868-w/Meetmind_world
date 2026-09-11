@@ -11,6 +11,8 @@ import json
 from pathlib import Path
 from typing import Iterable, Mapping
 
+from .recipes import validate_recipe
+
 
 class DuplicateEventConflict(ValueError):
     """The same event ID was supplied with different content."""
@@ -50,6 +52,7 @@ EVENT_TYPES = frozenset({
     "experience.confirmed", "artifact.observed", "inference.superseded",
     "experience.revoked", "action.proposed", "action.accepted", "action.declined",
     "action.outcome.recorded", "action.outcome.revoked",
+    "visual.recipe.applied", "visual.recipe.removed",
 })
 
 
@@ -192,6 +195,22 @@ def project_events(events: Iterable[Mapping], *, viewer_id: str, members: Iterab
             _require(actor == item["created_by"], "only reporter can withdraw experience")
             require_ref(item["source_event"])
             revoked.add(subject)
+        elif kind in {"visual.recipe.applied", "visual.recipe.removed"}:
+            item = entity(subject)
+            _require(item["kind"] in {"memory-object", "artifact"}, "visual recipe needs an experience or artifact")
+            _require(item["_audience"] == audience, "update must preserve entity audience")
+            _require(item["created_by"] == actor, "only the reporter may change the representation")
+            target = item.get("appearance_event", item.get("correction_event", item["source_event"]))
+            require_ref(target)
+            if kind == "visual.recipe.applied":
+                item["appearance"] = validate_recipe(payload.get("recipe"))
+                _require(_text(payload.get("model")), "recipe model must be identified")
+                item["appearance_model"] = payload["model"]
+            else:
+                _require("appearance" in item, "no recipe to remove")
+                item.pop("appearance")
+                item.pop("appearance_model")
+            item["appearance_event"] = event_id
         elif kind == "action.proposed":
             participants = payload.get("participant_ids")
             confirmed_people(participants, audience)

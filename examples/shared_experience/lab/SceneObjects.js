@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { buildRecipe, disposeRecipe } from "./RecipeGeometry.js";
 
 const COLORS = Object.freeze({
   person: 0x719b8c,
@@ -66,6 +67,12 @@ function createObject(entity) {
     const indicator = mesh(group, new THREE.SphereGeometry(0.15, 24, 16), 0xc9b696, [0, 1.36, 0]);
     group.userData.indicator = indicator;
   }
+  const defaultVisual = new THREE.Group();
+  for (const child of [...group.children]) {
+    if (child !== base) defaultVisual.add(child);
+  }
+  group.add(defaultVisual);
+  group.userData.defaultVisual = defaultVisual;
   return group;
 }
 
@@ -95,6 +102,28 @@ export class SemanticObjects {
         this.created++;
       }
       object.userData.entity = entity;
+      const signature = entity.appearance ? JSON.stringify(entity.appearance) : null;
+      if (signature !== (object.userData.recipeSignature ?? null)) {
+        let replacement = null;
+        let error = null;
+        if (entity.appearance) {
+          try { replacement = buildRecipe(entity.appearance); }
+          catch (cause) { error = cause.message; }
+        }
+        const old = object.userData.recipeVisual;
+        if (old) {
+          object.remove(old);
+          disposeRecipe(old);
+        }
+        if (replacement) {
+          replacement.position.y = 0.16;
+          object.add(replacement);
+        }
+        object.userData.defaultVisual.visible = !replacement;
+        object.userData.recipeVisual = replacement;
+        object.userData.recipeSignature = signature;
+        object.userData.recipeError = error;
+      }
       if (entity.kind === "action") {
         const reported = Object.values(entity.outcomes).some((item) => item.result === "completed");
         object.userData.indicator.material.color.setHex(entity.basis_status === "withdrawn" ? 0xbb7165 : reported ? 0x709b79 : 0xc9b696);

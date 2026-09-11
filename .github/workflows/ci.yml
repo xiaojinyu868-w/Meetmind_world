@@ -40,5 +40,5 @@ jobs:
           npm run build
       - name: Verify semantic lab
         run: |
-          node --test examples/shared_experience/lab/scene.test.mjs
+          node --test examples/shared_experience/lab/scene.test.mjs examples/shared_experience/lab/recipe.test.mjs
           npm exec vite build -- --config examples/shared_experience/lab/vite.config.js
