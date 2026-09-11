@@ -8,6 +8,7 @@ document.querySelector("#app").innerHTML = `
   <main>
     <section class="intro"><div><p class="eyebrow">共同经历 / 持续状态 / 现实反馈</p><h1>经历改变世界。<br>每次变化，都有来处。</h1></div>
       <p class="intro-note">这是一个可操作的合成实验。<br>试着纠正作品、选择下一步，再记录现实结果。<br><strong>人物以身份标记展示，美术与产品场景尚未定稿。</strong></p></section>
+    <div class="session-bar"><span id="session-status">连接实验会话…</span><button type="button" id="new-session">新建独立实验</button></div>
     <section class="workbench">
       <div class="world-pane"><div class="view-toolbar"><span><i></i> <span id="mode-label">语义空间</span></span><div class="toolbar-controls"><label>呈现 <select id="mode" aria-label="呈现模式"><option value="3d">3D 空间</option><option value="2d">2D 基线</option></select></label><label>查看身份 <select id="viewer" aria-label="查看身份"><option value="alice">小满</option><option value="bo">阿博</option><option value="observer">观察者</option></select></label></div></div>
         <div class="viewport"><canvas aria-label="共同经历三维空间"></canvas><div class="labels"></div><div class="canvas-help">拖动旋转 · 滚轮缩放 · 点击物件查看</div></div>
@@ -17,7 +18,7 @@ document.querySelector("#app").innerHTML = `
       <aside><div class="aside-heading"><span>当前世界</span><small id="count"></small></div><div id="entities" role="list"></div><section id="detail" aria-live="polite"></section></aside>
     </section>
     <details class="import-panel"><summary>导入一条本人签到 · JSON</summary>
-      <p>先填写或载入示例，再确认内容。记录仅保存在当前实验会话；刷新或重启后不保留。查看身份是实验切换，不是登录认证。</p>
+      <p>先填写或载入示例，再确认内容。已成功提交的记录保存在当前实验会话；是否能跨服务重启恢复，见上方保存状态。查看身份是实验切换，不是登录认证。</p>
       <button type="button" id="load-checkin">载入合成签到示例</button>
       <form id="checkin-form">
         <label class="field">签到记录 JSON<textarea id="checkin-json" aria-label="签到记录 JSON" rows="6" required placeholder='{"event_id":"my-visit-1","provider":"manual","location":"地点","occurred_at":"2026-09-12T10:00:00+08:00"}'></textarea></label>
@@ -109,6 +110,44 @@ const proposals = new Map();
 const recipeDrafts = new Map();
 const actionDrafts = new Map();
 let renderedFrames = 0;
+const SESSION_KEY = "meetmind.lab.session.v1";
+let browserSaveAvailable = true;
+let persistentSession = false;
+function rememberSession() {
+  if (!sessionId) return;
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ sessionId, viewer, selectedId, mode: presentationMode }));
+  } catch { browserSaveAvailable = false; }
+}
+function savedSession() {
+  try {
+    const value = JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
+    return value && /^[a-f0-9]{32}$/.test(value.sessionId) ? value : null;
+  } catch { browserSaveAvailable = false; return null; }
+}
+function showSessionStatus() {
+  document.querySelector("#session-status").textContent = !sessionId ? "未连接到实验会话" :
+    !browserSaveAvailable ? "浏览器无法记住会话；刷新后需要重新连接" :
+    persistentSession ? "历史已保存 · 刷新和服务重启后可继续" : "刷新可继续 · 当前服务重启后会丢失";
+}
+async function connectSession(fresh = false) {
+  const saved = fresh ? null : savedSession();
+  const session = await request("/lab-api/sessions", saved ? { session_id: saved.sessionId } : {});
+  if (saved && session.session_id !== saved.sessionId) throw new Error("当前服务不支持恢复原会话；请使用新版持久化实验入口。");
+  const nextViewer = saved && session.members.includes(saved.viewer) ? saved.viewer : "alice";
+  const next = await request("/lab-api/state?session_id=" + session.session_id + "&viewer=" + nextViewer);
+  sessionId = session.session_id;
+  persistentSession = session.persistent === true;
+  modelEnabled = session.model_generation === true;
+  viewer = nextViewer;
+  selectedId = saved?.selectedId ?? "artifact-1";
+  activeThrough = saved ? null : 8;
+  document.querySelector("#viewer").value = viewer;
+  setMode(saved?.mode ?? "3d");
+  apply(next);
+  rememberSession();
+  showSessionStatus();
+}
 
 function notice(text, error = false) {
   const element = document.querySelector("#notice");
@@ -166,6 +205,7 @@ function select(id) {
   renderList();
   renderDetail();
   renderBaseline();
+  rememberSession();
 }
 function renderBaseline() {
   const root = document.querySelector(".baseline-list");
@@ -225,6 +265,8 @@ function setMode(mode) {
   const is3d = presentationMode === "3d";
   document.querySelector(".viewport").hidden = !is3d;
   document.querySelector(".baseline").hidden = is3d;
+  document.querySelector("#mode").value = presentationMode;
+  rememberSession();
   document.querySelector("#mode-label").textContent = is3d ? "语义空间" : "2D 信息基线";
   renderBaseline();
   updateDiagnostic();
@@ -522,6 +564,8 @@ function apply(next) {
     element.classList.toggle("active", Number(element.dataset.through) === activeThrough);
   });
   document.querySelector("#json").textContent = JSON.stringify(state, null, 2);
+  rememberSession();
+  showSessionStatus();
   updateDiagnostic();
 }
 new ResizeObserver(() => {
@@ -612,13 +656,23 @@ function updateDiagnostic() {
 }
 const diagnosticTimer = setInterval(updateDiagnostic, 1000);
 try {
-  const session = await request("/lab-api/sessions", {});
-  sessionId = session.session_id;
-  modelEnabled = session.model_generation === true;
-  apply(await request("/lab-api/state?session_id=" + sessionId + "&viewer=" + viewer));
+  await connectSession();
 } catch (error) {
+  document.querySelector("#session-status").textContent = "恢复失败，已保留浏览器中的会话记录。可稍后刷新，或新建独立实验。";
   notice("实验服务连接失败：" + error.message, true);
 }
+document.querySelector("#new-session").addEventListener("click", async () => {
+  if (busy || generatingId) return;
+  busy = true;
+  try {
+    await connectSession(true);
+    proposals.clear();
+    recipeDrafts.clear();
+    actionDrafts.clear();
+    notice("已新建独立实验；原会话数据没有删除。");
+  } catch (error) { notice(error.message, true); }
+  finally { busy = false; renderDetail(); }
+});
 window.addEventListener("pagehide", () => {
   rendering = false;
   clearInterval(diagnosticTimer);

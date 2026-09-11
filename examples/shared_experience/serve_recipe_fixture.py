@@ -1,8 +1,10 @@
 """Isolated browser QA server; always synthetic/captured responses, never a model call."""
 import json
+import argparse
 from pathlib import Path
 
-from .serve import Lab, make_handler, ThreadingHTTPServer
+from .serve import Lab, make_handler, ThreadingHTTPServer, lab_data_directory
+from .session_store import SQLiteSessionStore
 
 
 def fixture_recipe():
@@ -41,7 +43,12 @@ def fixture_generator(messages):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--port", type=int, default=4192)
+    parser.add_argument("--data-dir", type=Path)
+    args = parser.parse_args()
     directory = Path(__file__).parent.joinpath("lab", "dist").resolve()
-    server = ThreadingHTTPServer(("127.0.0.1", 4192), make_handler(Lab(fixture_generator), directory, 4192))
-    print("Fixture-only QA server: http://127.0.0.1:4192/ ; no model calls", flush=True)
+    store = SQLiteSessionStore(lab_data_directory(args.data_dir)) if args.data_dir else None
+    server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(Lab(fixture_generator, store), directory, args.port))
+    print(f"Fixture-only QA server: http://127.0.0.1:{args.port}/ ; no model calls", flush=True)
     server.serve_forever()

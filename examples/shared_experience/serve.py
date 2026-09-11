@@ -16,11 +16,14 @@ from .recipes import parse_recipe, recipe_messages, parse_patch, patch_messages
 import hashlib
 import re
 from .action_plans import validate_action_plan, action_calendar
+from .session_store import SQLiteSessionStore
 
 
 class Lab:
-    def __init__(self, generator=None):
+    def __init__(self, generator=None, store=None):
         self.generator = generator
+        self.store = store
+        self.revisions = {}
         self.proposals = {}
         self.generating = set()
         self.fixture, self.original = load_fixture()
@@ -32,14 +35,44 @@ class Lab:
         with self.lock:
             sid = uuid4().hex
             if len(self.sessions) >= 100:
-                raise ValueError("实验会话已满，请重启实验服务")
-            self.sessions[sid] = deepcopy(self.original[:8])
+                raise ValueError("实验会话已满；已有会话仍可恢复，不能继续新建")
+            events = deepcopy(self.original[:8])
+            if self.store:
+                self.revisions[sid] = self.store.create(sid, events, 0)
+            self.sessions[sid] = events
             self.generations[sid] = 0
-            return {"session_id": sid, "members": self.fixture["members"],
-                    "model_generation": self.generator is not None}
+            return self._session_info(sid)
+
+    def _session_info(self, sid):
+        return {"session_id": sid, "members": self.fixture["members"],
+                "model_generation": self.generator is not None, "persistent": self.store is not None}
+
+    def resume(self, sid):
+        if not isinstance(sid, str) or not re.fullmatch(r"[a-f0-9]{32}", sid):
+            raise ValueError("无效实验会话标识")
+        with self.lock:
+            self.state(sid, self.fixture["viewer_id"])
+            return self._session_info(sid)
+
+    def _save(self, sid, events, generation=None):
+        next_generation = self.generations[sid] if generation is None else generation
+        if self.store:
+            revision = self.store.save(sid, events, next_generation, self.revisions[sid])
+            self.revisions[sid] = revision
+        self.sessions[sid] = events
+        self.generations[sid] = next_generation
 
     def state(self, sid, viewer):
         with self.lock:
+            if self.store:
+                saved = self.store.load(sid)
+                if saved is None:
+                    raise ValueError("实验会话不存在")
+                # Validate the full history before accepting stored content into memory.
+                project_events(saved["events"], viewer_id=viewer, members=self.fixture["members"])
+                self.sessions[sid] = saved["events"]
+                self.generations[sid] = saved["generation"]
+                self.revisions[sid] = saved["revision"]
             if sid not in self.sessions:
                 raise ValueError("实验会话不存在")
             return project_events(self.sessions[sid], viewer_id=viewer, members=self.fixture["members"])
@@ -84,7 +117,7 @@ class Lab:
                     raise ValueError("生成期间对象已变化，请基于新状态重新生成")
                 proposal = {"id": uuid4().hex, "subject_id": subject, "viewer": viewer,
                             "fingerprint": fingerprint, "recipe": recipe, "model": model,
-                            "mode": mode, "patch": patch, "changes": changes}
+                            "mode": mode, "patch": patch, "changes": changes, "generation": generation}
                 self.proposals[key] = proposal
                 return {"proposal_id": proposal["id"], "subject_id": subject, "recipe": recipe,
                         "model": model, "mode": mode, "patch": patch, "changes": changes,
@@ -134,7 +167,7 @@ class Lab:
                          "source_refs": [source["source_event"]], "request_basis_id": source_id}
                 candidate = [*events, event]
                 projected = project_events(candidate, viewer_id=viewer, members=self.fixture["members"])
-                self.sessions[sid] = candidate
+                self._save(sid, candidate)
                 return projected
             if body.get("command") == "checkin.import":
                 events = self.sessions[sid]
@@ -160,7 +193,7 @@ class Lab:
                     raise ValueError("状态已更新，请刷新后重试")
                 candidate = [*events, event]
                 projected = project_events(candidate, viewer_id=viewer, members=self.fixture["members"])
-                self.sessions[sid] = candidate
+                self._save(sid, candidate)
                 return projected
             if body.get("expected_sequence") != current["basis"]["through_sequence"]:
                 raise ValueError("状态已更新，请刷新后重试")
@@ -170,10 +203,7 @@ class Lab:
                 if type(through) is not int or not 0 <= through <= len(self.original):
                     raise ValueError("无效回放位置")
                 events = deepcopy(self.original[:through])
-                self.generations[sid] += 1
-                for key in list(self.proposals):
-                    if key[0] == sid:
-                        del self.proposals[key]
+
             else:
                 command = body.get("command")
                 subject = body.get("subject_id")
@@ -186,8 +216,8 @@ class Lab:
                     proposal = self.proposals.get((sid, viewer))
                     if not proposal or body.get("proposal_id") != proposal["id"] or proposal["subject_id"] != subject:
                         raise ValueError("找不到此对象的生成提案")
-                    _, fingerprint = self._generation_context(sid, viewer, subject)
-                    if fingerprint != proposal["fingerprint"]:
+                    fingerprint = hashlib.sha256(json.dumps(item, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+                    if fingerprint != proposal["fingerprint"] or proposal["generation"] != self.generations[sid]:
                         raise ValueError("对象已变化，旧提案不可应用")
                     expected_mode = "patch" if command == "visual.recipe.patched" else "create"
                     if proposal["mode"] != expected_mode:
@@ -225,7 +255,12 @@ class Lab:
                     "payload": payload, "audience": deepcopy(origin["audience"]), "source_refs": refs,
                 })
             projected = project_events(events, viewer_id=viewer, members=self.fixture["members"])
-            self.sessions[sid] = events
+            resetting = body.get("command") == "reset"
+            self._save(sid, events, self.generations[sid] + int(resetting))
+            if resetting:
+                for key in list(self.proposals):
+                    if key[0] == sid:
+                        del self.proposals[key]
             return projected
 
 
@@ -300,7 +335,7 @@ def make_handler(lab, directory, port):
                 if not isinstance(body, dict):
                     raise ValueError("请求必须是对象")
                 if self.path == "/lab-api/sessions":
-                    return self.respond(201, lab.create())
+                    return self.respond(200, lab.resume(body["session_id"])) if "session_id" in body else self.respond(201, lab.create())
                 if self.path == "/lab-api/proposals":
                     return self.respond(200, lab.propose(body))
                 if self.path == "/lab-api/commands":
@@ -315,11 +350,23 @@ def make_handler(lab, directory, port):
     return Handler
 
 
+
+def lab_data_directory(value):
+    target = Path(value).expanduser().resolve()
+    repo = Path(__file__).resolve().parents[2]
+    for forbidden in [repo / "backend" / "data", repo / "public", repo / "dist",
+                      repo / "examples" / "shared_experience" / "lab" / "dist"]:
+        if target == forbidden or forbidden in target.parents or target in forbidden.parents:
+            raise ValueError("存储目录必须独立于生产数据及公开资源目录")
+    return target
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=4191)
     parser.add_argument("--enable-model", action="store_true",
                         help="Opt in to the configured chat provider; only explicit proposal requests call it")
+    parser.add_argument("--data-dir", type=Path, help="Optional dedicated lab directory for durable session storage")
     args = parser.parse_args()
     directory = Path(__file__).parent.joinpath("lab", "dist").resolve()
     if not (directory / "index.html").is_file():
@@ -328,7 +375,13 @@ def main():
     if args.enable_model:
         from .model_provider import generate_with_configured_model
         generator = generate_with_configured_model
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(Lab(generator), directory, args.port))
+    store = None
+    if args.data_dir:
+        try:
+            store = SQLiteSessionStore(lab_data_directory(args.data_dir))
+        except ValueError as exc:
+            parser.error(str(exc))
+    server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(Lab(generator, store), directory, args.port))
     print(f"Synthetic lab: http://127.0.0.1:{args.port}/", flush=True)
     server.serve_forever()
 

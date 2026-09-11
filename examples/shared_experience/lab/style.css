@@ -126,3 +126,6 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 340px; overflo
 .action-composer input { max-width: 100%; min-width: 0; box-sizing: border-box; }
 .calendar-download { display: inline-block; padding: 10px 13px; border: 1px solid #b6c5b0; border-radius: 6px; font-size: 12px; color: #355746; }
 .action-plan { font-size: 12px; line-height: 1.7; }
+
+.session-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 0 0 14px; font-size: 11px; color: #697866; }
+.session-bar button { flex-shrink: 0; font-size: 11px; }

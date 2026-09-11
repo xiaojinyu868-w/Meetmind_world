@@ -1,5 +1,6 @@
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
 const fs = require("node:fs");
+const assert = require("node:assert/strict");
 const path = require("node:path");
 (async () => {
  const out = process.env.LAB_EVIDENCE_DIR || require("node:path").join(require("node:os").tmpdir(), "meetmind-semantic-lab-evidence");
@@ -102,7 +103,7 @@ const path = require("node:path");
  if(!imported || importedState.basis.through_sequence!==beforeImport.basis.through_sequence+1) throw new Error("Import did not append exactly once");
  await page.getByRole("button",{name:"确认并导入签到",exact:true}).click();
  await page.waitForTimeout(300);
- if(await page.locator("#json").textContent() !== JSON.stringify(importedState,null,2)) throw new Error("Retry changed state");
+ assert.deepEqual(JSON.parse(await page.locator("#json").textContent()), importedState, "Retry changed state");
  await page.getByLabel("查看身份",{exact:true}).selectOption("bo");
  await importedCard.waitFor({state:"detached"});
  await page.getByLabel("查看身份",{exact:true}).selectOption("alice");
