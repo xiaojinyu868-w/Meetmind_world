@@ -9,8 +9,9 @@ document.querySelector("#app").innerHTML = `
     <section class="intro"><div><p class="eyebrow">共同经历 / 持续状态 / 现实反馈</p><h1>经历改变世界。<br>每次变化，都有来处。</h1></div>
       <p class="intro-note">这是一个可操作的合成实验。<br>试着纠正作品、选择下一步，再记录现实结果。<br><strong>人物以身份标记展示，美术与产品场景尚未定稿。</strong></p></section>
     <section class="workbench">
-      <div class="world-pane"><div class="view-toolbar"><span><i></i> 语义空间</span><label>查看身份 <select id="viewer" aria-label="查看身份"><option value="alice">小满</option><option value="bo">阿博</option><option value="observer">观察者</option></select></label></div>
+      <div class="world-pane"><div class="view-toolbar"><span><i></i> <span id="mode-label">语义空间</span></span><div class="toolbar-controls"><label>呈现 <select id="mode" aria-label="呈现模式"><option value="3d">3D 空间</option><option value="2d">2D 基线</option></select></label><label>查看身份 <select id="viewer" aria-label="查看身份"><option value="alice">小满</option><option value="bo">阿博</option><option value="observer">观察者</option></select></label></div></div>
         <div class="viewport"><canvas aria-label="共同经历三维空间"></canvas><div class="labels"></div><div class="canvas-help">拖动旋转 · 滚轮缩放 · 点击物件查看</div></div>
+        <div class="baseline" hidden><div class="baseline-head"><span>事件时间线</span><small>同一份 world-state.v1</small></div><div class="baseline-list"></div></div>
         <div class="replay"><div class="replay-title"><span>回到一个时刻</span><span id="sequence"></span></div><div class="stages"></div></div>
       </div>
       <aside><div class="aside-heading"><span>当前世界</span><small id="count"></small></div><div id="entities" role="list"></div><section id="detail" aria-live="polite"></section></aside>
@@ -137,6 +138,38 @@ function select(id) {
   renderList();
   renderDetail();
 }
+function renderBaseline() {
+  const root = document.querySelector(".baseline-list");
+  if (!root || !state) return;
+  root.replaceChildren();
+  const entities = state.entities.filter((item) => item.kind !== "world");
+  if (!entities.length) {
+    root.append(node("p", "muted", "这个时刻还没有对当前查看者可见的对象。"));
+    return;
+  }
+  for (const item of entities) {
+    const card = node("button", "baseline-card" + (item.id === selectedId ? " selected" : ""));
+    card.dataset.entityId = item.id;
+    const title = item.title ?? item.display_name ?? "候选身份";
+    card.append(node("span", "baseline-kind", kindNames[item.kind] ?? item.kind),
+                 node("strong", "", title));
+    const provenance = item.provenance?.slice(-1)[0];
+    if (provenance) card.append(node("small", "", (eventNames[provenance.type] ?? provenance.type) + " · #" + provenance.sequence));
+    if (item.kind === "action") {
+      const choices = Object.entries(item.decisions ?? {}).map(([id, decision]) => (names[id] ?? id) + "：" + (decision.status === "accepted" ? "愿意" : "不参加"));
+      card.append(node("small", "", choices.join(" · ") || "尚未决定"));
+    }
+    card.addEventListener("click", () => select(item.id));
+    root.append(card);
+  }
+}
+function setMode(mode) {
+  const is3d = mode !== "2d";
+  document.querySelector(".viewport").hidden = !is3d;
+  document.querySelector(".baseline").hidden = is3d;
+  document.querySelector("#mode-label").textContent = is3d ? "语义空间" : "2D 信息基线";
+  renderBaseline();
+}
 function renderList() {
   const root = document.querySelector("#entities");
   root.replaceChildren();
@@ -236,6 +269,7 @@ function apply(next) {
   objects.select(selectedId);
   renderList();
   renderDetail();
+  renderBaseline();
   for (const [id, label] of labels) {
     if (objects.objects.has(id)) continue;
     label.remove();
@@ -281,6 +315,8 @@ stageRoot.addEventListener("click", (event) => {
   const target = event.target.closest("[data-through]");
   if (target) command("reset", { through: Number(target.dataset.through) });
 });
+document.querySelector("#mode").addEventListener("change", (event) => setMode(event.target.value));
+setMode("3d");
 document.querySelector("#viewer").addEventListener("change", async (event) => {
   if (busy) { event.target.value = viewer; return; }
   const nextViewer = event.target.value;

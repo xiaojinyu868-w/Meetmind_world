@@ -56,3 +56,6 @@ examples/shared_experience/lab 提供 loopback-only Three.js 适配器和操作�
 
 
 外部来源适配器已加入 `examples/shared_experience/adapters.py`：日历和本人签到 DTO 可转换为同一 `meetmind.event.v1`，保留 provider/时间/来源字段，并明确不自动推断参与者同意或真实完成。适配器测试与回放契约测试一起运行；仍未连接真实第三方 API。
+
+
+2D/3D 对照已加入实验室：两种视图消费同一个 world-state.v1，并保留同一身份过滤、来源抽屉和行动操作。它只提供技术对照入口，不构成 3D 价值胜出证据；需要真人在相同任务下比较完成质量、时间、信任和选择。

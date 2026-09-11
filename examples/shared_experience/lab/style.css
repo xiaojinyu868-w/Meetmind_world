@@ -22,11 +22,21 @@ h1 { font-size: clamp(27px, 2.7vw, 39px); line-height: 1.3; margin: 0; letter-sp
 .view-toolbar { height: 55px; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #d7d9cd; font-size: 12px; }
 .view-toolbar i { display: inline-block; width: 6px; height: 6px; margin-right: 8px; border-radius: 50%; background: #709784; }
 .view-toolbar label { display: flex; align-items: center; gap: 9px; color: #6b796c; font-size: 11px; }
+.toolbar-controls { display: flex; align-items: center; gap: 16px; }
 select { border: 1px solid #c9cebf; border-radius: 5px; padding: 7px 10px; background: #f6f5ec; color: #314437; }
 .viewport { position: relative; height: 440px; min-width: 0; overflow: hidden; }
 canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 .labels { position: absolute; inset: 0; pointer-events: none; }
 .object-label { position: absolute; transform: translate(-50%, -100%); min-height: 25px; max-width: 140px; font-size: 10px; padding: 5px 9px; background: #fffff2dd; border: 1px solid #dadccc; box-shadow: 0 2px 8px #3b492513; pointer-events: auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.baseline { height: 440px; overflow: auto; background: #f7f7f0; padding: 23px 28px; }
+.baseline-head { display: flex; align-items: baseline; justify-content: space-between; border-bottom: 1px solid #dfe2d5; padding-bottom: 14px; margin-bottom: 13px; color: #415845; font-size: 12px; }
+.baseline-head small { color: #8b9584; font-size: 10px; }
+.baseline-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.baseline-card { min-height: 84px; text-align: left; padding: 13px 14px; display: flex; flex-direction: column; align-items: flex-start; gap: 7px; background: #fffef8; }
+.baseline-card.selected { background: #e8eee1; border-color: #8da287; }
+.baseline-card strong { font-size: 13px; font-weight: 500; line-height: 1.4; overflow-wrap: anywhere; }
+.baseline-kind { color: #819080; font-size: 9px; }
+.baseline-card small { color: #7d8977; font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
 .canvas-help { position: absolute; bottom: 14px; left: 20px; color: #7b8776; font-size: 10px; pointer-events: none; }
 .replay { padding: 17px 20px 19px; border-top: 1px solid #d7d9cd; background: #f2f2e8; }
 .replay-title { display: flex; justify-content: space-between; font-size: 11px; color: #6c7c6a; margin-bottom: 11px; }
@@ -75,7 +85,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 340px; overflo
   header { height: 60px; padding: 0 17px; } .tag { font-size: 8px; letter-spacing: 1px; }
   main { padding: 23px 13px; } .intro { display: block; padding: 0 4px; }
   .intro-note { margin-top: 15px; font-size: 10px; max-width: none; } h1 { font-size: 29px; }
-  .workbench { display: block; } .viewport { height: 330px; }
+  .workbench { display: block; } .viewport, .baseline { height: 330px; } .baseline { padding: 17px 14px; } .baseline-list { grid-template-columns: 1fr; gap: 7px; }
   aside { border-left: 0; border-top: 1px solid #d8dccf; max-height: none; padding: 18px; }
   #entities { grid-template-columns: repeat(3, 1fr); } .view-toolbar { padding: 0 13px; }
   .replay { padding: 14px 13px; } .stages { gap: 5px; } .stages button { min-height: 39px; }
