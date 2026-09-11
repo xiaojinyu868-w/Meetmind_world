@@ -39,7 +39,7 @@ const eventNames = {
   "inference.superseded": "纠正作品标题", "action.proposed": "提出下一步",
   "action.accepted": "接受行动", "action.declined": "拒绝行动",
   "action.outcome.recorded": "自报现实结果", "action.outcome.revoked": "撤回自报",
-  "visual.recipe.applied": "应用生成外观", "visual.recipe.removed": "恢复默认外观",
+  "visual.recipe.patched": "局部修改外观", "visual.recipe.applied": "应用生成外观", "visual.recipe.removed": "恢复默认外观",
 };
 const stages = [[5, "共同经历"], [6, "作品初稿"], [7, "完成纠错"], [8, "提出行动"], [10, "不同选择"], [11, "自报完成"], [12, "撤回结果"], [13, "撤回经历"]];
 const stageRoot = document.querySelector(".stages");
@@ -136,7 +136,7 @@ async function command(command, fields = {}) {
     if (command === "reset") {
       proposals.clear();
       recipeDrafts.clear();
-    } else if (["visual.recipe.applied", "visual.recipe.removed", "inference.superseded", "experience.revoked"].includes(command)) {
+    } else if (["visual.recipe.applied", "visual.recipe.patched", "visual.recipe.removed", "inference.superseded", "experience.revoked"].includes(command)) {
       proposals.delete(viewer + ":" + selectedId);
     }
     activeThrough = command === "reset" ? fields.through : null;
@@ -308,18 +308,20 @@ function renderDetail() {
   if (["artifact", "memory-object"].includes(item.kind)) {
     const generator = node("section", "recipe-panel");
     generator.append(node("h3", "", "把经历变成一件物品"));
-    generator.append(node("p", "muted", "模型只接收当前物件的标题和你的要求，生成结构化视觉提案。应用后保持身份、来源和现实结果。"));
+    generator.append(node("p", "muted", "模型接收当前物件的标题和你的要求；局部修改时还会接收现有外观与部件含义。应用后保持身份、来源和现实结果。"));
     if (item.created_by === viewer && modelEnabled) {
       const label = node("label", "field", "生成要求");
       const input = node("textarea");
       input.setAttribute("aria-label", "生成要求");
       input.maxLength = 1200;
-      const draftKey = viewer + ":" + item.id;
-      input.value = recipeDrafts.get(draftKey) ?? ("把“" + item.title + "”做成有清楚轮廓、支撑合理的纸艺纪念物，部件含义与这段经历有关。");
+      const draftKey = viewer + ":" + item.id + (item.appearance ? ":patch" : ":create");
+      input.value = recipeDrafts.get(draftKey) ?? (item.appearance ?
+        "保留现有结构和颜色，在旁边加一盏小灯，象征想继续一起创作。灯是视觉寓意，不代表现实新增事件。" :
+        "把“" + item.title + "”做成有清楚轮廓、支撑合理的纸艺纪念物，部件含义与这段经历有关。");
       input.addEventListener("input", () => recipeDrafts.set(draftKey, input.value));
       label.append(input);
       generator.append(label);
-      const generate = button(generator, generatingId ? "模型正在生成…" : "生成视觉提案", async () => {
+      const generate = button(generator, generatingId ? "模型正在生成…" : item.appearance ? "生成局部修改提案" : "生成视觉提案", async () => {
         if (generatingId) return;
         const subject = item.id;
         const requestedViewer = viewer;
@@ -329,6 +331,7 @@ function renderDetail() {
         try {
           const proposal = await request("/lab-api/proposals", {
             session_id: sessionId, viewer: requestedViewer, subject_id: subject, instruction,
+            mode: item.appearance ? "patch" : "create",
           });
           for (const key of proposals.keys()) {
             if (key.startsWith(requestedViewer + ":")) proposals.delete(key);
@@ -350,13 +353,20 @@ function renderDetail() {
       card.append(node("strong", "", proposal.recipe.title),
         node("p", "", proposal.recipe.rationale),
         node("small", "", proposal.model + " · " + proposal.recipe.parts.length + " 个部件"));
+      if (proposal.changes) {
+        const diff = node("div", "recipe-diff");
+        for (const [key, label] of [["added", "新增"], ["updated", "修改"], ["removed", "移除"], ["preserved", "保留"]]) {
+          diff.append(node("p", "", label + " " + proposal.changes[key].length + " · " + (proposal.changes[key].join("、") || "无")));
+        }
+        card.append(diff);
+      }
       const review = node("details");
       review.append(node("summary", "", "查看配方与部件含义"));
       const list = node("ul");
       for (const part of proposal.recipe.parts) list.append(node("li", "", part.id + " · " + part.meaning));
-      review.append(list, node("pre", "", JSON.stringify(proposal.recipe, null, 2)));
+      review.append(list, node("pre", "", JSON.stringify(proposal.patch ?? proposal.recipe, null, 2)));
       card.append(review);
-      button(card, "应用这个提案", () => command("visual.recipe.applied", { proposal_id: proposal.proposal_id }), "primary");
+      button(card, "应用这个提案", () => command(proposal.mode === "patch" ? "visual.recipe.patched" : "visual.recipe.applied", { proposal_id: proposal.proposal_id }), "primary");
       generator.append(card);
     }
     if (item.appearance) {
@@ -508,7 +518,9 @@ function updateDiagnostic() {
     createdObjects: objects.created, removedObjects: objects.removed,
     objects: [...objects.objects].map(([id, object]) => ({ id, uuid: object.uuid, position: object.position.toArray(),
       recipeError: object.userData.recipeError ?? null,
-      recipeParts: object.userData.recipeVisual?.children.length ?? 0 })),
+      recipeParts: object.userData.recipeVisual?.children.length ?? 0,
+      parts: object.userData.recipeVisual?.children.map(part => ({ id: part.name, uuid: part.uuid,
+        geometry: part.geometry.uuid, material: part.material.uuid, position: part.position.toArray() })) ?? [] })),
   }, null, 2);
 }
 const diagnosticTimer = setInterval(updateDiagnostic, 1000);

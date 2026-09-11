@@ -83,3 +83,14 @@ examples/shared_experience/lab 提供 loopback-only Three.js 适配器和操作�
 50 项示例 Python、6 项 Node 和 331 项后端测试通过（后端 1 跳过），两项构建通过。
 此结果证明一条模型到可解释 3D 物件的链路，不证明生成稳定率、大厂美术品质或真人任务收益。
 见 [生成验收](SEMANTIC-RECIPE-VERIFICATION.md) 和 [愿景与切入点研究](MEETMIND-DIRECTION-2026-09-12.md)。
+
+
+## 2026-09-12：单件语义物件的持续编辑
+
+已有物件可提出 meetmind.scene-patch.v1 局部修改，应用后追加 visual.recipe.patched。
+新增/修改/移除/保留清单可检查；渲染按部件 ID 复用 Mesh、geometry、material，修改范围外的数据和对象保留。
+56 项 Python、8 项 Node 及人工配方浏览器桌面/390px 验收通过。详细证据见
+[持续编辑验收](SEMANTIC-PATCH-VERIFICATION.md)。
+
+本轮真实模型补丁请求被百炼 Arrearage 拒绝，确认是账户欠费或状态异常。已停止继续调用并改为明确报错。
+人工测试配方不是成功模型输出；真实增量生成仍待账户恢复后验收。完整场景、交互行为及用户价值不因这些检查而完成。

@@ -52,7 +52,7 @@ def validate_recipe(value):
     return deepcopy(value)
 
 
-def parse_recipe(text):
+def parse_json(text):
     _require(isinstance(text, str) and len(text) <= 80000, "模型输出为空或过长")
     def unique_pairs(pairs):
         result = {}
@@ -64,7 +64,11 @@ def parse_recipe(text):
         parsed = json.loads(text, object_pairs_hook=unique_pairs)
     except (ValueError, RecursionError) as exc:
         raise ValueError("模型未返回有效 JSON 配方") from exc
-    return validate_recipe(parsed)
+    return parsed
+
+
+def parse_recipe(text):
+    return validate_recipe(parse_json(text))
 
 
 def recipe_messages(entity, instruction):
@@ -92,3 +96,87 @@ title 最多80字、rationale最多800字、meaning最多240字、id最多64字�
 追求轮廓清楚、材料统一、连接合理；用功能部件和少量细节形成可识别主题，避免无意义地堆球体。"""
     return [{"role": "system", "content": system},
             {"role": "user", "content": json.dumps(context, ensure_ascii=False)}]
+
+
+PATCH_SCHEMA = "meetmind.scene-patch.v1"
+
+
+def apply_patch_recipe(base, patch):
+    """Apply a bounded edit atomically; omitted parts/fields remain byte-for-byte data."""
+    original = validate_recipe(base)
+    _require(isinstance(patch, dict) and set(patch) == {"schema", "title", "rationale", "operations"},
+             "局部修改字段不符合契约")
+    _require(patch["schema"] == PATCH_SCHEMA, "不支持的局部修改版本")
+    _require(_text(patch["title"], 80) and _text(patch["rationale"], 800), "修改需要标题和说明")
+    operations = patch["operations"]
+    _require(isinstance(operations, list) and 1 <= len(operations) <= 12, "一次修改需要 1–12 个操作")
+    parts = {part["id"]: part for part in original["parts"]}
+    touched = set()
+    changes = {"added": [], "updated": [], "removed": [], "preserved": []}
+    for operation in operations:
+        _require(isinstance(operation, dict), "修改操作必须是对象")
+        op = operation.get("op")
+        _require(isinstance(op, str), "操作类型必须是字符串")
+        if op == "add":
+            _require(set(operation) == {"op", "part"} and isinstance(operation["part"], dict),
+                     "新增操作需要完整部件")
+            part = operation["part"]
+            validate_recipe({"schema": SCHEMA, "title": patch["title"],
+                             "rationale": patch["rationale"], "parts": [part]})
+            part_id = part["id"]
+            _require(part_id not in parts, "新增部件 ID 已存在")
+        elif op in {"update", "remove"}:
+            expected = {"op", "id", "changes"} if op == "update" else {"op", "id"}
+            _require(set(operation) == expected, "修改操作字段无效")
+            part_id = operation["id"]
+            _require(_text(part_id, 64) and part_id in parts, "操作引用了不存在的部件")
+            if op == "update":
+                updates = operation["changes"]
+                _require(isinstance(updates, dict) and updates and set(updates) <= {
+                    "geometry", "size", "position", "rotation", "color", "material", "meaning",
+                }, "只允许修改部件属性，不能改变 ID")
+                _require(any(parts[part_id].get(key) != value for key, value in updates.items()),
+                         "修改没有改变部件")
+        else:
+            raise ValueError("只支持 add/update/remove 操作")
+        _require(part_id not in touched, "每个部件一次只能有一个操作")
+        touched.add(part_id)
+        if op == "add":
+            parts[part_id] = deepcopy(part)
+            changes["added"].append(part_id)
+        elif op == "update":
+            parts[part_id].update(deepcopy(operation["changes"]))
+            changes["updated"].append(part_id)
+        else:
+            del parts[part_id]
+            changes["removed"].append(part_id)
+    changes["preserved"] = [part["id"] for part in original["parts"] if part["id"] not in touched]
+    result = validate_recipe({"schema": SCHEMA, "title": patch["title"],
+                              "rationale": patch["rationale"], "parts": list(parts.values())})
+    return result, changes
+
+
+def patch_messages(entity, instruction):
+    messages = recipe_messages(entity, instruction)
+    current = validate_recipe(entity.get("appearance"))
+    messages[0]["content"] += """
+当前任务是修改现有纪念物。下面的 current_recipe 是已有结构，必须保护其身份与未要求改变的内容。
+这次不返回完整配方，严格返回局部修改 JSON：
+{"schema":"meetmind.scene-patch.v1","title":"修改后的纪念物标题","rationale":"完整物件与经历的联系及此次变化",
+"operations":[{"op":"add","part":{"id":"新ID","geometry":"sphere","size":[0.2,0.2,0.2],
+"position":[0,1,0],"rotation":[0,0,0],"color":"#e8c778","material":"paper","meaning":"新部件含义"}}]}
+操作仅三种：add 含完整 part；update 含 id 和 changes（仅实际变化的部件属性，禁止修改id）；
+remove 只含 id。一次1..12操作，同一id不能重复，新增id必须尚不存在。
+未提及部件原样保留，禁止输出它们。用户没有要求重做时保留原造型。
+rationale 描述完整新物件；不能宣称模型操作就是现实发生。所有数值仍须满足上述配方约束。
+"""
+    context = json.loads(messages[1]["content"])
+    context["current_recipe"] = current
+    messages[1]["content"] = json.dumps(context, ensure_ascii=False)
+    return messages
+
+
+def parse_patch(text, base):
+    patch = parse_json(text)
+    recipe, changes = apply_patch_recipe(base, patch)
+    return patch, recipe, changes

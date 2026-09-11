@@ -12,7 +12,7 @@ from uuid import uuid4
 
 from .replay import load_fixture, project_events
 from .adapters import checkin_to_envelope
-from .recipes import parse_recipe, recipe_messages
+from .recipes import parse_recipe, recipe_messages, parse_patch, patch_messages
 import hashlib
 
 
@@ -60,12 +60,19 @@ class Lab:
             generation = self.generations[sid]
             if key in self.generating:
                 raise ValueError("这个身份已有生成任务，请等待当前请求返回")
-            messages = recipe_messages(item, body.get("instruction"))
+            mode = body.get("mode", "create")
+            if mode not in {"create", "patch"}:
+                raise ValueError("不支持的生成方式")
+            messages = (patch_messages if mode == "patch" else recipe_messages)(item, body.get("instruction"))
             self.generating.add(key)
         try:
             # The paid call never holds the world state lock. Reject stale results below.
             response = self.generator(messages)
-            recipe = parse_recipe(response["text"])
+            patch, changes = None, None
+            if mode == "patch":
+                patch, recipe, changes = parse_patch(response["text"], item["appearance"])
+            else:
+                recipe = parse_recipe(response["text"])
             model = response.get("model")
             if not isinstance(model, str) or not model.strip():
                 raise ValueError("模型结果缺少模型标识")
@@ -74,10 +81,12 @@ class Lab:
                 if current != fingerprint or self.generations[sid] != generation:
                     raise ValueError("生成期间对象已变化，请基于新状态重新生成")
                 proposal = {"id": uuid4().hex, "subject_id": subject, "viewer": viewer,
-                            "fingerprint": fingerprint, "recipe": recipe, "model": model}
+                            "fingerprint": fingerprint, "recipe": recipe, "model": model,
+                            "mode": mode, "patch": patch, "changes": changes}
                 self.proposals[key] = proposal
                 return {"proposal_id": proposal["id"], "subject_id": subject, "recipe": recipe,
-                        "model": model, "latency_ms": response.get("latency_ms", 0)}
+                        "model": model, "mode": mode, "patch": patch, "changes": changes,
+                        "latency_ms": response.get("latency_ms", 0)}
         finally:
             with self.lock:
                 self.generating.discard(key)
@@ -132,14 +141,18 @@ class Lab:
                     raise ValueError("对象不可见或已撤回")
                 item = by_id[subject]
                 payload = {}
-                if command == "visual.recipe.applied":
+                if command in {"visual.recipe.applied", "visual.recipe.patched"}:
                     proposal = self.proposals.get((sid, viewer))
                     if not proposal or body.get("proposal_id") != proposal["id"] or proposal["subject_id"] != subject:
                         raise ValueError("找不到此对象的生成提案")
                     _, fingerprint = self._generation_context(sid, viewer, subject)
                     if fingerprint != proposal["fingerprint"]:
                         raise ValueError("对象已变化，旧提案不可应用")
-                    payload = {"recipe": proposal["recipe"], "model": proposal["model"]}
+                    expected_mode = "patch" if command == "visual.recipe.patched" else "create"
+                    if proposal["mode"] != expected_mode:
+                        raise ValueError("提案类型与应用命令不匹配")
+                    payload = ({"patch": proposal["patch"], "model": proposal["model"]}
+                               if expected_mode == "patch" else {"recipe": proposal["recipe"], "model": proposal["model"]})
                     refs = [item.get("appearance_event", item.get("correction_event", item["source_event"]))]
                 elif command == "visual.recipe.removed":
                     refs = [item.get("appearance_event", item["source_event"])]

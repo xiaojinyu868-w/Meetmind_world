@@ -32,7 +32,13 @@ def generate_with_configured_model(messages):
         if not isinstance(content, str) or not content.strip():
             raise ValueError("模型没有返回可用配方")
     except httpx.HTTPStatusError as exc:
-        # Provider response bodies/URLs can contain internal data; expose status only.
+        # Only recognize a known account code; never expose provider response bodies.
+        try:
+            error = exc.response.json().get("error", {})
+        except (ValueError, TypeError, AttributeError):
+            error = {}
+        if isinstance(error, dict) and error.get("code") == "Arrearage":
+            raise ValueError("模型账户欠费或状态异常（Arrearage），未生成提案") from None
         raise ValueError(f"模型服务返回 HTTP {exc.response.status_code}，未生成提案") from None
     except httpx.TimeoutException:
         raise ValueError("模型生成超时（90 秒），未生成提案") from None

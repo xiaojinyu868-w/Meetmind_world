@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { buildRecipe, disposeRecipe } from "./RecipeGeometry.js";
+import { buildRecipe, syncRecipe, disposeRecipe } from "./RecipeGeometry.js";
 
 const COLORS = Object.freeze({
   person: 0x719b8c,
@@ -104,23 +104,27 @@ export class SemanticObjects {
       object.userData.entity = entity;
       const signature = entity.appearance ? JSON.stringify(entity.appearance) : null;
       if (signature !== (object.userData.recipeSignature ?? null)) {
-        let replacement = null;
+        let visual = object.userData.recipeVisual ?? null;
         let error = null;
         if (entity.appearance) {
-          try { replacement = buildRecipe(entity.appearance); }
-          catch (cause) { error = cause.message; }
+          try {
+            if (visual) syncRecipe(visual, entity.appearance);
+            else {
+              visual = buildRecipe(entity.appearance);
+              visual.position.y = 0.16;
+              object.add(visual);
+            }
+          } catch (cause) {
+            // Keep the last valid appearance when a later proposal is malformed.
+            error = cause.message;
+          }
+        } else if (visual) {
+          object.remove(visual);
+          disposeRecipe(visual);
+          visual = null;
         }
-        const old = object.userData.recipeVisual;
-        if (old) {
-          object.remove(old);
-          disposeRecipe(old);
-        }
-        if (replacement) {
-          replacement.position.y = 0.16;
-          object.add(replacement);
-        }
-        object.userData.defaultVisual.visible = !replacement;
-        object.userData.recipeVisual = replacement;
+        object.userData.defaultVisual.visible = !visual;
+        object.userData.recipeVisual = visual;
         object.userData.recipeSignature = signature;
         object.userData.recipeError = error;
       }

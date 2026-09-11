@@ -94,7 +94,8 @@ backend/.venv/bin/python -m examples.shared_experience.serve --port 4191 --enabl
 ~~~
 
 选中本人创建的经历或作品 → 填写生成要求 → 生成视觉提案 → 检查部件含义 → 应用。
-仅发送所选对象的 ID、类型、标题和明确填写的要求；不会附带来源元数据、其他人物或结果记录。
+首次生成发送所选对象的 ID、类型、标题和明确填写的要求；局部修改还会发送该物件的现有外观及部件含义。
+不会附带来源元数据、其他人物或结果记录。
 这是一次外部模型调用，要求里填写的内容会发往所配置服务。
 
 模型输出 meetmind.scene-recipe.v1 的 JSON 数据，支持 box/sphere/cylinder/cone/torus 和五类材质，
@@ -116,6 +117,15 @@ RUN_LIVE_RECIPE=1 node examples/shared_experience/lab/recipe-browser-test.cjs
 
 详见 [生成验收](../../docs/SEMANTIC-RECIPE-VERIFICATION.md)。测试中的固定响应与实时调用分别标记，
 CI 不访问模型。该实验没有证明 3D 的任务收益或付费价值。
+
+## 在现有物件上继续生长
+
+已有生成外观时，按钮自动切换为“生成局部修改提案”。例如保留桥体，在旁边加一盏灯。
+模型输出 meetmind.scene-patch.v1 的 add/update/remove；页面列出新增、修改、移除、保留的部件，再应用。
+应用追加 visual.recipe.patched，原经历与对象身份保持。渲染按部件 ID 更新，不重建未改动的部件。
+
+本轮真实增量调用被 CHAT 账户 Arrearage 拒绝；已用明确标注的人工测试配方验证机制。
+不要把人工配方当成模型能力证明。详见 [持续编辑验收](../../docs/SEMANTIC-PATCH-VERIFICATION.md)。
 
 ## 按事件观察
 
