@@ -129,3 +129,8 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 340px; overflo
 
 .session-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 0 0 14px; font-size: 11px; color: #697866; }
 .session-bar button { flex-shrink: 0; font-size: 11px; }
+
+.pair-panel { border: 1px solid #d8dccf; padding: 14px; border-radius: 9px; margin-bottom: 16px; }
+.pair-panel p { font-size: 12px; line-height: 1.7; }
+.pair-panel small { display: block; color: #697866; line-height: 1.7; margin-top: 9px; font-size: 10px; }
+.pair-panel button { margin: 0 6px 6px 0; font-size: 11px; }

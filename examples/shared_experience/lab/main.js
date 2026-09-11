@@ -9,6 +9,14 @@ document.querySelector("#app").innerHTML = `
     <section class="intro"><div><p class="eyebrow">共同经历 / 持续状态 / 现实反馈</p><h1>经历改变世界。<br>每次变化，都有来处。</h1></div>
       <p class="intro-note">这是一个可操作的合成实验。<br>试着纠正作品、选择下一步，再记录现实结果。<br><strong>人物以身份标记展示，美术与产品场景尚未定稿。</strong></p></section>
     <div class="session-bar"><span id="session-status">连接实验会话…</span><button type="button" id="new-session">新建独立实验</button></div>
+    <section id="pair-panel" class="pair-panel" hidden>
+      <p id="pair-status">双人实验：每个浏览器只控制自己的合成角色。</p>
+      <button id="pair-invite" type="button" hidden>创建另一位参与者的加入链接</button>
+      <button id="pair-revoke" type="button" hidden>撤销另一位参与者的访问</button>
+      <button id="pair-join" type="button" hidden>以阿博加入这个共同世界</button>
+      <label class="field" id="pair-link-wrap" hidden>加入链接（30分钟内一次有效）<input id="pair-link" readonly aria-label="另一位参与者的加入链接"></label>
+      <small>链接持有者可占用对应实验角色；这不是照片本人核验。链接由你自行交给对方，系统不会发送。</small>
+    </section>
     <section class="workbench">
       <div class="world-pane"><div class="view-toolbar"><span><i></i> <span id="mode-label">语义空间</span></span><div class="toolbar-controls"><label>呈现 <select id="mode" aria-label="呈现模式"><option value="3d">3D 空间</option><option value="2d">2D 基线</option></select></label><label>查看身份 <select id="viewer" aria-label="查看身份"><option value="alice">小满</option><option value="bo">阿博</option><option value="observer">观察者</option></select></label></div></div>
         <div class="viewport"><canvas aria-label="共同经历三维空间"></canvas><div class="labels"></div><div class="canvas-help">拖动旋转 · 滚轮缩放 · 点击物件查看</div></div>
@@ -111,12 +119,14 @@ const recipeDrafts = new Map();
 const actionDrafts = new Map();
 let renderedFrames = 0;
 const SESSION_KEY = "meetmind.lab.session.v1";
+let pairMode = false, accessToken = null, pairAccessLost = false, polling = false;
+const pendingInvite = new URLSearchParams(location.hash.slice(1)).get("join");
 let browserSaveAvailable = true;
 let persistentSession = false;
 function rememberSession() {
   if (!sessionId) return;
   try {
-    localStorage.setItem(SESSION_KEY, JSON.stringify({ sessionId, viewer, selectedId, mode: presentationMode }));
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ sessionId, viewer, selectedId, mode: presentationMode, token: accessToken }));
   } catch { browserSaveAvailable = false; }
 }
 function savedSession() {
@@ -130,23 +140,49 @@ function showSessionStatus() {
     !browserSaveAvailable ? "浏览器无法记住会话；刷新后需要重新连接" :
     persistentSession ? "历史已保存 · 刷新和服务重启后可继续" : "刷新可继续 · 当前服务重启后会丢失";
 }
-async function connectSession(fresh = false) {
-  const saved = fresh ? null : savedSession();
-  const session = await request("/lab-api/sessions", saved ? { session_id: saved.sessionId } : {});
-  if (saved && session.session_id !== saved.sessionId) throw new Error("当前服务不支持恢复原会话；请使用新版持久化实验入口。");
-  const nextViewer = saved && session.members.includes(saved.viewer) ? saved.viewer : "alice";
-  const next = await request("/lab-api/state?session_id=" + session.session_id + "&viewer=" + nextViewer);
+function configurePair() {
+  document.querySelector("#pair-panel").hidden = !pairMode;
+  document.querySelector("#viewer").disabled = pairMode;
+  document.querySelector(".replay").hidden = pairMode;
+  document.querySelector("#pair-invite").hidden = !pairMode || viewer !== "alice" || !sessionId;
+  document.querySelector("#pair-revoke").hidden = !pairMode || viewer !== "alice" || !sessionId;
+  document.querySelector("#pair-status").textContent = pairMode ? "我的实验角色：" + (names[viewer] ?? viewer) +
+    " · 独立凭证控制 · 自动同步共同变化" : "";
+}
+async function useSession(session, saved = null) {
+  const nextViewer = pairMode ? session.viewer : saved && session.members.includes(saved.viewer) ? saved.viewer : "alice";
+  const nextToken = session.token ?? (pairMode ? saved?.token : null);
+  if (pairMode && session.token) {
+    // Keep a consumed invite's issued capability even if the following state read fails.
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify({ sessionId: session.session_id, viewer: nextViewer,
+        selectedId: saved?.selectedId ?? "artifact-1", mode: saved?.mode ?? "3d", token: nextToken }));
+    } catch { browserSaveAvailable = false; }
+  }
+  const next = await request("/lab-api/state?session_id=" + session.session_id + "&viewer=" + nextViewer, undefined, nextToken);
   sessionId = session.session_id;
+  accessToken = nextToken;
+  pairAccessLost = false;
   persistentSession = session.persistent === true;
   modelEnabled = session.model_generation === true;
   viewer = nextViewer;
   selectedId = saved?.selectedId ?? "artifact-1";
-  activeThrough = saved ? null : 8;
+  activeThrough = saved || pairMode ? null : 8;
   document.querySelector("#viewer").value = viewer;
   setMode(saved?.mode ?? "3d");
   apply(next);
   rememberSession();
   showSessionStatus();
+  configurePair();
+}
+async function connectSession(fresh = false) {
+  const saved = fresh ? null : savedSession();
+  try { pairMode = (await request("/lab-api/mode")).pair_mode === true; } catch { pairMode = false; }
+  const session = await request("/lab-api/sessions", saved ? { session_id: saved.sessionId } : {},
+    saved?.token ?? null);
+  if (saved && session.session_id !== saved.sessionId) throw new Error("当前服务不支持恢复原会话；请使用新版持久化实验入口。");
+  pairMode = session.pair_mode === true;
+  await useSession(session, saved);
 }
 
 function notice(text, error = false) {
@@ -156,14 +192,19 @@ function notice(text, error = false) {
   clearTimeout(noticeTimer);
   noticeTimer = setTimeout(() => { element.textContent = ""; }, 6000);
 }
-async function request(path, body) {
-  const response = await fetch(path, body ? {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-  } : {});
+async function request(path, body, token = accessToken) {
+  const headers = { ...(body ? { "Content-Type": "application/json" } : {}),
+    ...(token ? { Authorization: "Bearer " + token } : {}) };
+  const response = await fetch(path, { headers, ...(body ? { method: "POST", body: JSON.stringify(body) } : {}) });
   const value = await response.json();
-  if (!response.ok) throw new Error(value.error ?? "实验服务不可用");
+  if (!response.ok) {
+    const error = new Error(value.error ?? "实验服务不可用");
+    error.status = response.status;
+    throw error;
+  }
   return value;
 }
+
 async function command(command, fields = {}) {
   if (busy || !state) return;
   busy = true;
@@ -397,6 +438,17 @@ function renderDetail() {
         const link = node("a", "calendar-download", "下载我的日历文件");
         link.href = "/lab-api/calendar?" + new URLSearchParams({ session_id: sessionId, viewer, action_id: item.id });
         link.download = "meetmind-action.ics";
+        if (pairMode) link.addEventListener("click", async event => {
+          event.preventDefault();
+          try {
+            const response = await fetch(link.href, { headers: { Authorization: "Bearer " + accessToken } });
+            if (!response.ok) throw new Error("当前角色不能下载这个计划。");
+            const url = URL.createObjectURL(await response.blob());
+            const download = document.createElement("a");
+            download.href = url; download.download = "meetmind-action.ics"; download.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+          } catch (error) { notice(error.message, true); }
+        });
         root.append(link, node("p", "footnote", "下载后可自行导入日历。不会替其他人发邀请，下载也不代表已经参加。"));
       }
     }
@@ -613,7 +665,7 @@ document.querySelector("#checkin-form").addEventListener("submit", async (event)
 document.querySelector("#mode").addEventListener("change", (event) => setMode(event.target.value));
 setMode("3d");
 document.querySelector("#viewer").addEventListener("change", async (event) => {
-  if (busy) { event.target.value = viewer; return; }
+  if (busy || pairMode) { event.target.value = viewer; return; }
   const nextViewer = event.target.value;
   busy = true;
   try {
@@ -656,17 +708,87 @@ function updateDiagnostic() {
 }
 const diagnosticTimer = setInterval(updateDiagnostic, 1000);
 try {
-  await connectSession();
+  if (pendingInvite) {
+    pairMode = (await request("/lab-api/mode")).pair_mode === true;
+    if (!pairMode) throw new Error("当前服务不支持双人加入链接。");
+    document.querySelector("#pair-panel").hidden = false;
+    document.querySelector("#pair-join").hidden = false;
+    document.querySelector("#new-session").hidden = true;
+    document.querySelector("#session-status").textContent = "收到共同世界邀请，确认加入后才取得角色访问权。";
+  } else await connectSession();
 } catch (error) {
   document.querySelector("#session-status").textContent = "恢复失败，已保留浏览器中的会话记录。可稍后刷新，或新建独立实验。";
   notice("实验服务连接失败：" + error.message, true);
 }
+document.querySelector("#pair-join").addEventListener("click", async () => {
+  if (busy) return;
+  busy = true;
+  try {
+    const session = await request("/lab-api/pair/join", { invite: pendingInvite }, null);
+    history.replaceState(null, "", location.pathname + location.search);
+    await useSession(session);
+    document.querySelector("#pair-join").hidden = true;
+    document.querySelector("#new-session").hidden = false;
+    notice("已加入共同世界，你现在只控制阿博的选择和反馈。");
+  } catch (error) { notice(error.message, true); }
+  finally { busy = false; renderDetail(); }
+});
+document.querySelector("#pair-invite").addEventListener("click", async () => {
+  try {
+    const value = await request("/lab-api/pair/invite", {});
+    const url = new URL(location.pathname, location.href);
+    url.hash = "join=" + encodeURIComponent(value.invite);
+    document.querySelector("#pair-link").value = url.href;
+    document.querySelector("#pair-link-wrap").hidden = false;
+  } catch (error) { notice(error.message, true); }
+});
+document.querySelector("#pair-revoke").addEventListener("click", async () => {
+  try {
+    await request("/lab-api/pair/revoke", {});
+    document.querySelector("#pair-link").value = "";
+    document.querySelector("#pair-link-wrap").hidden = true;
+    notice("另一端访问已撤销；过去的共同历史仍然保留。");
+  } catch (error) { notice(error.message, true); }
+});
+const pairPollTimer = setInterval(async () => {
+  if (!pairMode || !sessionId || !accessToken || pairAccessLost || busy || polling || document.hidden) return;
+  polling = true;
+  const targetSession = sessionId, targetViewer = viewer, targetToken = accessToken;
+  try {
+    const next = await request("/lab-api/state?session_id=" + targetSession + "&viewer=" + targetViewer, undefined, targetToken);
+    if (!busy && sessionId === targetSession && viewer === targetViewer && accessToken === targetToken &&
+      !document.activeElement?.matches("input, textarea, select") &&
+      next.basis.through_event_id !== state?.basis.through_event_id) {
+      activeThrough = null;
+      apply(next);
+    }
+  } catch (error) {
+    // A delayed failure from the previous world must not clear the current one.
+    if (sessionId !== targetSession || viewer !== targetViewer || accessToken !== targetToken) return;
+    if (error.status === 403) {
+      pairAccessLost = true;
+      state = null;
+      proposals.clear();
+      recipeDrafts.clear();
+      actionDrafts.clear();
+      objects.apply({ entities: [], relationships: [] });
+      for (const label of labels.values()) label.remove();
+      labels.clear();
+      document.querySelector("#entities").replaceChildren();
+      document.querySelector(".baseline-list").replaceChildren();
+      document.querySelector("#json").textContent = "";
+      renderDetail();
+      document.querySelector("#session-status").textContent = "当前角色访问已失效；需要新的邀请才能继续。";
+    } else notice("同步暂时失败：" + error.message, true);
+  } finally { polling = false; }
+}, 1200);
 document.querySelector("#new-session").addEventListener("click", async () => {
   if (busy || generatingId) return;
   busy = true;
   try {
     await connectSession(true);
     proposals.clear();
+    document.querySelector("#pair-link-wrap").hidden = true;
     recipeDrafts.clear();
     actionDrafts.clear();
     notice("已新建独立实验；原会话数据没有删除。");
@@ -676,6 +798,7 @@ document.querySelector("#new-session").addEventListener("click", async () => {
 window.addEventListener("pagehide", () => {
   rendering = false;
   clearInterval(diagnosticTimer);
+  clearInterval(pairPollTimer);
   objects.dispose();
   controls.dispose();
   renderer.dispose();

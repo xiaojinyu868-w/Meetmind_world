@@ -290,6 +290,8 @@ def make_handler(lab, directory, port):
             if not self.allowed():
                 return self.respond(403, {"error": "仅限本机实验页面"})
             url = urlsplit(self.path)
+            if url.path == "/lab-api/mode":
+                return self.respond(200, {"pair_mode": False})
             if url.path == "/lab-api/calendar":
                 query = parse_qs(url.query)
                 try:
