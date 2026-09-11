@@ -19,7 +19,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r backend/requirements.txt
       - name: Run shared experience contract
-        run: python -m unittest examples.shared_experience.test_replay examples.shared_experience.test_adapters -v
+        run: python -m unittest discover -s examples/shared_experience -t . -v
       - name: Run backend tests
         working-directory: backend
         env:
@@ -38,3 +38,7 @@ jobs:
         run: |
           npm ci
           npm run build
+      - name: Verify semantic lab
+        run: |
+          node --test examples/shared_experience/lab/scene.test.mjs
+          npm exec vite build -- --config examples/shared_experience/lab/vite.config.js

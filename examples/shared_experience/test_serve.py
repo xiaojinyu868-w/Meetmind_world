@@ -53,6 +53,36 @@ class LabTests(unittest.TestCase):
         self.assertEqual(state["basis"]["through_sequence"], 8)
         self.assertIn("memory-1", {item["id"] for item in state["entities"]})
 
+    def test_checkin_import_retry_conflict_and_private_withdrawal(self):
+        record = {"event_id": "visit", "provider": "synthetic-test", "location": "工作坊",
+                  "occurred_at": "2026-09-12T10:00:00+08:00", "confirmed": True}
+        before = self.lab.state(self.sid, "alice")
+        state = self.command("checkin.import", record=record, visibility="private")
+        imported = next(item for item in state["entities"] if item.get("source"))
+        self.assertEqual(imported["source"]["occurred_at"], "2026-09-12T02:00:00Z")
+        self.assertEqual(imported["source"]["report_kind"], "self_report")
+        self.assertNotIn(imported["id"], {i["id"] for i in self.lab.state(self.sid, "bo")["entities"]})
+        self.assertEqual(state, self.command("checkin.import", record=record,
+                                            visibility="private", expected_sequence=8))
+        with self.assertRaises(ValueError):
+            self.command("checkin.import", record={**record, "location": "另一个地方"}, visibility="private")
+        self.assertEqual(state, self.lab.state(self.sid, "alice"))
+        withdrawn = self.command("experience.revoked", subject_id=imported["id"])
+        self.assertNotIn(imported["id"], {i["id"] for i in withdrawn["entities"]})
+        self.assertEqual(withdrawn, self.command("checkin.import", record=record, visibility="private"))
+        self.assertEqual(before["basis"]["through_sequence"] + 2, withdrawn["basis"]["through_sequence"])
+
+    def test_unconfirmed_checkin_and_candidate_report_rejected_atomically(self):
+        before = self.lab.state(self.sid, "alice")
+        record = {"event_id": "visit", "provider": "test", "location": "工作坊",
+                  "occurred_at": "2026-09-12T10:00:00+08:00"}
+        with self.assertRaises(ValueError):
+            self.command("checkin.import", record=record, visibility="private")
+        with self.assertRaises(ValueError):
+            self.command("checkin.import", record={**record, "confirmed": True},
+                         visibility="private", viewer="observer")
+        self.assertEqual(before, self.lab.state(self.sid, "alice"))
+
 
 if __name__ == "__main__":
     unittest.main()

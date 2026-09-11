@@ -19,15 +19,55 @@ python -m unittest examples.shared_experience.test_replay -v
 ```
 
 服务器 /root/meetmind_go 的系统 python3 较旧，使用 backend/.venv/bin/python 替代上面的 python。
-输出为确定性的 meetmind.world-state.v1 JSON；前端未来可以把相同对象投影为时间线或 3D 交互物件。
+输出为确定性的 meetmind.world-state.v1 JSON；2D 与 3D 消费同一份状态并共享操作。
 当前的 loopback 实验室提供一个 Three.js 语义对象适配器和操作面板；它使用程序化实验物件，不加载人物或环境模型，也不代表游戏大厂人物质量。
 
 ## 外部事件适配器
 
-`adapters.py` 提供两个纯函数：`calendar_event_to_envelope` 和 `checkin_to_envelope`。
-它们只接受已经由调用方授权的最小 DTO，不访问日历、定位或照片服务。日历事件保留 provider、
-时间区间和参与者列表；签到只报告本人。调用方必须传入已认证的 `actor_id`、可见 `audience`、
-事件序号和（如果存在）已授权的 `source_ref`，适配器不会替外部服务背书或制造其他人的同意。
+`adapters.py` 提供 `calendar_event_to_envelope` 和 `checkin_to_envelope` 两个纯函数。
+这次是 DTO 到世界状态的集成，没有连接第三方日历、定位、照片或模型服务。
+
+- 日历必须有 `attendance_confirmed: true`，且记录者在参与者列表里。日历邀请本身不是到场证明。
+- 签到必须有 `confirmed: true`，只报告当前记录者；他人名单不会被扩成参与关系。
+- 记录 ID 按来源类型、provider、记录者、外部 ID 分别编码，避免不同服务或不同人的记录冲突。
+- 时间必须包含时区和时分秒，输出统一为 UTC。日期、不带时区的时间、反向时间区间会被拒绝。
+- `actor_id`、`audience`、`sequence` 和非空 `source_ref` 是调用方负责的可信上下文。
+  `source_ref` 必须是当前流里已存在、允许该受众看到的事件 ID，随意写一个 `obs:...` 字符串不能通过回放。
+- 来源类型、provider、外部记录 ID、发生时间及地点/时间区间保存到实体 `source`。
+  `report_kind=self_report` 明确它是本人的陈述，provider 标签不等于外部验证。
+- 实验室导入的 source_ref 引用世界创建事件，表达“导入这个世界”的上下文；
+  外部记录来历由 source DTO 记录。这里没有伪造一个外部服务已验证的来源事件。
+
+下面从已有的四条身份事件继续导入，再调用同一个投影：
+
+```python
+from examples.shared_experience.adapters import checkin_to_envelope
+from examples.shared_experience.replay import load_fixture, project_events
+
+fixture, original = load_fixture()
+events = original[:4]
+event = checkin_to_envelope(
+    {
+        "event_id": "my-visit-1",
+        "provider": "manual",
+        "location": "合成工作坊",
+        "occurred_at": "2026-09-12T10:00:00+08:00",
+        "confirmed": True,
+    },
+    sequence=5,
+    room_id="shared-demo",
+    actor_id="alice",
+    audience=["alice"],
+    source_ref="evt-01",
+)
+state = project_events(
+    [*events, event], viewer_id="alice", members=fixture["members"]
+)
+```
+
+字段校验、服务间 ID 冲突、UTC 归一化、来源保留、权限和回放可在 `test_adapters.py` 中复现。
+纯适配器不负责分配序号或持久化；实验服务按完整事件内容处理导入重试，来源 ID 相同但内容改变会报冲突，
+撤回后重试旧记录不会把它重新发布。
 
 ## 启动可操作实验室
 
@@ -38,7 +78,9 @@ npm exec vite build -- --config examples/shared_experience/lab/vite.config.js
 python -m examples.shared_experience.serve --port 4191
 ```
 
-然后打开 `http://127.0.0.1:4191/`。服务只监听 `127.0.0.1`，会话在内存中隔离，页面可切换查看身份、回放阶段、点击对象、纠正作品标题、逐人接受或拒绝行动、填写本人结果并撤回。实验室不会发送消息、报名或调用模型。
+然后打开 `http://127.0.0.1:4191/`。服务只监听 `127.0.0.1`，会话在内存中隔离，页面可切换查看身份、回放阶段、点击对象、纠正作品标题、逐人接受或拒绝行动、填写本人结果并撤回。“导入一条本人签到”可载入合成示例，或填入最小 JSON；须勾选本人确认并选择可见范围。
+导入可重复重试，撤回后不会因旧重试重新出现。重放阶段会重置本会话的实验输入。
+服务可能通过 SSH 运行于远程主机，数据在实验服务内存中，不写生产数据目录。实验室不会发送消息、报名或调用模型。
 
 浏览器验收脚本（需要本机 Playwright）位于 `lab/browser-test.cjs`，会覆盖桌面和 390px 手机视口、2D/3D 切换、同一对象选择和操作，并输出截图与 JSON 诊断；它不是产品登录或线上验收。
 
@@ -90,8 +132,8 @@ state = project_events(
 目前是内存中纯函数全量回放，不是生产事件存储或多人同步服务。现有 RoomService 的持久化、
 幂等命令及有序事件可以作为后续适配基础，但尚未接通。
 
-接下来的完整验证需要：用同一授权事件流驱动时间线与可交互的语义 3D 对象；验证新增、纠错、
-撤回时的局部更新和稳定身份；让真人使用后区分意愿、自报、外部证据与实际价值。
+同一事件驱动 2D/3D 与新增、纠错、撤回已有合成集成验收；接下来需验证外部开发者复用、真实材料接入、
+增量生成和真人任务收益，并区分意愿、自报、外部证据与实际价值。
 商业切入口与愿景措辞仍待选择，不因这个合成样例就默认活动社交或世界养成成立。
 
 本示例未新增许可证，不改变仓库原有权利状态；正式框架发行仍需确定发布范围与许可证。

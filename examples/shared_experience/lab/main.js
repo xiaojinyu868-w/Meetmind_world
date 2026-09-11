@@ -11,11 +11,21 @@ document.querySelector("#app").innerHTML = `
     <section class="workbench">
       <div class="world-pane"><div class="view-toolbar"><span><i></i> <span id="mode-label">语义空间</span></span><div class="toolbar-controls"><label>呈现 <select id="mode" aria-label="呈现模式"><option value="3d">3D 空间</option><option value="2d">2D 基线</option></select></label><label>查看身份 <select id="viewer" aria-label="查看身份"><option value="alice">小满</option><option value="bo">阿博</option><option value="observer">观察者</option></select></label></div></div>
         <div class="viewport"><canvas aria-label="共同经历三维空间"></canvas><div class="labels"></div><div class="canvas-help">拖动旋转 · 滚轮缩放 · 点击物件查看</div></div>
-        <div class="baseline" hidden><div class="baseline-head"><span>事件时间线</span><small>同一份 world-state.v1</small></div><div class="baseline-list"></div></div>
+        <div class="baseline" hidden><div class="baseline-head"><span>经历与关系</span><small>同一份 world-state.v1</small></div><div class="baseline-list"></div></div>
         <div class="replay"><div class="replay-title"><span>回到一个时刻</span><span id="sequence"></span></div><div class="stages"></div></div>
       </div>
       <aside><div class="aside-heading"><span>当前世界</span><small id="count"></small></div><div id="entities" role="list"></div><section id="detail" aria-live="polite"></section></aside>
     </section>
+    <details class="import-panel"><summary>导入一条本人签到 · JSON</summary>
+      <p>先填写或载入示例，再确认内容。记录仅保存在当前实验会话；刷新或重启后不保留。查看身份是实验切换，不是登录认证。</p>
+      <button type="button" id="load-checkin">载入合成签到示例</button>
+      <form id="checkin-form">
+        <label class="field">签到记录 JSON<textarea id="checkin-json" aria-label="签到记录 JSON" rows="6" required placeholder='{"event_id":"my-visit-1","provider":"manual","location":"地点","occurred_at":"2026-09-12T10:00:00+08:00"}'></textarea></label>
+        <label class="field">可见范围<select id="checkin-visibility" aria-label="签到可见范围"><option value="private">仅本人</option><option value="shared">当前会话成员</option></select></label>
+        <label class="checkin-consent"><input type="checkbox" id="checkin-confirm" required>我确认这条记录是本人的陈述（示例仅供合成测试）</label>
+        <button class="primary" type="submit" id="import-checkin">确认并导入签到</button>
+      </form>
+    </details>
     <div id="notice" role="status"></div>
     <footer><span>同一份事件 → 2D 信息与 3D 对象</span><span>本机合成数据 · 不发送消息 · 不代表真实报名或完成</span></footer>
     <details class="raw"><summary>查看本次状态 JSON 与渲染诊断</summary><pre id="diagnostic"></pre><pre id="json"></pre></details>
@@ -91,6 +101,8 @@ const labels = new Map();
 let sessionId, state, selectedId = "artifact-1", viewer = "alice", busy = false, noticeTimer;
 let rendering = true;
 let activeThrough = 8;
+let presentationMode = "3d";
+let renderedFrames = 0;
 
 function notice(text, error = false) {
   const element = document.querySelector("#notice");
@@ -118,7 +130,7 @@ async function command(command, fields = {}) {
     });
     activeThrough = command === "reset" ? fields.through : null;
     apply(next);
-    notice(command === "reset" ? "已回放到所选时刻；本会话的后续实验操作已重置。" : "事件已记录，2D 与 3D 已同步。");
+    notice(command === "reset" ? "已回放到所选时刻；本会话的后续实验操作已重置。" : command === "checkin.import" ? "签到已确认并导入。相同记录重复提交不会重复造物。" : "事件已记录，2D 与 3D 已同步。");
   } catch (error) {
     notice(error.message, true);
   } finally {
@@ -137,12 +149,15 @@ function select(id) {
   objects.select(id);
   renderList();
   renderDetail();
+  renderBaseline();
 }
 function renderBaseline() {
   const root = document.querySelector(".baseline-list");
   if (!root || !state) return;
   root.replaceChildren();
   const entities = state.entities.filter((item) => item.kind !== "world");
+  const byId = new Map(entities.map((item) => [item.id, item]));
+  const titleOf = (id) => byId.get(id)?.title ?? byId.get(id)?.display_name ?? id;
   if (!entities.length) {
     root.append(node("p", "muted", "这个时刻还没有对当前查看者可见的对象。"));
     return;
@@ -150,25 +165,47 @@ function renderBaseline() {
   for (const item of entities) {
     const card = node("button", "baseline-card" + (item.id === selectedId ? " selected" : ""));
     card.dataset.entityId = item.id;
-    const title = item.title ?? item.display_name ?? "候选身份";
+    card.setAttribute("aria-pressed", String(item.id === selectedId));
     card.append(node("span", "baseline-kind", kindNames[item.kind] ?? item.kind),
-                 node("strong", "", title));
-    const provenance = item.provenance?.slice(-1)[0];
-    if (provenance) card.append(node("small", "", (eventNames[provenance.type] ?? provenance.type) + " · #" + provenance.sequence));
+      node("strong", "", item.title ?? item.display_name ?? "候选身份"));
+    if (item.kind === "person") {
+      card.append(node("small", "", item.claim === "confirmed" ? "本人已认领" : "候选 · 尚未认领"));
+    }
+    if (item.source) card.append(node("small", "baseline-source",
+      item.source.provider + " · " + item.source.occurred_at + " · 本人陈述"));
+    for (const edge of state.relationships.filter((edge) => edge.from === item.id || edge.to === item.id)) {
+      card.append(node("small", "baseline-relation",
+        titleOf(edge.from) + " → " + titleOf(edge.to) + " · " +
+        (names[edge.reported_by] ?? edge.reported_by) + "记录的参与"));
+    }
+    for (const entry of item.provenance ?? []) {
+      card.append(node("small", "baseline-event",
+        "#" + entry.sequence + " " + (eventNames[entry.type] ?? entry.type) +
+        " · " + (names[entry.actor_id] ?? entry.actor_id)));
+    }
     if (item.kind === "action") {
-      const choices = Object.entries(item.decisions ?? {}).map(([id, decision]) => (names[id] ?? id) + "：" + (decision.status === "accepted" ? "愿意" : "不参加"));
-      card.append(node("small", "", choices.join(" · ") || "尚未决定"));
+      for (const id of item.participant_ids) {
+        const decision = item.decisions[id]?.status;
+        const report = item.outcomes[id];
+        card.append(node("small", "baseline-decision", (names[id] ?? id) + "：" +
+          (decision === "accepted" ? "愿意参加" : decision === "declined" ? "这次不参加" : "尚未决定") +
+          " · " + (report ? "本人自报：" + (report.result === "completed" ? "已完成" : "未完成") : "没有当前现实结果报告")));
+        if (report) card.append(node("small", "", report.note));
+      }
+      if (item.basis_status === "withdrawn") card.append(node("small", "warning", "原经历已撤回"));
     }
     card.addEventListener("click", () => select(item.id));
     root.append(card);
   }
 }
 function setMode(mode) {
-  const is3d = mode !== "2d";
+  presentationMode = mode === "2d" ? "2d" : "3d";
+  const is3d = presentationMode === "3d";
   document.querySelector(".viewport").hidden = !is3d;
   document.querySelector(".baseline").hidden = is3d;
   document.querySelector("#mode-label").textContent = is3d ? "语义空间" : "2D 信息基线";
   renderBaseline();
+  updateDiagnostic();
 }
 function renderList() {
   const root = document.querySelector("#entities");
@@ -257,9 +294,27 @@ function renderDetail() {
   details.append(node("summary", "", "为什么它会在这里 · " + item.provenance.length + " 次变化"));
   const list = node("ol");
   for (const entry of item.provenance) {
-    list.append(node("li", "", (eventNames[entry.type] ?? entry.type) + " · " + (names[entry.actor_id] ?? entry.actor_id) + " · #" + entry.sequence));
+    const row = node("li", "", (eventNames[entry.type] ?? entry.type) + " · " + (names[entry.actor_id] ?? entry.actor_id) + " · #" + entry.sequence);
+    for (const ref of entry.source_refs ?? []) {
+      const sourceObject = state.entities.find((entity) => entity.provenance.some((record) => record.event_id === ref));
+      if (sourceObject && sourceObject.id !== selectedId) {
+        button(row, "来源：" + (sourceObject.title ?? sourceObject.display_name ?? sourceObject.id),
+          () => select(sourceObject.id), "source-link");
+      } else row.append(node("code", "", " 来源事件 " + ref));
+    }
+    list.append(row);
   }
   details.append(list, node("code", "", "稳定对象 ID: " + item.id));
+  if (item.source) {
+    const meta = node("dl", "source-meta");
+    for (const [label, value] of [["服务", item.source.provider], ["记录 ID", item.source.record_id],
+      ["发生时间", item.source.occurred_at], ["地点", item.source.location],
+      ["开始", item.source.starts_at], ["结束", item.source.ends_at]]) {
+      if (value) meta.append(node("dt", "", label), node("dd", "", value));
+    }
+    meta.append(node("dt", "", "证据类型"), node("dd", "", "本人陈述 · 未经外部验证"));
+    details.append(meta);
+  }
   root.append(details);
 }
 function apply(next) {
@@ -294,6 +349,7 @@ function apply(next) {
 }
 new ResizeObserver(() => {
   const { width, height } = viewport.getBoundingClientRect();
+  if (width <= 0 || height <= 0) return;
   renderer.setSize(width, height, false);
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
@@ -315,6 +371,24 @@ stageRoot.addEventListener("click", (event) => {
   const target = event.target.closest("[data-through]");
   if (target) command("reset", { through: Number(target.dataset.through) });
 });
+document.querySelector("#load-checkin").addEventListener("click", () => {
+  document.querySelector("#checkin-json").value = JSON.stringify({
+    event_id: "synthetic-visit-001", provider: "synthetic-demo",
+    location: "合成纸桥工作坊", occurred_at: "2026-09-12T10:00:00+08:00"
+  }, null, 2);
+  document.querySelector("#checkin-confirm").checked = false;
+});
+document.querySelector("#checkin-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (busy) return;
+  try {
+    const record = JSON.parse(document.querySelector("#checkin-json").value);
+    if (!record || typeof record !== "object" || Array.isArray(record)) throw new Error("请输入 JSON 对象");
+    if (!document.querySelector("#checkin-confirm").checked) throw new Error("请先确认本人陈述");
+    await command("checkin.import", { record: { ...record, confirmed: true },
+      visibility: document.querySelector("#checkin-visibility").value });
+  } catch (error) { notice(error.message, true); }
+});
 document.querySelector("#mode").addEventListener("change", (event) => setMode(event.target.value));
 setMode("3d");
 document.querySelector("#viewer").addEventListener("change", async (event) => {
@@ -333,8 +407,10 @@ document.querySelector("#viewer").addEventListener("change", async (event) => {
 function frame() {
   if (!rendering) return;
   requestAnimationFrame(frame);
+  if (presentationMode === "2d" || document.hidden) return;
   controls.update();
   renderer.render(scene, camera);
+  renderedFrames++;
   const width = viewport.clientWidth, height = viewport.clientHeight;
   for (const [id, label] of labels) {
     const object = objects.objects.get(id);
@@ -347,6 +423,7 @@ function frame() {
 frame();
 function updateDiagnostic() {
   document.querySelector("#diagnostic").textContent = JSON.stringify({
+    mode: presentationMode, renderedFrames,
     drawCalls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
     createdObjects: objects.created, removedObjects: objects.removed,
     objects: [...objects.objects].map(([id, object]) => ({ id, uuid: object.uuid, position: object.position.toArray() })),

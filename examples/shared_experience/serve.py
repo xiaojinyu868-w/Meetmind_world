@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
 from .replay import load_fixture, project_events
+from .adapters import checkin_to_envelope
 
 
 class Lab:
@@ -37,6 +38,32 @@ class Lab:
         with self.lock:
             sid, viewer = body.get("session_id"), body.get("viewer")
             current = self.state(sid, viewer)
+            if body.get("command") == "checkin.import":
+                events = self.sessions[sid]
+                if not events:
+                    raise ValueError("请先回放到世界已创建的时刻")
+                visibility = body.get("visibility")
+                if visibility not in {"private", "shared"}:
+                    raise ValueError("请选择本人可见或会话成员可见")
+                event = checkin_to_envelope(
+                    body.get("record"), sequence=len(events) + 1,
+                    room_id=current["world_id"], actor_id=viewer,
+                    audience=[viewer] if visibility == "private" else self.fixture["members"],
+                    source_ref=events[0]["event_id"],
+                )
+                # A repeated delivery remains a retry even after later events or withdrawal.
+                prior = next((item for item in events if item["event_id"] == event["event_id"]), None)
+                if prior:
+                    event["sequence"] = prior["sequence"]
+                    if event != prior:
+                        raise ValueError("同一来源记录已导入，内容或可见范围冲突")
+                    return current
+                if body.get("expected_sequence") != current["basis"]["through_sequence"]:
+                    raise ValueError("状态已更新，请刷新后重试")
+                candidate = [*events, event]
+                projected = project_events(candidate, viewer_id=viewer, members=self.fixture["members"])
+                self.sessions[sid] = candidate
+                return projected
             if body.get("expected_sequence") != current["basis"]["through_sequence"]:
                 raise ValueError("状态已更新，请刷新后重试")
             events = deepcopy(self.sessions[sid])
@@ -73,11 +100,12 @@ class Lab:
                     payload = {"target_event_id": outcome["event_id"]}
                 else:
                     raise ValueError("不支持的实验命令")
+                origin = next(event for event in events if event["event_id"] == item["source_event"])
                 events.append({
                     "schema": "meetmind.event.v1", "event_id": "lab-" + uuid4().hex,
                     "sequence": len(events) + 1, "room_id": current["world_id"],
                     "actor_id": viewer, "subject_id": subject, "type": command,
-                    "payload": payload, "audience": self.fixture["members"], "source_refs": refs,
+                    "payload": payload, "audience": deepcopy(origin["audience"]), "source_refs": refs,
                 })
             projected = project_events(events, viewer_id=viewer, members=self.fixture["members"])
             self.sessions[sid] = events

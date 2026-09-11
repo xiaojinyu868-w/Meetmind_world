@@ -159,6 +159,22 @@ def project_events(events: Iterable[Mapping], *, viewer_id: str, members: Iterab
                 confirmed_people(participants, audience)
                 _require(actor in participants, "reporter must be a participant")
                 item = create("memory-object", title=payload["title"], reported_by=actor)
+                # Only adapter-approved source DTOs are exposed, never arbitrary provider blobs.
+                if "source" in payload:
+                    source = payload["source"]
+                    allowed = {"kind", "provider", "record_id", "occurred_at", "report_kind",
+                               "starts_at", "ends_at", "location"}
+                    _require(isinstance(source, dict) and set(source) <= allowed,
+                             "source must be a minimal DTO")
+                    _require(all(_text(value) for value in source.values()), "invalid source fields")
+                    _require(source.get("kind") in {"calendar", "checkin"}
+                             and source.get("report_kind") == "self_report",
+                             "source must identify an explicit report")
+                    _require(all(_text(source.get(key)) for key in
+                                 ("provider", "record_id", "occurred_at")), "source metadata missing")
+                    _require(event.get("occurred_at") == source["occurred_at"],
+                             "source time must match event time")
+                    item["source"] = deepcopy(source)
                 for person_id in participants:
                     edges.append({"from": person_id, "to": subject, "type": "reported-participation",
                                   "reported_by": actor, "source_event": event_id})
@@ -224,6 +240,8 @@ def project_events(events: Iterable[Mapping], *, viewer_id: str, members: Iterab
         dto["provenance"] = [
             {"event_id": event_id, "type": ledger[event_id]["type"],
              "sequence": ledger[event_id]["sequence"], "actor_id": ledger[event_id]["actor_id"],
+             **({"occurred_at": ledger[event_id]["occurred_at"]}
+                if "occurred_at" in ledger[event_id] else {}),
              "source_refs": [ref for ref in ledger[event_id]["source_refs"] if visible_event(ref)]}
             for event_id in item["_history"] if visible_event(event_id)
         ]

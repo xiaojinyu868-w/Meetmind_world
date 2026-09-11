@@ -91,3 +91,22 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 340px; overflo
   .replay { padding: 14px 13px; } .stages { gap: 5px; } .stages button { min-height: 39px; }
   footer { flex-direction: column; font-size: 9px; } .object-label { max-width: 110px; font-size: 9px; }
 }
+
+/* Native hidden must win over authored viewport/card display rules. */
+[hidden] { display: none !important; }
+.import-panel { margin-top: 18px; padding: 17px 20px; border: 1px solid #d8dccf; border-radius: 9px; font-size: 12px; }
+.import-panel p { line-height: 1.8; color: #697866; }
+.import-panel textarea { font-family: monospace; }
+.checkin-consent { display: flex; align-items: center; gap: 9px; margin: 14px 0; font-size: 12px; }
+.checkin-consent input { width: 19px; height: 19px; flex: 0 0 auto; }
+.source-meta { display: grid; grid-template-columns: 65px 1fr; gap: 8px; margin-top: 13px; }
+.source-meta dd { margin: 0; overflow-wrap: anywhere; }
+.source-link { display: block; padding: 5px 8px; font-size: 10px; min-height: 32px; }
+.baseline-event, .baseline-relation { padding-top: 3px; }
+.baseline-card small { text-align: left; }
+.baseline-card .warning { margin: 0; }
+@media (max-width: 720px) {
+  .view-toolbar { height: auto; min-height: 65px; flex-wrap: wrap; gap: 9px; padding: 10px 13px; }
+  .toolbar-controls { flex-wrap: wrap; gap: 10px; }
+  .view-toolbar label { gap: 6px; }
+}
