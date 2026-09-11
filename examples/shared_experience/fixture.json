@@ -1,0 +1,274 @@
+{
+  "schema": "meetmind.shared-experience.fixture.v1",
+  "synthetic": true,
+  "fixture_id": "shared-demo-001",
+  "members": [
+    "alice",
+    "bo",
+    "observer"
+  ],
+  "viewer_id": "alice",
+  "events": [
+    {
+      "schema": "meetmind.event.v1",
+      "event_id": "evt-01",
+      "sequence": 1,
+      "room_id": "shared-demo",
+      "actor_id": "alice",
+      "subject_id": "shared-demo",
+      "type": "world.created",
+      "payload": {
+        "title": "共同经历合成示例"
+      },
+      "audience": [
+        "alice",
+        "bo",
+        "observer"
+      ],
+      "source_refs": []
+    },
+    {
+      "schema": "meetmind.event.v1",
+      "event_id": "evt-02",
+      "sequence": 2,
+      "room_id": "shared-demo",
+      "actor_id": "observer",
+      "subject_id": "candidate-e",
+      "type": "identity.candidate.observed",
+      "payload": {
+        "display_name": "未确认人物"
+      },
+      "audience": [
+        "observer"
+      ],
+      "source_refs": [
+        "evt-01"
+      ]
+    },
+    {
+      "schema": "meetmind.event.v1",
+      "event_id": "evt-03",
+      "sequence": 3,
+      "room_id": "shared-demo",
+      "actor_id": "alice",
+      "subject_id": "alice",
+      "type": "identity.claimed",
+      "payload": {
+        "display_name": "小满"
+      },
+      "audience": [
+        "alice",
+        "bo",
+        "observer"
+      ],
+      "source_refs": [
+        "evt-01"
+      ]
+    },
+    {
+      "schema": "meetmind.event.v1",
+      "event_id": "evt-04",
+      "sequence": 4,
+      "room_id": "shared-demo",
+      "actor_id": "bo",
+      "subject_id": "bo",
+      "type": "identity.claimed",
+      "payload": {
+        "display_name": "阿博"
+      },
+      "audience": [
+        "alice",
+        "bo",
+        "observer"
+      ],
+      "source_refs": [
+        "evt-01"
+      ]
+    },
+    {
+      "schema": "meetmind.event.v1",
+      "event_id": "evt-05",
+      "sequence": 5,
+      "room_id": "shared-demo",
+      "actor_id": "alice",
+      "subject_id": "memory-1",
+      "type": "experience.confirmed",
+      "payload": {
+        "title": "一起完成第一次创作",
+        "participant_ids": [
+          "alice",
+          "bo"
+        ]
+      },
+      "audience": [
+        "alice",
+        "bo",
+        "observer"
+      ],
+      "source_refs": [
+        "evt-01"
+      ]
+    },
+    {
+      "schema": "meetmind.event.v1",
+      "event_id": "evt-06",
+      "sequence": 6,
+      "room_id": "shared-demo",
+      "actor_id": "alice",
+      "subject_id": "artifact-1",
+      "type": "artifact.observed",
+      "payload": {
+        "title": "错误识别的作品名"
+      },
+      "audience": [
+        "alice",
+        "bo",
+        "observer"
+      ],
+      "source_refs": [
+        "evt-05"
+      ]
+    },
+    {
+      "schema": "meetmind.event.v1",
+      "event_id": "evt-07",
+      "sequence": 7,
+      "room_id": "shared-demo",
+      "actor_id": "alice",
+      "subject_id": "artifact-1",
+      "type": "inference.superseded",
+      "payload": {
+        "target_event_id": "evt-06",
+        "new_title": "共同完成的纸桥"
+      },
+      "audience": [
+        "alice",
+        "bo",
+        "observer"
+      ],
+      "source_refs": [
+        "evt-06"
+      ]
+    },
+    {
+      "schema": "meetmind.event.v1",
+      "event_id": "evt-08",
+      "sequence": 8,
+      "room_id": "shared-demo",
+      "actor_id": "alice",
+      "subject_id": "action-1",
+      "type": "action.proposed",
+      "payload": {
+        "title": "下次一起继续创作",
+        "participant_ids": [
+          "alice",
+          "bo"
+        ]
+      },
+      "audience": [
+        "alice",
+        "bo",
+        "observer"
+      ],
+      "source_refs": [
+        "evt-05"
+      ]
+    },
+    {
+      "schema": "meetmind.event.v1",
+      "event_id": "evt-09",
+      "sequence": 9,
+      "room_id": "shared-demo",
+      "actor_id": "alice",
+      "subject_id": "action-1",
+      "type": "action.accepted",
+      "payload": {},
+      "audience": [
+        "alice",
+        "bo",
+        "observer"
+      ],
+      "source_refs": [
+        "evt-08"
+      ]
+    },
+    {
+      "schema": "meetmind.event.v1",
+      "event_id": "evt-10",
+      "sequence": 10,
+      "room_id": "shared-demo",
+      "actor_id": "bo",
+      "subject_id": "action-1",
+      "type": "action.declined",
+      "payload": {},
+      "audience": [
+        "alice",
+        "bo",
+        "observer"
+      ],
+      "source_refs": [
+        "evt-08"
+      ]
+    },
+    {
+      "schema": "meetmind.event.v1",
+      "event_id": "evt-11",
+      "sequence": 11,
+      "room_id": "shared-demo",
+      "actor_id": "alice",
+      "subject_id": "action-1",
+      "type": "action.outcome.recorded",
+      "payload": {
+        "result": "completed",
+        "report_kind": "self_report",
+        "note": "我自己参加了后续创作；这不代表阿博参加。"
+      },
+      "audience": [
+        "alice",
+        "bo",
+        "observer"
+      ],
+      "source_refs": [
+        "evt-09"
+      ]
+    },
+    {
+      "schema": "meetmind.event.v1",
+      "event_id": "evt-12",
+      "sequence": 12,
+      "room_id": "shared-demo",
+      "actor_id": "alice",
+      "subject_id": "action-1",
+      "type": "action.outcome.revoked",
+      "payload": {
+        "target_event_id": "evt-11"
+      },
+      "audience": [
+        "alice",
+        "bo",
+        "observer"
+      ],
+      "source_refs": [
+        "evt-11"
+      ]
+    },
+    {
+      "schema": "meetmind.event.v1",
+      "event_id": "evt-13",
+      "sequence": 13,
+      "room_id": "shared-demo",
+      "actor_id": "alice",
+      "subject_id": "memory-1",
+      "type": "experience.revoked",
+      "payload": {},
+      "audience": [
+        "alice",
+        "bo",
+        "observer"
+      ],
+      "source_refs": [
+        "evt-05"
+      ]
+    }
+  ]
+}
