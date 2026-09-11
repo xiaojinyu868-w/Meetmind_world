@@ -107,6 +107,7 @@ let modelEnabled = false;
 let generatingId = null;
 const proposals = new Map();
 const recipeDrafts = new Map();
+const actionDrafts = new Map();
 let renderedFrames = 0;
 
 function notice(text, error = false) {
@@ -136,8 +137,12 @@ async function command(command, fields = {}) {
     if (command === "reset") {
       proposals.clear();
       recipeDrafts.clear();
+      actionDrafts.clear();
     } else if (["visual.recipe.applied", "visual.recipe.patched", "visual.recipe.removed", "inference.superseded", "experience.revoked"].includes(command)) {
       proposals.delete(viewer + ":" + selectedId);
+    }
+    if (command === "action.proposed") {
+      selectedId = "action-" + viewer + "-" + fields.request_id;
     }
     activeThrough = command === "reset" ? fields.through : null;
     apply(next);
@@ -189,6 +194,8 @@ function renderBaseline() {
         titleOf(edge.from) + " → " + titleOf(edge.to) + " · " +
         (names[edge.reported_by] ?? edge.reported_by) + "记录的参与"));
     }
+    if (item.plan) card.append(node("small", "", new Date(item.plan.scheduled_at).toLocaleString("zh-CN") +
+      " · " + item.plan.location + " · " + item.plan.success_criteria));
     if (item.appearance) {
       card.append(node("small", "", "生成外观：" + item.appearance.title + " · " + item.appearance.parts.length + " 个部件"));
       card.append(node("small", "", item.appearance.rationale));
@@ -242,6 +249,70 @@ function button(root, text, action, className = "") {
   root.append(element);
   return element;
 }
+function renderActionComposer(root, item) {
+  if (!item.action_candidate_ids?.includes(viewer)) return;
+  const section = node("details", "action-composer");
+  section.append(node("summary", "", "从这段经历，约一件下一步的事"));
+  section.append(node("p", "muted", "写清什么时候、在哪里、一起完成什么。每个人仍需自己接受或拒绝。"));
+  const key = viewer + ":" + item.id;
+  const draft = actionDrafts.get(key) ?? { requestId: crypto.randomUUID(), title: "", time: "",
+    duration: "60", location: "", criteria: "", participants: [viewer] };
+  actionDrafts.set(key, draft);
+  const form = node("form");
+  const edit = () => { draft.requestId = crypto.randomUUID(); };
+  for (const [name, label, type, limit] of [
+    ["title", "下一步具体做什么", "text", 160],
+    ["time", "计划时间（本机时区）", "datetime-local"],
+    ["duration", "预计时长（分钟）", "number"],
+    ["location", "行动地点", "text", 160],
+    ["criteria", "怎样算完成", "textarea", 500],
+  ]) {
+    const wrap = node("label", "field", label);
+    const input = node(type === "textarea" ? "textarea" : "input");
+    if (type !== "textarea") input.type = type;
+    input.setAttribute("aria-label", label);
+    input.required = true;
+    input.value = draft[name];
+    if (limit) input.maxLength = limit;
+    if (type === "number") { input.min = "5"; input.max = "1440"; input.step = "1"; }
+    input.addEventListener("input", () => { draft[name] = input.value; edit(); });
+    wrap.append(input);
+    form.append(wrap);
+  }
+  const participants = node("fieldset", "action-participants");
+  participants.append(node("legend", "", "邀请谁一起（仅当前实验身份）"));
+  for (const id of item.action_candidate_ids) {
+    const label = node("label", "checkin-consent");
+    const input = node("input");
+    input.type = "checkbox";
+    input.checked = draft.participants.includes(id);
+    input.disabled = id === viewer;
+    input.setAttribute("aria-label", "行动参与者：" + (names[id] ?? id));
+    input.addEventListener("change", () => {
+      draft.participants = input.checked ? [...draft.participants, id] : draft.participants.filter(value => value !== id);
+      edit();
+    });
+    label.append(input, document.createTextNode((names[id] ?? id) + (id === viewer ? "（我）" : "")));
+    participants.append(label);
+  }
+  form.append(participants);
+  const submit = node("button", "primary", "提出这次行动");
+  submit.type = "submit";
+  submit.disabled = busy;
+  form.append(submit);
+  form.addEventListener("submit", event => {
+    event.preventDefault();
+    if (!form.reportValidity()) return;
+    const date = new Date(draft.time);
+    if (!Number.isFinite(date.getTime())) return notice("请选择有效时间。", true);
+    command("action.proposed", { request_id: draft.requestId, title: draft.title,
+      participant_ids: draft.participants,
+      plan: { scheduled_at: date.toISOString(), duration_minutes: Number(draft.duration),
+        location: draft.location, success_criteria: draft.criteria } });
+  });
+  section.append(form);
+  root.append(section);
+}
 function renderDetail() {
   const root = document.querySelector("#detail");
   root.replaceChildren();
@@ -272,6 +343,21 @@ function renderDetail() {
     if (item.created_by === viewer) button(root, "撤回这段经历", () => command("experience.revoked"), "quiet-danger");
   }
   if (item.kind === "action") {
+    if (item.plan) {
+      const plan = node("dl", "source-meta action-plan");
+      for (const [label, value] of [["时间", new Date(item.plan.scheduled_at).toLocaleString("zh-CN")],
+        ["时长", item.plan.duration_minutes + " 分钟"], ["地点", item.plan.location],
+        ["想完成", item.plan.success_criteria]]) {
+        plan.append(node("dt", "", label), node("dd", "", value));
+      }
+      root.append(plan);
+      if (item.decisions[viewer]?.status === "accepted") {
+        const link = node("a", "calendar-download", "下载我的日历文件");
+        link.href = "/lab-api/calendar?" + new URLSearchParams({ session_id: sessionId, viewer, action_id: item.id });
+        link.download = "meetmind-action.ics";
+        root.append(link, node("p", "footnote", "下载后可自行导入日历。不会替其他人发邀请，下载也不代表已经参加。"));
+      }
+    }
     if (item.basis_status === "withdrawn") root.append(node("p", "warning", "原经历已撤回。这里保留行动历史，不再展示原依据。"));
     for (const person of item.participant_ids) {
       const decision = item.decisions[person]?.status;
@@ -306,6 +392,7 @@ function renderDetail() {
     root.append(node("p", "footnote", "意愿、自报与外部验证分别表达。这个实验不会验证现实发生，也不会替任何人报名。"));
   }
   if (["artifact", "memory-object"].includes(item.kind)) {
+    renderActionComposer(root, item);
     const generator = node("section", "recipe-panel");
     generator.append(node("h3", "", "把经历变成一件物品"));
     generator.append(node("p", "muted", "模型接收当前物件的标题和你的要求；局部修改时还会接收现有外观与部件含义。应用后保持身份、来源和现实结果。"));

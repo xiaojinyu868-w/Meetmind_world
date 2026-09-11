@@ -14,6 +14,8 @@ from .replay import load_fixture, project_events
 from .adapters import checkin_to_envelope
 from .recipes import parse_recipe, recipe_messages, parse_patch, patch_messages
 import hashlib
+import re
+from .action_plans import validate_action_plan, action_calendar
 
 
 class Lab:
@@ -95,6 +97,45 @@ class Lab:
         with self.lock:
             sid, viewer = body.get("session_id"), body.get("viewer")
             current = self.state(sid, viewer)
+            if body.get("command") == "action.proposed":
+                request_id = body.get("request_id")
+                if not isinstance(request_id, str) or not re.fullmatch(r"[a-zA-Z0-9-]{8,80}", request_id):
+                    raise ValueError("行动请求需要唯一请求 ID")
+                source_id = body.get("subject_id")
+                title = body.get("title")
+                if not isinstance(title, str) or not 0 < len(title.strip()) <= 160:
+                    raise ValueError("请填写 1–160 字的具体行动")
+                participants = body.get("participant_ids")
+                if (not isinstance(participants, list) or not participants
+                        or not all(isinstance(value, str) for value in participants)
+                        or len(set(participants)) != len(participants)
+                        or viewer not in participants):
+                    raise ValueError("请选择参与者并包含自己；选择不等于替对方接受")
+                payload = {"title": title.strip(), "participant_ids": sorted(participants),
+                           "plan": validate_action_plan(body.get("plan"))}
+                event_id = "action-request-" + viewer + "-" + request_id
+                events = self.sessions[sid]
+                prior = next((event for event in events if event["event_id"] == event_id), None)
+                if prior:
+                    if prior["payload"] != payload or prior.get("request_basis_id") != source_id:
+                        raise ValueError("同一行动请求内容冲突")
+                    return current
+                if body.get("expected_sequence") != current["basis"]["through_sequence"]:
+                    raise ValueError("状态已更新，请刷新后重试")
+                source = next((item for item in current["entities"] if item["id"] == source_id), None)
+                if not source or source["kind"] not in {"artifact", "memory-object"}:
+                    raise ValueError("请选择一段仍可见的经历或作品")
+                if not set(participants) <= set(source["action_candidate_ids"]):
+                    raise ValueError("参与者需要已认领身份，并且能看到这段经历")
+                event = {"schema": "meetmind.event.v1", "event_id": event_id,
+                         "sequence": len(events) + 1, "room_id": current["world_id"],
+                         "actor_id": viewer, "subject_id": "action-" + viewer + "-" + request_id,
+                         "type": "action.proposed", "payload": payload, "audience": sorted(participants),
+                         "source_refs": [source["source_event"]], "request_basis_id": source_id}
+                candidate = [*events, event]
+                projected = project_events(candidate, viewer_id=viewer, members=self.fixture["members"])
+                self.sessions[sid] = candidate
+                return projected
             if body.get("command") == "checkin.import":
                 events = self.sessions[sid]
                 if not events:
@@ -214,6 +255,24 @@ def make_handler(lab, directory, port):
             if not self.allowed():
                 return self.respond(403, {"error": "仅限本机实验页面"})
             url = urlsplit(self.path)
+            if url.path == "/lab-api/calendar":
+                query = parse_qs(url.query)
+                try:
+                    viewer = query.get("viewer", [""])[0]
+                    state = lab.state(query.get("session_id", [""])[0], viewer)
+                    action = next((item for item in state["entities"]
+                                   if item["id"] == query.get("action_id", [""])[0]), None)
+                    data = action_calendar(action, viewer).encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/calendar; charset=utf-8")
+                    self.send_header("Content-Disposition", 'attachment; filename="meetmind-action.ics"')
+                    self.send_header("Cache-Control", "no-store")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
+                    return
+                except (ValueError, TypeError):
+                    return self.respond(400, {"error": "只有本人已接受且有完整计划的行动可以导出日历"})
             if url.path == "/lab-api/state":
                 query = parse_qs(url.query)
                 try:

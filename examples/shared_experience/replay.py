@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Iterable, Mapping
 
 from .recipes import validate_recipe, apply_patch_recipe
+from .action_plans import validate_action_plan
 
 
 class DuplicateEventConflict(ValueError):
@@ -222,10 +223,12 @@ def project_events(events: Iterable[Mapping], *, viewer_id: str, members: Iterab
             participants = payload.get("participant_ids")
             confirmed_people(participants, audience)
             _require(actor in participants and set(participants) <= audience, "proposer must participate and participants must see action")
-            _require(_text(payload.get("title")), "action needs a title")
+            _require(_text(payload.get("title")) and len(payload["title"].strip()) <= 160, "action needs a title of at most 160 characters")
             _require(any(ledger[ref]["type"] in {"experience.confirmed", "artifact.observed"} for ref in refs), "action needs an experience or artifact basis")
             item = create("action", title=payload["title"], participant_ids=participants,
                           decisions={}, outcomes={}, basis_event_ids=refs)
+            if "plan" in payload:
+                item["plan"] = validate_action_plan(payload["plan"])
         else:
             item = modify("action")
             _require(actor in item["participant_ids"], "only action participants may respond")
@@ -271,6 +274,12 @@ def project_events(events: Iterable[Mapping], *, viewer_id: str, members: Iterab
              "source_refs": [ref for ref in ledger[event_id]["source_refs"] if visible_event(ref)]}
             for event_id in item["_history"] if visible_event(event_id)
         ]
+        if item["kind"] in {"memory-object", "artifact"}:
+            dto["action_candidate_ids"] = [
+                person["id"] for person in entities.values()
+                if person["kind"] == "person" and person.get("claim") == "confirmed"
+                and person["id"] in item["_audience"] and viewer_id in person["_audience"]
+            ]
         if item["kind"] == "action":
             basis = item["basis_event_ids"]
             dto["basis_status"] = "active" if all(visible_event(ref) for ref in basis) else "withdrawn"

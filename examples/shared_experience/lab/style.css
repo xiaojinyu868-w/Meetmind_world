@@ -118,3 +118,11 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 340px; overflo
 .recipe-proposal small { font-size: 10px; color: #78856f; display: block; }
 .recipe-proposal ul { padding-left: 20px; }
 .recipe-proposal pre { max-height: 200px; }
+
+.action-composer { margin-top: 18px; padding-top: 14px; border-top: 1px solid #d8dccf; }
+.action-composer summary { font-size: 13px; line-height: 1.8; }
+.action-participants { border: 0; padding: 0; margin: 15px 0; }
+.action-participants legend { font-size: 11px; color: #697866; }
+.action-composer input { max-width: 100%; min-width: 0; box-sizing: border-box; }
+.calendar-download { display: inline-block; padding: 10px 13px; border: 1px solid #b6c5b0; border-radius: 6px; font-size: 12px; color: #355746; }
+.action-plan { font-size: 12px; line-height: 1.7; }
