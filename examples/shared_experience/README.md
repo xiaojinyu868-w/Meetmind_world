@@ -22,6 +22,13 @@ python -m unittest examples.shared_experience.test_replay -v
 输出为确定性的 meetmind.world-state.v1 JSON；前端未来可以把相同对象投影为时间线或 3D 交互物件。
 当前的 loopback 实验室提供一个 Three.js 语义对象适配器和操作面板；它使用程序化实验物件，不加载人物或环境模型，也不代表游戏大厂人物质量。
 
+## 外部事件适配器
+
+`adapters.py` 提供两个纯函数：`calendar_event_to_envelope` 和 `checkin_to_envelope`。
+它们只接受已经由调用方授权的最小 DTO，不访问日历、定位或照片服务。日历事件保留 provider、
+时间区间和参与者列表；签到只报告本人。调用方必须传入已认证的 `actor_id`、可见 `audience`、
+事件序号和（如果存在）已授权的 `source_ref`，适配器不会替外部服务背书或制造其他人的同意。
+
 ## 启动可操作实验室
 
 在仓库根目录执行：

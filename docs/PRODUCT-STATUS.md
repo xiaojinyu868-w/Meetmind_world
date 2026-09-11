@@ -53,3 +53,6 @@ examples/shared_experience 已加入可重复的合成事件回放，输出 meet
 ## 2026-09-12：语义对象实验室
 
 examples/shared_experience/lab 提供 loopback-only Three.js 适配器和操作面板：同一实体 ID 在标题纠正后保持对象身份与位置，撤回经历时移除物件和关联边，视图切换按 audience 隐藏候选，行动接受/拒绝、个人自报及撤回可操作。25 项 Python 契约测试、3 项 Three.js 对象测试和浏览器桌面/390px 验收已通过；浏览器证据在本机临时目录，不进入仓库。该实验使用程序化物件与合成数据，仍未证明人物美术、3D 相比 2D 的用户价值、商业动机、生产权限或真实世界反馈。
+
+
+外部来源适配器已加入 `examples/shared_experience/adapters.py`：日历和本人签到 DTO 可转换为同一 `meetmind.event.v1`，保留 provider/时间/来源字段，并明确不自动推断参与者同意或真实完成。适配器测试与回放契约测试一起运行；仍未连接真实第三方 API。

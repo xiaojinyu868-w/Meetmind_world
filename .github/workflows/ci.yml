@@ -19,7 +19,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r backend/requirements.txt
       - name: Run shared experience contract
-        run: python -m unittest examples.shared_experience.test_replay -v
+        run: python -m unittest examples.shared_experience.test_replay examples.shared_experience.test_adapters -v
       - name: Run backend tests
         working-directory: backend
         env:
