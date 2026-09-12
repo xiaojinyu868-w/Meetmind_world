@@ -45,6 +45,7 @@ const fs=require("node:fs"),path=require("node:path"),assert=require("node:asser
  await owner.locator('[data-tab="decide"]').click();
  await owner.getByLabel("我的下一步",{exact:true}).fill("周末量一下门宽，确认家具尺寸。");await owner.getByRole("button",{name:"留下我的行动",exact:true}).click();
  await owner.getByRole("button",{name:"自报完成",exact:true}).click();
+ await owner.locator("#report-submit").click();
  await guest.waitForFunction(()=>window.__space.state.actions.some(a=>a.status==="done"));
  const download=owner.waitForEvent("download");await owner.locator("#export").click();const file=await download;await file.saveAs(path.join(out,"summary.md"));assert.match(fs.readFileSync(path.join(out,"summary.md"),"utf8"),/本人自报/);
  await guest.reload();await guest.locator("#identity").filter({hasText:"阿博"}).waitFor();

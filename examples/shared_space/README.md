@@ -26,7 +26,7 @@ PairAccessStore凭证7天、邀请30分钟一次有效；没有真实账号、�
 2. 点击家具后拖动，或输入X/Z和方向。2D平面与3D使用同一实际布局；空白处拖动调整视角。
 3. “来处”纠正本人经历或回应另一人的说法，相关要求提示本人重核；已确认要求不会自动撤掉。
 4. “一起决定”可接受、调整、先测量或暂不决定。改布局/要求/经历产生新版，旧同意不算当前同意。
-5. 记录本人下一步与自报结果，导出Markdown摘要。导出不代表购买或现实完成。
+5. 记录本人下一步的负责人、截止时间（仅记录，不自动提醒）、完成标准、待测量事项和结果来源；本人可以提交完成/未完成报告、补充说明，或撤回报告。导出Markdown摘要。导出不代表购买或现实完成。
 
 ## 模块与复验
 
@@ -38,13 +38,14 @@ HTTP额外添加violations，不将派生冲突保存为权威事件。
 ~~~bash
 backend/.venv/bin/python -m unittest examples.shared_space.test_domain examples.shared_space.test_service -q
 node examples/shared_space/web/browser-test.cjs
+node examples/shared_space/web/action-browser-test.cjs
 ~~~
 
 浏览器脚本需要Playwright，支持PLAYWRIGHT_MODULE、CHROMIUM_EXECUTABLE、LAB_URL、LAB_EVIDENCE_DIR。
 见[验收报告](../../docs/SHARED-SPACE-VERIFICATION.md)。
 
 房间/费用/经历均为人工合成。只检查水平矩形、入口及活动区，不提供装修或安全规范验收。
-当前模型布局提案适配已接入，但未实测真实模型；仍缺真实材料、尺寸/预算/妥协编辑、完整行动日历与任务对照分组。
+当前模型布局提案适配已接入，但未实测真实模型；行动记录已经结构化保存并可在双方之间同步，但截止时间不触发提醒，结果来源仍是本人自报，尚无独立核验。仍缺真实材料、尺寸/预算/妥协编辑、完整行动日历与任务对照分组。
 没有真人价值或商业验证，未达到原始人物和完整世界品质。
 
 
