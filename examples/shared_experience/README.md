@@ -182,6 +182,11 @@ backend/.venv/bin/python -m examples.shared_experience.serve_pair --port 4196 --
 
 ## 开发者接口
 
+事件投影、外部 DTO 适配、符号配方与个人日历导出已提取到
+[meetmind_core 实验包](../../packages/meetmind_core/README.md)。旧导入路径继续可用，
+下方 `load_fixture` 仍属于本示例；独立项目使用 `from meetmind_core import project_events`。
+[三人散步消费者](../core_consumer/README.md)通过仓库外 wheel 安装运行，不依赖本示例的固定人物和 fixture。
+
 ```python
 from examples.shared_experience.replay import load_fixture, project_events
 
@@ -215,7 +220,7 @@ state = project_events(
 目前以纯函数全量回放投影事件，实验会话支持独立SQLite存储；双人入口提供角色绑定及轮询同步，尚非生产多人服务。
 现有 RoomService 的持久化、幂等命令及有序事件可以作为后续适配基础，但尚未接通。
 
-同一事件驱动 2D/3D 与新增、纠错、撤回已有合成集成验收；接下来需验证外部开发者复用、真实材料接入、
+同一事件驱动 2D/3D 与新增、纠错、撤回已有合成集成验收；已验证内核打包后的内部独立消费者；接下来需验证外部开发者复用、真实材料接入、
 增量生成和真人任务收益，并区分意愿、自报、外部证据与实际价值。
 商业切入口与愿景措辞仍待选择，不因这个合成样例就默认活动社交或世界养成成立。
 

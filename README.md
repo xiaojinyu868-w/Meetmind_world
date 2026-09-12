@@ -2,9 +2,11 @@
 
 ## 前沿框架实验：共同经历与现实反馈
 
-独立开发者入口见 [可回放示例](examples/shared_experience/README.md)：合成事件生成带来源的
-世界状态，覆盖本人认领、纠错、撤回、每人的行动选择与自报结果。仅依赖 Python 标准库，
-不读取线上数据。当前未接入产品 UI、持久化或 3D 渲染，不代表真实需求和付费已经验证。
+开发者入口见 [可安装事件内核](packages/meetmind_core/README.md) 和 [仓库外接入示例](examples/core_consumer/README.md)：
+经历生成带来源的世界状态，覆盖本人认领、物件纠错、撤回、符号化局部变化和个人行动反馈。
+运行时仅依赖 Python 标准库，不读取线上数据。原[共同经历实验](examples/shared_experience/README.md)
+已有独立持久化、双人入口和 Three.js 渲染；[共同空间实验](examples/shared_space/README.md)提供经历到个人空间要求的协商。
+这些实验尚未合并进主站，也未验证真实需求、付费或外部开发者采用。
 
 ## 本地运行
 
