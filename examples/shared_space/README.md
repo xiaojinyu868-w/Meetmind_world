@@ -28,6 +28,9 @@ PairAccessStore凭证7天、邀请30分钟一次有效；没有真实账号、�
 4. “一起决定”可接受、调整、先测量或暂不决定。改布局/要求/经历产生新版，旧同意不算当前同意。
 5. 记录本人下一步的负责人、截止时间（仅记录，不自动提醒）、完成标准、待测量事项和结果来源；本人可以提交完成/未完成报告、补充说明，或撤回报告。导出Markdown摘要。导出不代表购买或现实完成。
 
+6. 完成报告后点“把测量带回空间”，填所选家具的宽深高、日期、来源。记录本身不改布局；点击“预览测量影响”仅在本端缩放，应用后两端才更新尺寸并使旧版同意过期。尺寸冲突会保留显示，需修改方案。
+7. 可撤回本人的测量；已应用尺寸暂保留并标成来源失效。修改/撤回相关行动报告也会使其失效，需要记录新测量并应用。可查看测量变化记录和导出来源。其他参与者可明确应用共享测量，但不能冒充来源本人或替其撤回。
+
 ## 模块与复验
 
 domain.py为纯状态转换/几何/导出；serve.py复用SQLiteSessionStore和PairAccessStore，
@@ -39,13 +42,14 @@ HTTP额外添加violations，不将派生冲突保存为权威事件。
 backend/.venv/bin/python -m unittest examples.shared_space.test_domain examples.shared_space.test_service -q
 node examples/shared_space/web/browser-test.cjs
 node examples/shared_space/web/action-browser-test.cjs
+node examples/shared_space/web/measurement-browser-test.cjs
 ~~~
 
 浏览器脚本需要Playwright，支持PLAYWRIGHT_MODULE、CHROMIUM_EXECUTABLE、LAB_URL、LAB_EVIDENCE_DIR。
 见[验收报告](../../docs/SHARED-SPACE-VERIFICATION.md)。
 
 房间/费用/经历均为人工合成。只检查水平矩形、入口及活动区，不提供装修或安全规范验收。
-当前模型布局提案适配已接入，但未实测真实模型；行动记录已经结构化保存并可在双方之间同步，但截止时间不触发提醒，结果来源仍是本人自报，尚无独立核验。仍缺真实材料、尺寸/预算/妥协编辑、完整行动日历与任务对照分组。
+当前模型布局提案适配已接入，但未实测真实模型；行动记录已经结构化保存并可在双方之间同步，但截止时间不触发提醒，结果来源仍是本人自报，尚无独立核验。家具测量可明确应用到尺寸；房间/门区仍为合成固定尺寸，未实现预算/妥协编辑、真实媒体输入、完整行动日历与任务对照分组。
 没有真人价值或商业验证，未达到原始人物和完整世界品质。
 
 
@@ -62,3 +66,13 @@ node examples/shared_space/web/action-browser-test.cjs
 backend/.venv/bin/python -m unittest discover -s examples/shared_space -t . -q
 node examples/shared_space/web/proposal-browser-test.cjs
 ~~~
+
+## 测量记录的来源边界
+
+测量关联一个本人已自报完成的行动与该报告的版本，只接收 0.05–10 米的家具尺寸及 YYYY-MM-DD 日期。
+没有照片识尺、外部核验或自动将文字报告推断成尺寸。来源文字不是上传附件，也不会被抓取或发送给布局模型；
+模型继续只接收房间、家具几何、已确认要求和用户布局指令。
+
+测量记录只推进命令序号；应用尺寸或使当前尺寸依据失效才推进方案版本。旧命令日志原样重放，
+补出空测量列表和报告版本，无需改写生产或实验历史。测量修正为新增记录；withdraw 标记撤回后不能复用。
+前端预览遇到共同记录更新自动退出；服务端重新检查报告版本、撤回状态和方案版本。

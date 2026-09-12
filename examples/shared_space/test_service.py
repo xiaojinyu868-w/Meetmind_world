@@ -92,6 +92,44 @@ class SpaceIntegrationTests(unittest.TestCase):
         self.assertEqual(self.http("/space-api/state", token=self.guest["token"])[0], 403)
         self.assertEqual(self.service.state(self.sid)["sequence"], 0)
 
+    def test_measurement_http_preview_and_source_withdrawal(self):
+        code, _ = self.command(0, {"type": "action.add", "text": "测量沙发"}, rid="measure-add-1")
+        self.assertEqual(code, 200)
+        code, _ = self.command(1, {"type": "action.report", "action_id": "action-1", "status": "done"},
+                               rid="measure-report-1")
+        self.assertEqual(code, 200)
+        record = {"type": "measurement.record", "action_id": "action-1", "object_id": "sofa",
+                  "width": 2.3, "depth": .9, "height": .9, "source": "卷尺", "measured_on": "2026-09-12"}
+        code, _ = self.command(2, record, rid="measure-forged-1", guest=True)
+        self.assertEqual(code, 400)
+        code, recorded = self.command(2, record, rid="measure-record-1")
+        self.assertEqual(code, 200)
+        body = {"measurement_id": "measurement-3", "expected_sequence": 3}
+        self.assertEqual(self.http("/space-api/measurement/preview", body)[0], 403)
+        code, preview = self.http("/space-api/measurement/preview", body, self.guest["token"])
+        self.assertEqual(code, 200)
+        self.assertEqual(preview["preview"]["objects"][1]["width"], 2.3)
+        self.assertEqual(self.service.state(self.sid), recorded["state"])
+        code, _ = self.http("/space-api/measurement/preview", {**body, "expected_sequence": 2}, self.owner["token"])
+        self.assertEqual(code, 409)
+        code, applied = self.command(3, {"type": "measurement.apply", "measurement_id": "measurement-3",
+                                       "basis_revision": 1}, rid="measure-apply-1", guest=True)
+        self.assertEqual(code, 200)
+        self.assertEqual(applied["state"]["revision"], 2)
+        self.assertEqual(self.http("/space-api/measurement/preview", {**body, "expected_sequence": 4},
+                                   self.guest["token"])[0], 400)
+        code, _ = self.command(4, {"type": "measurement.withdraw", "measurement_id": "measurement-3"},
+                               rid="measure-withdraw-forged", guest=True)
+        self.assertEqual(code, 400)
+        code, withdrawn = self.command(4, {"type": "measurement.withdraw", "measurement_id": "measurement-3"},
+                                       rid="measure-withdraw")
+        self.assertEqual(code, 200)
+        self.assertIn("measurement-stale:sofa", [v["id"] for v in withdrawn["state"]["violations"]])
+        self.assertEqual(SpaceService(SQLiteSessionStore(self.root / "worlds")).state(self.sid), withdrawn["state"])
+        code, document = self.http("/space-api/export", token=self.owner["token"])
+        self.assertEqual(code, 200)
+        self.assertIn("依据已失效", document["text"])
+
     def test_failed_store_write_does_not_publish_new_state(self):
         before = self.service.state(self.sid)
         original = self.service.store.save

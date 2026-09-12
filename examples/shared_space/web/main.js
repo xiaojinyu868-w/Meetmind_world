@@ -1,6 +1,7 @@
 import "./style.css";
 import { SpaceView } from "./SpaceView.js";
 import { ProposalPanel } from "./ProposalPanel.js";
+import { MeasurementPanel } from "./MeasurementPanel.js";
 document.querySelector("#app").innerHTML = [
 '<header class="top"><a class="brand" href="/">MeetMind <span>world</span></a><span class="experiment">共同空间 · 实验 02</span><div class="account"><span id="identity">正在连接…</span><button id="invite" hidden>邀请另一位</button><button id="new">新建空间</button></div></header>',
 '<main><section class="intro"><div><p class="eyebrow">把生活里的要求，放进我们的空间</p><h1>一起安放，<br>下一段生活。</h1></div><div class="brief"><p>一个人需要安静办公，一个人想留出运动的位置。<br>还有那件一起做的纸桥，我们想把它放在哪里？</p><p class="subtle">6 × 5 米合成房间 · 人工样例，未调用模型</p></div></section>',
@@ -8,7 +9,7 @@ document.querySelector("#app").innerHTML = [
 '<div class="workspace"><section class="studio"><div class="studio-bar"><div><span class="live-dot"></span><strong id="version">方案 01</strong><span id="sync" class="subtle">正在恢复空间</span></div><div class="segmented"><button id="mode3d" aria-pressed="true">3D 空间</button><button id="mode2d" aria-pressed="false">2D 平面</button></div></div>',
 '<div id="preview-label" hidden>提案预览 · 仅你可见，共同方案尚未改变</div><div id="viewport"></div><div class="view-note"><span id="control-help">选中家具后拖动摆放 · 空白处拖动旋转 · 滚轮缩放</span><span>单位：米</span></div>',
 '<div class="layout-strip"><div><small>从两个想法开始</small><strong>先安排，再讨论</strong></div><button data-preset="A">方案 A · 围坐交流</button><button data-preset="B">方案 B · 留出活动区</button></div><div id="issues" class="issues"></div><section id="proposal-panel" class="proposal-panel"></section>',
-'<div class="editing"><div id="object-title"><h3>点击一件家具</h3><p class="subtle">查看它的尺寸与位置，或在空间里拖动。</p></div><form id="move" hidden><label>横向 X<input id="x" aria-label="横向 X" type="number" step=".1" required></label><label>纵向 Z<input id="z" aria-label="纵向 Z" type="number" step=".1" required></label><label>方向<select id="rotation" aria-label="家具方向"><option value="0">0°</option><option value="90">90°</option></select></label><button class="primary">更新位置</button></form></div></section>',
+'<div class="editing"><div id="object-title"><h3>点击一件家具</h3><p class="subtle">查看它的尺寸与位置，或在空间里拖动。</p></div><form id="move" hidden><label>横向 X<input id="x" aria-label="横向 X" type="number" step=".1" required></label><label>纵向 Z<input id="z" aria-label="纵向 Z" type="number" step=".1" required></label><label>方向<select id="rotation" aria-label="家具方向"><option value="0">0°</option><option value="90">90°</option></select></label><button class="primary">更新位置</button></form></div><section id="measurement-panel" class="measurement-panel"></section></section>',
 '<aside><nav class="tabs" aria-label="空间讨论"><button data-tab="needs" aria-selected="true">我们的要求</button><button data-tab="story" aria-selected="false">来处</button><button data-tab="decide" aria-selected="false">一起决定</button></nav><div id="panel"></div></aside></div>',
 '<footer><span id="durable">合成实验 · 共同历史保存在独立实验目录</span><div><button id="export">导出当前方案</button><button id="revoke" hidden>撤销另一位访问</button></div><p>只检查简化的平面几何，不是装修或安全规范验收。加入链接仅供本机实验使用。</p></footer></main>',
 '<dialog id="report-dialog" aria-labelledby="report-title"><form id="report-form"><p class="eyebrow">把实际结果带回来</p><h2 id="report-title">记录我的行动结果</h2><p id="report-action-title"></p><label>结果说明<textarea id="report-note" aria-label="结果说明" maxlength="360" placeholder="做了什么，测得什么，或为什么还没完成"></textarea></label><label>结果来源<input id="report-source" aria-label="本次结果来源" maxlength="240" placeholder="例如：本人卷尺测量，门宽 82 厘米"></label><p class="subtle">只记录本人的说法；填写来源不等于核验通过。双方都可看到这份记录。</p><p id="report-error" class="warning" role="status" aria-live="polite"></p><div class="button-row"><button type="button" id="report-cancel">取消</button><button type="submit" id="report-submit" class="primary">保存结果</button></div></form></dialog>',
@@ -18,10 +19,19 @@ const $ = (id) => document.querySelector(id), KEY = "meetmind.shared-space.sessi
 const pendingInvite = new URLSearchParams(location.hash.slice(1)).get("join");
 let session = null, state = null, selected = "desk", tab = "needs", mode = "3d";
 let busy = false, polling = false, lost = false, noticeTimer, reportDraft = null;
-const scene = new SpaceView($("#viewport"), { onSelect: select, onMove: fields => { if (proposals.previewing) { scene.apply({...proposals.proposal.preview,violations:proposals.proposal.violations}); notify("正在预览提案，请先退出预览再移动家具。", true); } else return send({ type: "object.move", ...fields }); } });
+const scene = new SpaceView($("#viewport"), { onSelect: select, onMove: fields => { if (measurements.previewing || proposals.previewing) { const p = measurements.proposal || proposals.proposal; scene.apply({...p.preview,violations:p.violations}); notify("正在预览提案，请先退出预览再移动家具。", true); } else return send({ type: "object.move", ...fields }); } });
 const proposals = new ProposalPanel($("#proposal-panel"), {
   getState: () => state, getSession: () => session, request, receive, notify,
-  preview: value => { $("#preview-label").hidden = !value; if (value || state) scene.apply(value || state); }
+  preview: value => { if (value) measurements.clearPreview(); $("#preview-label").textContent = "布局提案预览 · 仅你可见，共同方案尚未改变"; $("#preview-label").hidden = !value; if (value || state) scene.apply(value || state); }
+});
+const measurements = new MeasurementPanel($("#measurement-panel"), {
+  getState: () => state, getSession: () => session, request, send, notify,
+  beforePreview: () => proposals.clearPreview(),
+  preview: value => {
+    $("#preview-label").textContent = "测量预览 · 仅你可见，共同尺寸尚未改变";
+    $("#preview-label").hidden = !value;
+    if (value || state) scene.apply(value || state);
+  }
 });
 const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 function notify(text, error = false) {
@@ -39,7 +49,8 @@ async function request(path, body, token = session?.token) {
 function receive(result) {
   state = result.state;
   proposals.update(state, result.model_enabled);
-  scene.apply(proposals.previewing && proposals.proposal ? {...proposals.proposal.preview, violations:proposals.proposal.violations} : state);
+  measurements.update(state);
+  scene.apply(measurements.previewing && measurements.proposal ? {...measurements.proposal.preview, violations:measurements.proposal.violations} : proposals.previewing && proposals.proposal ? {...proposals.proposal.preview, violations:proposals.proposal.violations} : state);
   scene.select(selected);
   $("#version").textContent = "方案 " + String(state.revision).padStart(2, "0");
   $("#sync").textContent = "历史已保存 · 自动同步"; $("#identity").textContent = state.members[session.viewer] + " · 我的实验身份";
@@ -55,7 +66,7 @@ async function connect(fresh = false) {
 }
 async function send(command) {
   if (busy || !state || lost) { if (state) scene.apply(state); return false; }
-  proposals.clearPreview(); busy = true; $("#sync").textContent = "保存中…";
+  measurements.clearPreview(); proposals.clearPreview(); busy = true; $("#sync").textContent = "保存中…";
   try {
     const result = await request("/space-api/command", { expected_sequence: state.sequence, request_id: crypto.randomUUID(), command });
     receive(result); notify(command.type === "decision.set" ? "已记录你对这个版本的选择。" : "变化已保存，对方会看到同一份方案。");
@@ -65,7 +76,7 @@ async function send(command) {
     if (error.status === 409) {
       try {
         const result = await request("/space-api/state");
-        state = result.state; proposals.update(state, result.model_enabled); scene.apply(state); renderIssues();
+        state = result.state; proposals.update(state, result.model_enabled); measurements.update(state); scene.apply(state); renderIssues();
         window.__space = { state, viewer: session.viewer, diagnostics: () => scene.diagnostics() };
         $("#version").textContent = "方案 " + String(state.revision).padStart(2, "0");
         $("#sync").textContent = "已更新，请检查后重试";
@@ -77,7 +88,7 @@ async function send(command) {
 function select(id) { selected = id; scene.select(id); renderObject(); }
 function renderObject() {
   const object = state?.objects.find(o => o.id === selected); $("#move").hidden = !object;
-  $("#object-title").innerHTML = object ? "<h3>" + esc(object.label) + '</h3><p class="subtle">' + object.width + " × " + object.depth + " 米 · " + (object.source_id ? "带着一段共同来历" : "合成家具尺寸") + "</p>" : "<h3>点击一件家具</h3>";
+  $("#object-title").innerHTML = object ? "<h3>" + esc(object.label) + '</h3><p class="subtle">' + object.width + " × " + object.depth + " 米 · " + (object.measurement_id ? "采用参与者测量" : object.source_id ? "带着一段共同来历 · 合成尺寸" : "合成家具尺寸") + "</p>" : "<h3>点击一件家具</h3>";
   if (object) { $("#x").value = object.x; $("#z").value = object.z; $("#rotation").value = object.rotation; }
 }
 function renderIssues() {
@@ -107,12 +118,21 @@ function renderPanel() {
         return '<article class="decision"><span class="avatar ' + id + '">' + esc(name.slice(0,1)) + "</span><div><strong>" + esc(name) + "</strong><p>" + (d ? esc(statusText[d.status]) + (current ? "" : " · 旧方案 " + d.revision) : "还没有作出选择") + "</p>" + (d?.note ? "<small>" + esc(d.note) + "</small>" : "") + "</div><small>" + (current ? "当前版本" : "待确认") + "</small></article>";
       }).join("") + '</div><form id="decision-form"><label>我想补充<textarea id="decision-note" aria-label="决定说明" maxlength="500" placeholder="可以指出分歧，也可以先不决定"></textarea></label><div class="decision-buttons"><button name="status" value="accepted" class="primary" ' + (state.violations.length || state.requirements.some(r=>r.review_needed) ? "disabled" : "") + '>我接受这个版本</button><button name="status" value="changes">还需要调整</button><button name="status" value="measure">先去测量</button><button name="status" value="defer">暂不决定</button></div></form>' +
       '<section class="next-step"><h3>把下一步带回生活</h3><p class="subtle">例如：周末量一下门宽，再决定是否买这张桌子。</p><form id="action-form"><label>我的下一步<input id="action-text" aria-label="我的下一步" maxlength="200" required placeholder="写下一件自己愿意做的事"></label><div class="action-fields"><label>截止时间<input id="action-due" aria-label="截止时间" maxlength="80" placeholder="例如：9月19日前（不自动提醒）"></label><label>完成标准<input id="action-criteria" aria-label="完成标准" maxlength="360" placeholder="做到什么算完成"></label><label>待测量事项<input id="action-measurement" aria-label="待测量事项" maxlength="240" placeholder="需要测什么"></label><label>结果来源<input id="action-source" aria-label="结果来源" maxlength="240" placeholder="照片、尺寸或链接"></label></div><button>留下我的行动</button></form>' +
-      state.actions.map(a => '<article class="action"><strong>' + esc(state.members[a.owner]) + " · " + esc(a.text) + "</strong>" + (a.due_at ? "<p>截止：" + esc(a.due_at) + "</p>" : "") + (a.completion_criteria ? "<p>完成标准：" + esc(a.completion_criteria) + "</p>" : "") + (a.measurement ? "<p>待测量：" + esc(a.measurement) + "</p>" : "") + (a.result_source ? "<p>本人提供的来源：" + esc(a.result_source) + "</p>" : "") + "<p>" + (a.status === "done" ? "本人自报已完成 · 未独立核验" : a.status === "not_done" ? "本人自报未完成" : "尚无完成报告") + (a.report_note ? " · " + esc(a.report_note) : "") + "</p>" + (a.owner === session.viewer ? '<div class="button-row"><button data-action="' + esc(a.id) + '" data-status="done">自报完成</button><button data-action="' + esc(a.id) + '" data-status="not_done">未完成</button><button data-action="' + esc(a.id) + '" data-status="pending">撤回报告</button></div>' : "") + "</article>").join("") + "</section>";
+      state.actions.map(a => '<article class="action"><strong>' + esc(state.members[a.owner]) + " · " + esc(a.text) + "</strong>" + (a.due_at ? "<p>截止：" + esc(a.due_at) + "</p>" : "") + (a.completion_criteria ? "<p>完成标准：" + esc(a.completion_criteria) + "</p>" : "") + (a.measurement ? "<p>待测量：" + esc(a.measurement) + "</p>" : "") + (a.result_source ? "<p>本人提供的来源：" + esc(a.result_source) + "</p>" : "") + "<p>" + (a.status === "done" ? "本人自报已完成 · 未独立核验" : a.status === "not_done" ? "本人自报未完成" : "尚无完成报告") + (a.report_note ? " · " + esc(a.report_note) : "") + "</p>" + (a.owner === session.viewer ? '<div class="button-row"><button data-action="' + esc(a.id) + '" data-status="done">自报完成</button><button data-action="' + esc(a.id) + '" data-status="not_done">未完成</button><button data-action="' + esc(a.id) + '" data-status="pending">撤回报告</button>' + (a.status === "done" ? '<button data-action-measurement="' + esc(a.id) + '">把测量带回空间</button>' : "") + '</div>' : "") + "</article>").join("") + "</section>";
   }
 }
 $("#panel").addEventListener("click", e => {
   const r=e.target.closest("[data-requirement]"); if(r)send({type:"requirement.set",requirement_id:r.dataset.requirement,enabled:r.dataset.enabled==="true"});
   const w=e.target.closest("[data-withdraw]"); if(w)send({type:"memory.withdraw",memory_id:w.dataset.withdraw});
+  const measure = e.target.closest("[data-action-measurement]");
+  if (measure && !busy && state) {
+    const target = document.querySelector("#measurement-action");
+    if ([...target.options].some(option => option.value === measure.dataset.actionMeasurement)) {
+      target.value = measure.dataset.actionMeasurement;
+      $("#measurement-panel").scrollIntoView({ behavior: "smooth", block: "center" });
+      document.querySelector("#measurement-object").focus({ preventScroll: true });
+    }
+  }
   const a = e.target.closest("[data-action]");
   if (a) {
     if (busy || lost || !state) return;
@@ -172,7 +192,7 @@ const timer=setInterval(async()=>{
     if(r.state.sequence!==state?.sequence){if(($("#report-dialog").open || document.activeElement?.matches("input,textarea,select")))$("#sync").textContent="对方有更新 · 输入结束后同步";else receive(r);}
   }catch(e){
     if(session?.token!==token)return;
-    if(e.status===403){lost=true;proposals.reset();$("#report-dialog").close();state=null;scene.apply({room:{width:6,depth:5,height:2.8,door:{x:3,z:.55,width:1.2,depth:1.1}},objects:[],requirements:[],violations:[]});$("#panel").replaceChildren();$("#issues").replaceChildren();$("#move").hidden=true;$("#object-title").textContent="";$("#sync").textContent="当前角色访问已失效";delete window.__space;notify("当前访问已失效，需要新的加入链接。",true);}
+    if(e.status===403){lost=true;measurements.clearPreview();measurements.update(null);proposals.reset();$("#report-dialog").close();state=null;scene.apply({room:{width:6,depth:5,height:2.8,door:{x:3,z:.55,width:1.2,depth:1.1}},objects:[],requirements:[],violations:[]});$("#panel").replaceChildren();$("#issues").replaceChildren();$("#move").hidden=true;$("#object-title").textContent="";$("#sync").textContent="当前角色访问已失效";delete window.__space;notify("当前访问已失效，需要新的加入链接。",true);}
     else $("#sync").textContent="连接暂时中断，正在重试";
   }finally{polling=false;}
 },1200);

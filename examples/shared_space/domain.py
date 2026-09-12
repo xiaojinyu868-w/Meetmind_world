@@ -1,6 +1,7 @@
 """Deterministic synthetic shared space; horizontal geometry is not a building standard."""
 from copy import deepcopy
 import math
+from datetime import date
 
 SCHEMA = "meetmind.shared-space.v1"
 MEMBERS = {"alice": "小满", "bo": "阿博"}
@@ -65,9 +66,30 @@ def _unique(items):
     _require(len(set(ids)) == len(ids), "ID 不能重复")
 
 
+def _dimensions(value):
+    for key in ("width", "depth", "height"):
+        _number(value[key], key)
+        _require(.05 <= value[key] <= 10, "家具测量尺寸须在 0.05 到 10 米之间")
+
+
+def _date(value):
+    _text(value, "测量日期", 10)
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError:
+        raise ValueError("测量日期须为 YYYY-MM-DD") from None
+    _require(parsed.isoformat() == value, "测量日期须为 YYYY-MM-DD")
+
+
+def measurement_is_current(state, measurement):
+    action = next(a for a in state["actions"] if a["id"] == measurement["action_id"])
+    return (not measurement["withdrawn"] and action["status"] == "done"
+            and action["report_version"] == measurement["report_version"])
+
+
 def validate_state(state):
     _keys(state, ("schema", "revision", "sequence", "members", "room", "objects",
-                  "requirements", "memories", "decisions", "actions", "history"))
+                  "requirements", "memories", "decisions", "actions", "measurements", "history"))
     _require(state["schema"] == SCHEMA and state["members"] == MEMBERS, "状态 schema 或参与者无效")
     _integer(state["revision"], 1)
     _integer(state["sequence"])
@@ -78,11 +100,11 @@ def validate_state(state):
     _require(room["unit"] == "m", "空间单位必须为米")
     _keys(room["door"], ("x", "z", "width", "depth"))
     _rectangle(room["door"])
-    for name in ("objects", "requirements", "memories", "actions"):
+    for name in ("objects", "requirements", "memories", "actions", "measurements"):
         _unique(state[name])
     memory_ids = {item["id"] for item in state["memories"]}
     for item in state["objects"]:
-        _keys(item, ("id", "label", "kind", "width", "depth", "height", "x", "z", "rotation", "cost"), ("source_id",))
+        _keys(item, ("id", "label", "kind", "width", "depth", "height", "x", "z", "rotation", "cost"), ("source_id", "measurement_id"))
         _text(item["label"], maximum=120)
         _text(item["kind"], maximum=80)
         _rectangle(item)
@@ -122,13 +144,36 @@ def validate_state(state):
         _text(decision["note"], empty=True)
     for action in state["actions"]:
         _keys(action, ("id", "owner", "text", "status", "due_at", "completion_criteria",
-                       "measurement", "result_source", "report_note"))
+                       "measurement", "result_source", "report_note", "report_version"))
         _actor(action["owner"])
+        _integer(action["report_version"])
         _text(action["text"], maximum=240)
         _require(type(action["status"]) is str and action["status"] in ACTION_STATUS, "行动状态无效")
         for key, maximum in (("due_at", 80), ("completion_criteria", 360), ("measurement", 240),
                              ("result_source", 240), ("report_note", 360)):
             _text(action[key], key, maximum, empty=True)
+    action_ids = {item["id"] for item in state["actions"]}
+    object_ids = {item["id"] for item in state["objects"]}
+    measurement_ids = {item["id"] for item in state["measurements"]}
+    for item in state["measurements"]:
+        _keys(item, ("id", "owner", "action_id", "object_id", "width", "depth", "height",
+                     "source", "measured_on", "report_version", "withdrawn"))
+        _actor(item["owner"])
+        _require(item["action_id"] in action_ids and item["object_id"] in object_ids, "测量关联不存在")
+        action = next(a for a in state["actions"] if a["id"] == item["action_id"])
+        _require(item["owner"] == action["owner"], "测量必须来自行动本人")
+        _integer(item["report_version"], 1)
+        _require(item["report_version"] <= action["report_version"], "测量报告版本无效")
+        _dimensions(item)
+        _text(item["source"], "测量来源", 240)
+        _date(item["measured_on"])
+        _require(type(item["withdrawn"]) is bool, "测量撤回状态无效")
+    for item in state["objects"]:
+        if "measurement_id" in item:
+            _require(item["measurement_id"] in measurement_ids, "尺寸测量来源不存在")
+            measurement = next(m for m in state["measurements"] if m["id"] == item["measurement_id"])
+            _require(measurement["object_id"] == item["id"], "尺寸来源对象不匹配")
+            _require(all(item[k] == measurement[k] for k in ("width", "depth", "height")), "尺寸与测量来源不一致")
     _require(type(state["history"]) is list and len(state["history"]) == state["sequence"], "历史游标不连续")
     for index, entry in enumerate(state["history"], 1):
         _keys(entry, ("sequence", "actor", "type", "summary", "revision"))
@@ -168,7 +213,7 @@ def initial_state():
                  "version": 1, "withdrawn": False, "replies": {}},
                 {"id": "bridge", "owner": "bo", "text": "我们一起做的纸桥想要保留，放在展示架上。",
                  "version": 1, "withdrawn": False, "replies": {}}],
-            "decisions": {}, "actions": [], "history": []}
+            "decisions": {}, "actions": [], "measurements": [], "history": []}
 
 
 def _bounds(item):
@@ -220,6 +265,13 @@ def evaluate(state):
         if not any(item["id"] == "shelf" and item.get("source_id") == "bridge" for item in objects):
             result.append({"id": "keep:shelf", "object_ids": [], "requirement_id": "keep",
                            "message": "保留纸桥的要求尚未落实到展示架"})
+    for item in objects:
+        if "measurement_id" not in item:
+            continue
+        measurement = _find(state["measurements"], item["measurement_id"])
+        if not measurement_is_current(state, measurement):
+            result.append({"id": f"measurement-stale:{item['id']}", "object_ids": [item["id"]],
+                           "message": f"{item['label']}的尺寸来源已撤回或行动报告已变化，请重新测量并应用；当前尺寸暂保留"})
     return result
 
 
@@ -254,6 +306,21 @@ def _preview_moves(state, moves, maximum=4):
     return result, changed
 
 
+def measurement_preview(state, measurement_id):
+    """Apply a recorded observation to a copy; conflicts remain visible, never hidden."""
+    validate_state(state)
+    measurement = _find(state["measurements"], measurement_id)
+    _require(measurement_is_current(state, measurement), "测量依据已撤回或报告已变化，请本人重新记录")
+    result = deepcopy(state)
+    item = _find(result["objects"], measurement["object_id"])
+    _require(item.get("measurement_id") != measurement_id, "这份测量已经用于当前尺寸")
+    for key in ("width", "depth", "height"):
+        item[key] = measurement[key]
+    item["measurement_id"] = measurement_id
+    validate_state(result)
+    return result
+
+
 def apply_command(state, actor, command):
     """Validate and copy before mutation; deterministic action IDs enable replay."""
     _actor(actor)
@@ -266,6 +333,9 @@ def apply_command(state, actor, command):
         "layout.patch": ("basis_revision", "moves", "provenance"),
         "requirement.set": ("requirement_id", "enabled"), "memory.edit": ("memory_id", "text"),
         "memory.withdraw": ("memory_id",), "memory.reply": ("memory_id", "status", "note"),
+        "measurement.record": ("action_id", "object_id", "width", "depth", "height", "source", "measured_on"),
+        "measurement.apply": ("measurement_id", "basis_revision"),
+        "measurement.withdraw": ("measurement_id",),
         "decision.set": ("status", "note"), "action.add": ("text",), "action.report": ("action_id", "status"),
     }
     _require(kind in schemas, "不支持的命令")
@@ -354,6 +424,33 @@ def apply_command(state, actor, command):
                      "经历依据已变化，请要求的本人重新核对")
         result["decisions"][actor] = {"revision": result["revision"], "status": command["status"], "note": note}
         summary = f"本人选择：{DECISIONS[command['status']]}第 {result['revision']} 版"
+    elif kind == "measurement.record":
+        action = _find(result["actions"], command["action_id"])
+        _require(action["owner"] == actor, "只能记录本人行动的测量")
+        _require(action["status"] == "done", "请先提交本人完成报告，再记录测量")
+        _find(result["objects"], command["object_id"])
+        _dimensions(command)
+        _date(command["measured_on"])
+        measurement = {key: command[key] for key in ("action_id", "object_id", "width", "depth", "height", "measured_on")}
+        measurement.update(id=f"measurement-{result['sequence'] + 1}", owner=actor,
+                           source=_text(command["source"], "测量来源", 240),
+                           report_version=action["report_version"], withdrawn=False)
+        result["measurements"].append(measurement)
+        summary = f"本人记录家具测量 {measurement['id']}；未改变共同尺寸"
+    elif kind == "measurement.apply":
+        _integer(command["basis_revision"], 1)
+        _require(command["basis_revision"] == state["revision"], "测量预览方案已过期，请重新预览")
+        result = measurement_preview(state, command["measurement_id"])
+        measurement = _find(result["measurements"], command["measurement_id"])
+        change_revision = True
+        summary = f"将测量 {measurement['id']} 应用于 {measurement['object_id']} 的尺寸；双方需重新决定"
+    elif kind == "measurement.withdraw":
+        measurement = _find(result["measurements"], command["measurement_id"])
+        _require(measurement["owner"] == actor, "只能撤回本人的测量")
+        _require(not measurement["withdrawn"], "测量已撤回")
+        measurement["withdrawn"] = True
+        change_revision = any(item.get("measurement_id") == measurement["id"] for item in result["objects"])
+        summary = f"撤回本人测量 {measurement['id']}；若已应用则保留尺寸并标记依据失效"
     elif kind == "action.add":
         text = _text(command["text"], maximum=240)
         fields = {
@@ -363,12 +460,15 @@ def apply_command(state, actor, command):
             "result_source": _text(command.get("result_source", ""), "结果来源", 240, empty=True),
         }
         result["actions"].append({"id": f"action-{result['sequence'] + 1}", "owner": actor, "text": text,
-                                   "status": "pending", **fields, "report_note": ""})
+                                   "status": "pending", **fields, "report_note": "", "report_version": 0})
         summary = f"添加本人下一步：{text}"
     else:
         item = _find(result["actions"], command["action_id"])
         _require(item["owner"] == actor, "只能报告本人的行动结果")
         _require(type(command["status"]) is str and command["status"] in ACTION_STATUS, "行动状态无效")
+        item["report_version"] += 1
+        linked = {m["id"] for m in result["measurements"] if m["action_id"] == item["id"]}
+        change_revision = any(obj.get("measurement_id") in linked for obj in result["objects"])
         item["status"] = command["status"]
         item["report_note"] = _text(command.get("note", ""), "行动报告", 360, empty=True)
         item["result_source"] = _text(command.get("result_source", item["result_source"]), "结果来源", 240, empty=True)
@@ -419,6 +519,17 @@ def export_summary(state, actor):
     for item in state["objects"]:
         lines.append(f"- {_md(item['label'])} [{item['id']}]：中心 ({item['x']}, {item['z']}) 米；"
                      f"宽深高 {item['width']} × {item['depth']} × {item['height']} 米；旋转 {item['rotation']}°；合成费用 {item['cost']} 元。")
+    lines.extend(["", "## 家具测量来源", ""])
+    if not state["measurements"]:
+        lines.append("- 尚无参与者测量；使用合成尺寸。")
+    for measurement in state["measurements"]:
+        applied = any(obj.get("measurement_id") == measurement["id"] for obj in state["objects"])
+        validity = "本人测量，未经独立核验" if measurement_is_current(state, measurement) else "依据已失效，不可继续采用"
+        lines.append(f"- {_md(measurement['id'])}：{MEMBERS[measurement['owner']]}；物品 {_md(measurement['object_id'])}；"
+                     f"{measurement['width']} × {measurement['depth']} × {measurement['height']} 米；"
+                     f"日期 {_md(measurement['measured_on'])}；来源 {_md(measurement['source'])}；"
+                     f"关联行动 {_md(measurement['action_id'])} 的第 {measurement['report_version']} 份报告；"
+                     f"{'用于当前尺寸' if applied else '未用于当前尺寸'}；{validity}。")
     lines.extend(["", "## 经历与各自回应", ""])
     for memory in state["memories"]:
         lines.append(f"- {MEMBERS[memory['owner']]}的经历 {_md(memory['id'])}，版本 {memory['version']}："

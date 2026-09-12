@@ -12,7 +12,7 @@ from uuid import uuid4
 from examples.shared_experience.serve import make_handler, lab_data_directory, ThreadingHTTPServer
 from examples.shared_experience.session_store import SQLiteSessionStore
 from examples.shared_experience.pair_access import PairAccessStore
-from .domain import initial_state, apply_command, evaluate, export_summary
+from .domain import initial_state, apply_command, evaluate, export_summary, measurement_preview
 from .proposals import proposal_messages, parse_proposal, demo_proposal
 
 
@@ -82,6 +82,21 @@ class SpaceService:
             result["violations"] = evaluate(result)
             return result
 
+
+    def preview_measurement(self, sid, actor, body):
+        if type(body) is not dict or set(body) != {"measurement_id", "expected_sequence"}:
+            raise ValueError("测量预览字段无效")
+        if type(body["expected_sequence"]) is not int:
+            raise ValueError("测量预览版本无效")
+        with self.lock:
+            _, state = self._load(sid)
+            if actor not in state["members"]:
+                raise ValueError("参与者无效")
+            if state["sequence"] != body["expected_sequence"]:
+                raise Conflict("空间已变化，请查看最新记录后预览")
+            preview = measurement_preview(state, body["measurement_id"])
+            return {"preview": preview, "violations": evaluate(preview), "measurement_id": body["measurement_id"],
+                    "basis_revision": state["revision"], "basis_sequence": state["sequence"]}
 
     def propose(self, sid, actor, body):
         if type(body) is not dict or set(body) != {"mode", "instruction", "expected_sequence"}:
@@ -204,6 +219,8 @@ def make_space_handler(service, access, directory, port):
                     identity = self.identity()
                 except ValueError as exc:
                     return self.respond(403, {"error": str(exc)})
+                if self.path == "/space-api/measurement/preview":
+                    return self.respond(200, service.preview_measurement(identity["session_id"], identity["viewer"], body))
                 if self.path == "/space-api/proposal":
                     result = service.propose(identity["session_id"], identity["viewer"], body)
                     # Recheck access after a potentially long-running model call.
