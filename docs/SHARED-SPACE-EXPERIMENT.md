@@ -84,3 +84,7 @@ World -> SpaceSpec -> ObjectInstance -> Constraint -> LayoutRevision -> Particip
 语义位置提案的适配、人工预览和原子应用已接通，真实模型尚未实测，见[提案验收](SPACE-PROPOSAL-VERIFICATION.md)。
 家具测量 → 本端预览 → 明确应用尺寸 → 重新决定已接通，测量/报告撤回会让相关尺寸来源失效。
 房间/门区尺寸、预算/妥协编辑、完整行动计划和实验对照分组尚未实现；未进行真人研究。
+
+新增经历→本人主动关联活动区域→空间冲突→来源纠正/撤回后的本人重核已实现，
+见[经历与要求验收](LIVING-CONTEXT-VERIFICATION.md)。当前由参与者明确转写要求，并非模型根据上下文自动提炼；
+尚不能以该功能验证前述上下文协助对照B的收益。

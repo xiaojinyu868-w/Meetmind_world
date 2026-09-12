@@ -130,6 +130,38 @@ class SpaceIntegrationTests(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertIn("依据已失效", document["text"])
 
+    def test_personal_context_http_owner_and_version_boundaries(self):
+        code, created = self.command(0, {"type": "memory.add", "text": "一起练习",
+            "occurred_on": "2026-09-12", "source_note": "本人录入"}, rid="context-add-memory")
+        self.assertEqual(code, 200)
+        self.assertEqual(created["state"]["memories"][-1]["owner"], "alice")
+        code, req = self.command(1, {"type": "requirement.add", "label": "我想留活动区",
+            "source_id": "memory-1", "source_version": 1, "basis_revision": 1,
+            "zone": {"x": 4.8, "z": 2, "width": 1, "depth": 1}}, rid="context-add-req", guest=True)
+        self.assertEqual(code, 200)
+        self.assertEqual(req["state"]["requirements"][-1]["owner"], "bo")
+        code, _ = self.command(2, {"type": "requirement.update", "requirement_id": "requirement-2",
+            "label": "替人修改", "source_id": None, "source_version": 0, "basis_revision": 2,
+            "zone": {"x": 4, "z": 2, "width": 1, "depth": 1}}, rid="context-forge")
+        self.assertEqual(code, 400)
+        code, _ = self.command(2, {"type": "memory.edit", "memory_id": "memory-1",
+            "basis_version": 1, "text": "替人纠正"}, rid="context-forge-mem", guest=True)
+        self.assertEqual(code, 400)
+        code, edited = self.command(2, {"type": "memory.edit", "memory_id": "memory-1",
+            "basis_version": 1, "text": "还没一起练习"}, rid="context-edit-memory")
+        self.assertEqual(code, 200)
+        self.assertTrue(edited["state"]["requirements"][-1]["review_needed"])
+        code, _ = self.command(3, {"type": "requirement.set", "requirement_id": "requirement-2",
+            "enabled": True, "source_version": 1}, rid="context-stale-confirm", guest=True)
+        self.assertEqual(code, 400)
+        self.assertEqual(self.service.state(self.sid), edited["state"])
+        reopened = SpaceService(SQLiteSessionStore(self.root / "worlds"))
+        self.assertEqual(reopened.state(self.sid), edited["state"])
+        code, doc = self.http("/space-api/export", token=self.guest["token"])
+        self.assertEqual(code, 200)
+        self.assertIn("参与者录入，未经独立核验", doc["text"])
+        self.assertIn("需要本人重新核对", doc["text"])
+
     def test_failed_store_write_does_not_publish_new_state(self):
         before = self.service.state(self.sid)
         original = self.service.store.save

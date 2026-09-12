@@ -435,7 +435,7 @@ export class SpaceView {
 
   diagnostics() {
     const info = this.renderer.info;
-    return { object_scales: Object.fromEntries([...this.objects].map(([id, root]) => [id, root.scale.toArray()])), mode: this.mode, objects: this.objects.size, selected_id: this.selectedId, object_uuids: Object.fromEntries([...this.objects].map(([id, root]) => [id, root.uuid])), mesh_uuids: Object.fromEntries([...this.objects].map(([id, root]) => [id, root.children.filter((child) => child.isMesh).map((child) => child.uuid)])), draw_calls: info.render.calls, triangles: info.render.triangles, geometries: info.memory.geometries, textures: info.memory.textures, dpr: this.renderer.getPixelRatio(), shadows: { lights: 1, map: 1024 }, viewport: { width: this.canvas.clientWidth, height: this.canvas.clientHeight }, dragging: this.drag?.id || null };
+    return { region_ids: [...this.regions.keys()], object_scales: Object.fromEntries([...this.objects].map(([id, root]) => [id, root.scale.toArray()])), mode: this.mode, objects: this.objects.size, selected_id: this.selectedId, object_uuids: Object.fromEntries([...this.objects].map(([id, root]) => [id, root.uuid])), mesh_uuids: Object.fromEntries([...this.objects].map(([id, root]) => [id, root.children.filter((child) => child.isMesh).map((child) => child.uuid)])), draw_calls: info.render.calls, triangles: info.render.triangles, geometries: info.memory.geometries, textures: info.memory.textures, dpr: this.renderer.getPixelRatio(), shadows: { lights: 1, map: 1024 }, viewport: { width: this.canvas.clientWidth, height: this.canvas.clientHeight }, dragging: this.drag?.id || null };
   }
 
   _release(root) {

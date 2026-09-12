@@ -120,13 +120,23 @@ def validate_state(state):
         _require(type(item["enabled"]) is bool and type(item["review_needed"]) is bool, "要求开关无效")
         _integer(item["source_version"])
         _require(item["source_id"] is None or item["source_id"] in memory_ids, "要求来源不存在")
+        if item["source_id"] is not None:
+            memory = next(m for m in state["memories"] if m["id"] == item["source_id"])
+            _require(item["source_version"] <= memory["version"], "要求依据版本超前")
+        else:
+            _require(item["source_version"] == 0, "无经历来源时版本须为零")
         if "zone" in item:
             _keys(item["zone"], ("x", "z", "width", "depth"))
             _rectangle(item["zone"])
     for item in state["memories"]:
-        _keys(item, ("id", "owner", "text", "version", "withdrawn", "replies"))
+        _keys(item, ("id", "owner", "text", "version", "withdrawn", "replies",
+                     "origin", "occurred_on", "source_note"))
         _actor(item["owner"])
         _text(item["text"])
+        _require(item["origin"] in ("synthetic", "participant-entry"), "经历来源类型无效")
+        if item["occurred_on"] is not None:
+            _date(item["occurred_on"])
+        _text(item["source_note"], "经历来源说明", 240, empty=True)
         _integer(item["version"], 1)
         _require(type(item["withdrawn"]) is bool, "撤回状态无效")
         _require(type(item["replies"]) is dict, "回应必须是对象")
@@ -210,9 +220,9 @@ def initial_state():
                  "source_id": "bridge", "source_version": 1, "review_needed": False}],
             "memories": [
                 {"id": "office", "owner": "alice", "text": "上次我们在客厅开视频会议，另一方被打扰。",
-                 "version": 1, "withdrawn": False, "replies": {}},
+                 "version": 1, "withdrawn": False, "replies": {}, "origin": "synthetic", "occurred_on": None, "source_note": "人工合成样例"},
                 {"id": "bridge", "owner": "bo", "text": "我们一起做的纸桥想要保留，放在展示架上。",
-                 "version": 1, "withdrawn": False, "replies": {}}],
+                 "version": 1, "withdrawn": False, "replies": {}, "origin": "synthetic", "occurred_on": None, "source_note": "人工合成样例"}],
             "decisions": {}, "actions": [], "measurements": [], "history": []}
 
 
@@ -331,6 +341,9 @@ def apply_command(state, actor, command):
     schemas = {
         "object.move": ("object_id", "x", "z", "rotation"), "layout.preset": ("preset",),
         "layout.patch": ("basis_revision", "moves", "provenance"),
+        "memory.add": ("text", "occurred_on", "source_note"),
+        "requirement.add": ("label", "source_id", "source_version", "zone"),
+        "requirement.update": ("requirement_id", "label", "source_id", "source_version", "zone"),
         "requirement.set": ("requirement_id", "enabled"), "memory.edit": ("memory_id", "text"),
         "memory.withdraw": ("memory_id",), "memory.reply": ("memory_id", "status", "note"),
         "measurement.record": ("action_id", "object_id", "width", "depth", "height", "source", "measured_on"),
@@ -344,6 +357,14 @@ def apply_command(state, actor, command):
         optional = ("due_at", "completion_criteria", "measurement", "result_source")
     elif kind == "action.report":
         optional = ("note", "result_source")
+    elif kind == "memory.edit":
+        optional = ("occurred_on", "source_note", "basis_version")
+    elif kind in ("memory.reply", "memory.withdraw"):
+        optional = ("basis_version",)
+    elif kind == "requirement.set":
+        optional = ("source_version",)
+    elif kind in ("requirement.add", "requirement.update"):
+        optional = ("basis_revision",)
     _keys(command, ("type",) + schemas[kind], optional)
     result = deepcopy(state)
     change_revision = False
@@ -381,19 +402,66 @@ def apply_command(state, actor, command):
         _require(not evaluate(result), "布局提案最终仍有空间冲突，未应用任何修改")
         change_revision = True
         summary = f"应用布局提案，移动 {len(changed)} 个物品；{source}；参与者仍需分别选择是否接受"
+    elif kind == "memory.add":
+        occurred_on = command["occurred_on"]
+        if occurred_on is not None:
+            _date(occurred_on)
+        result["memories"].append({"id": f"memory-{state['sequence'] + 1}", "owner": actor,
+                                  "text": _text(command["text"]), "occurred_on": occurred_on,
+                                  "source_note": _text(command["source_note"], "经历来源说明", 240, empty=True),
+                                  "origin": "participant-entry", "version": 1, "withdrawn": False, "replies": {}})
+        summary = "本人添加一段经历；未自动生成要求或改变布局"
+    elif kind in ("requirement.add", "requirement.update"):
+        if "basis_revision" in command:
+            _integer(command["basis_revision"], 1)
+            _require(command["basis_revision"] == state["revision"], "方案已变化，请重新查看经历与要求后编辑")
+        if kind == "requirement.update":
+            item = _find(result["requirements"], command["requirement_id"])
+            _require(item["owner"] == actor, "只能修改本人的要求")
+            _require("zone" in item, "这个保留物品要求不支持编辑空间区域")
+        _keys(command["zone"], ("x", "z", "width", "depth"))
+        _rectangle(command["zone"])
+        _require(all(.1 <= command["zone"][k] <= 10 for k in ("width", "depth")), "活动区域宽深须在 0.1 到 10 米之间")
+        _require(all(-10 <= command["zone"][k] <= 20 for k in ("x", "z")), "活动区域中心须在 -10 到 20 米之间")
+        _integer(command["source_version"])
+        if command["source_id"] is not None:
+            memory = _find(result["memories"], command["source_id"])
+            _require(not memory["withdrawn"], "经历已撤回，不能作为新依据；可改为本人独立要求")
+            _require(command["source_version"] == memory["version"], "经历版本已变化，请重新查看后关联")
+        else:
+            _require(command["source_version"] == 0, "无经历来源时版本须为零")
+        fields = {"label": _text(command["label"], "要求名称", 180), "source_id": command["source_id"],
+                  "source_version": command["source_version"], "zone": deepcopy(command["zone"]),
+                  "enabled": True, "review_needed": False}
+        if kind == "requirement.add":
+            item = {"id": f"requirement-{state['sequence'] + 1}", "owner": actor, **fields}
+            result["requirements"].append(item)
+        else:
+            item.update(fields)
+        change_revision = True
+        summary = f"本人{'新增并启用' if kind == 'requirement.add' else '修改并确认'}活动区域要求：{item['label']}"
     elif kind == "requirement.set":
         item = _find(result["requirements"], command["requirement_id"])
         _require(item["owner"] == actor, "只能确认本人的要求")
         _require(type(command["enabled"]) is bool, "enabled 必须是布尔值")
         item["enabled"] = command["enabled"]
         if item["source_id"]:
-            item["source_version"] = _find(result["memories"], item["source_id"])["version"]
+            source = _find(result["memories"], item["source_id"])
+            if "source_version" in command:
+                _integer(command["source_version"], 1)
+                _require(command["source_version"] == source["version"], "经历版本已变化，请查看后重新确认")
+            item["source_version"] = source["version"]
+        elif "source_version" in command:
+            _require(type(command["source_version"]) is int and command["source_version"] == 0, "无经历来源时版本须为零")
         item["review_needed"] = False
         change_revision = True
         summary = f"本人确认{'启用' if item['enabled'] else '不启用'}要求：{item['label']}"
     elif kind in ("memory.edit", "memory.withdraw", "memory.reply"):
         item = _find(result["memories"], command["memory_id"])
         _require(not item["withdrawn"], "这条经历已撤回")
+        if "basis_version" in command:
+            _integer(command["basis_version"], 1)
+            _require(command["basis_version"] == item["version"], "经历版本已变化，请重新查看后操作")
         if kind == "memory.reply":
             _require(command["status"] in ("confirmed", "different"), "回应状态无效")
             item["replies"][actor] = {"status": command["status"], "note": _text(command["note"], empty=True)}
@@ -405,6 +473,12 @@ def apply_command(state, actor, command):
             _require(item["owner"] == actor, "只能修改或撤回本人提供的经历")
             if kind == "memory.edit":
                 item["text"] = _text(command["text"])
+                if "occurred_on" in command:
+                    if command["occurred_on"] is not None:
+                        _date(command["occurred_on"])
+                    item["occurred_on"] = command["occurred_on"]
+                if "source_note" in command:
+                    item["source_note"] = _text(command["source_note"], "经历来源说明", 240, empty=True)
                 summary = f"纠正本人经历：{item['id']}"
             else:
                 item["withdrawn"] = True
@@ -495,7 +569,7 @@ def export_summary(state, actor):
                       and state["decisions"][person]["revision"] == state["revision"] for person in MEMBERS))
     lines = ["# MeetMind 共同空间实验摘要", "",
              f"导出者：{MEMBERS[actor]}；方案版本：{state['revision']}；命令游标：{state['sequence']}。",
-             "合成房间、人物、费用与经历；只做水平矩形空间检查。未经真实尺寸测量，不代表建筑或安装验收。",
+             "合成房间、人物、费用与预置经历；参与者新增内容单独标注，未经独立核验。只做水平矩形空间检查，不代表建筑或安装验收。",
              "", f"当前结论：{'双方接受同一版本' if agreed else '尚无当前共同认可的方案'}。", "", "## 本人选择", ""]
     for person, name in MEMBERS.items():
         choice = state["decisions"].get(person)
@@ -532,6 +606,10 @@ def export_summary(state, actor):
                      f"{'用于当前尺寸' if applied else '未用于当前尺寸'}；{validity}。")
     lines.extend(["", "## 经历与各自回应", ""])
     for memory in state["memories"]:
+        provenance = "人工合成样例" if memory["origin"] == "synthetic" else "参与者录入，未经独立核验"
+        lines.append(f"- 经历 {_md(memory['id'])} 来源类型：{provenance}。")
+        if not memory["withdrawn"]:
+            lines.append(f"  - 日期：{_md(memory['occurred_on'] or '未填写')}；来源说明：{_md(memory['source_note'] or '未填写')}。")
         lines.append(f"- {MEMBERS[memory['owner']]}的经历 {_md(memory['id'])}，版本 {memory['version']}："
                      + ("已撤回，不再作为经历依据。" if memory["withdrawn"] else _md(memory["text"])))
         for person, reply in memory["replies"].items():

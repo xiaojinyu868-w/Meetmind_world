@@ -2,6 +2,7 @@ import "./style.css";
 import { SpaceView } from "./SpaceView.js";
 import { ProposalPanel } from "./ProposalPanel.js";
 import { MeasurementPanel } from "./MeasurementPanel.js";
+import { ContextEditor, memoryProvenance, requirementSource } from "./ContextEditor.js";
 document.querySelector("#app").innerHTML = [
 '<header class="top"><a class="brand" href="/">MeetMind <span>world</span></a><span class="experiment">共同空间 · 实验 02</span><div class="account"><span id="identity">正在连接…</span><button id="invite" hidden>邀请另一位</button><button id="new">新建空间</button></div></header>',
 '<main><section class="intro"><div><p class="eyebrow">把生活里的要求，放进我们的空间</p><h1>一起安放，<br>下一段生活。</h1></div><div class="brief"><p>一个人需要安静办公，一个人想留出运动的位置。<br>还有那件一起做的纸桥，我们想把它放在哪里？</p><p class="subtle">6 × 5 米合成房间 · 人工样例，未调用模型</p></div></section>',
@@ -10,7 +11,7 @@ document.querySelector("#app").innerHTML = [
 '<div id="preview-label" hidden>提案预览 · 仅你可见，共同方案尚未改变</div><div id="viewport"></div><div class="view-note"><span id="control-help">选中家具后拖动摆放 · 空白处拖动旋转 · 滚轮缩放</span><span>单位：米</span></div>',
 '<div class="layout-strip"><div><small>从两个想法开始</small><strong>先安排，再讨论</strong></div><button data-preset="A">方案 A · 围坐交流</button><button data-preset="B">方案 B · 留出活动区</button></div><div id="issues" class="issues"></div><section id="proposal-panel" class="proposal-panel"></section>',
 '<div class="editing"><div id="object-title"><h3>点击一件家具</h3><p class="subtle">查看它的尺寸与位置，或在空间里拖动。</p></div><form id="move" hidden><label>横向 X<input id="x" aria-label="横向 X" type="number" step=".1" required></label><label>纵向 Z<input id="z" aria-label="纵向 Z" type="number" step=".1" required></label><label>方向<select id="rotation" aria-label="家具方向"><option value="0">0°</option><option value="90">90°</option></select></label><button class="primary">更新位置</button></form></div><section id="measurement-panel" class="measurement-panel"></section></section>',
-'<aside><nav class="tabs" aria-label="空间讨论"><button data-tab="needs" aria-selected="true">我们的要求</button><button data-tab="story" aria-selected="false">来处</button><button data-tab="decide" aria-selected="false">一起决定</button></nav><div id="panel"></div></aside></div>',
+'<aside><nav class="tabs" aria-label="空间讨论"><button data-tab="needs" aria-selected="true">我们的要求</button><button data-tab="story" aria-selected="false">来处</button><button data-tab="decide" aria-selected="false">一起决定</button></nav><div id="panel-refresh" hidden><p>共同记录已更新。请重新查看后再操作；未保存的讨论输入会清除。</p><button id="refresh-discussion">查看更新并重新核对</button></div><div id="panel"></div></aside></div>',
 '<footer><span id="durable">合成实验 · 共同历史保存在独立实验目录</span><div><button id="export">导出当前方案</button><button id="revoke" hidden>撤销另一位访问</button></div><p>只检查简化的平面几何，不是装修或安全规范验收。加入链接仅供本机实验使用。</p></footer></main>',
 '<dialog id="report-dialog" aria-labelledby="report-title"><form id="report-form"><p class="eyebrow">把实际结果带回来</p><h2 id="report-title">记录我的行动结果</h2><p id="report-action-title"></p><label>结果说明<textarea id="report-note" aria-label="结果说明" maxlength="360" placeholder="做了什么，测得什么，或为什么还没完成"></textarea></label><label>结果来源<input id="report-source" aria-label="本次结果来源" maxlength="240" placeholder="例如：本人卷尺测量，门宽 82 厘米"></label><p class="subtle">只记录本人的说法；填写来源不等于核验通过。双方都可看到这份记录。</p><p id="report-error" class="warning" role="status" aria-live="polite"></p><div class="button-row"><button type="button" id="report-cancel">取消</button><button type="submit" id="report-submit" class="primary">保存结果</button></div></form></dialog>',
 '<dialog id="invite-dialog"><form method="dialog"><button class="close" aria-label="关闭">×</button></form><p class="eyebrow">一起进入同一个空间</p><h2>把这个链接交给另一位</h2><p>在另一个独立浏览器会话打开，以阿博加入。链接 30 分钟内一次有效。</p><input id="invite-link" readonly aria-label="加入链接"><p class="subtle">实验身份不等于真人核验；系统不会替你发送消息。</p></dialog>'
@@ -32,6 +33,16 @@ const measurements = new MeasurementPanel($("#measurement-panel"), {
     $("#preview-label").hidden = !value;
     if (value || state) scene.apply(value || state);
   }
+});
+const contextEditor = new ContextEditor({
+  getState: () => state, getSession: () => session, send,
+  onClose: () => {
+    if (!$("#panel-refresh").hidden && state) {
+      renderPanel();
+      $("#panel-refresh").hidden = true;
+    }
+  },
+  getError: () => $("#notice").textContent
 });
 const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 function notify(text, error = false) {
@@ -55,7 +66,7 @@ function receive(result) {
   $("#version").textContent = "方案 " + String(state.revision).padStart(2, "0");
   $("#sync").textContent = "历史已保存 · 自动同步"; $("#identity").textContent = state.members[session.viewer] + " · 我的实验身份";
   $("#invite").hidden = $("#revoke").hidden = session.viewer !== "alice"; $("#joining").hidden = true;
-  renderIssues(); renderObject(); renderPanel();
+  renderIssues(); renderObject(); renderPanel(); $("#panel-refresh").hidden = true;
   window.__space = { state, viewer: session.viewer, diagnostics: () => scene.diagnostics() };
 }
 async function connect(fresh = false) {
@@ -80,6 +91,7 @@ async function send(command) {
         window.__space = { state, viewer: session.viewer, diagnostics: () => scene.diagnostics() };
         $("#version").textContent = "方案 " + String(state.revision).padStart(2, "0");
         $("#sync").textContent = "已更新，请检查后重试";
+        $("#panel-refresh").hidden = false;
       } catch {}
     } else if (state) { scene.apply(state); $("#sync").textContent = "未保存，请重试"; }
   } finally { busy = false; }
@@ -101,16 +113,17 @@ function renderPanel() {
   if (!state || !session) { $("#panel").replaceChildren(); return; }
   for (const b of document.querySelectorAll("[data-tab]")) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
   if (tab === "needs") {
-    $("#panel").innerHTML = '<div class="panel-heading"><p class="eyebrow">01 / 把各自的需要说清楚</p><h2>这里，也要容得下我。</h2><p>每个人确认自己的要求。启用后，空间会标出需要保留的位置。</p></div>' + state.requirements.map(r =>
+    $("#panel").innerHTML = '<div class="panel-heading"><p class="eyebrow">01 / 把各自的需要说清楚</p><h2>这里，也要容得下我。</h2><p>每个人确认自己的要求。启用后，空间会标出需要保留的位置。</p><button data-context="requirement">添加我的活动区域</button></div>' + state.requirements.map(r =>
       '<article class="requirement ' + (r.enabled ? "enabled" : "") + '">' + person(r.owner) + "<small>" + (r.enabled ? "已确认" : "待本人确认") + "</small></div><h3>" + esc(r.label) + "</h3><p>" + (r.zone ? "留出 " + r.zone.width + " × " + r.zone.depth + " 米" : "让共同做过的物件继续留在生活里") + "</p>" +
-      (r.review_needed ? '<p class="warning">相关经历有变化，请重新检查这项要求。</p>' : "") +
-      (r.owner === session.viewer ? '<button data-requirement="' + esc(r.id) + '" data-enabled="' + (!r.enabled || r.review_needed) + '">' + (r.review_needed ? "按当前来处重新确认" : r.enabled ? "暂时取消这项要求" : "这是我的要求") + "</button>" : '<small class="subtle">等待本人选择，你可以查看但不能替他决定。</small>') + "</article>").join("");
+      requirementSource(state, r) + (r.review_needed ? '<p class="warning">相关经历有变化，请重新检查这项要求。</p>' : "") +
+      (r.owner === session.viewer && r.zone ? '<button data-context="requirement" data-context-id="' + esc(r.id) + '">调整这项要求</button>' : "") +
+      (r.owner === session.viewer ? '<button data-requirement="' + esc(r.id) + '" data-enabled="' + (!r.enabled || r.review_needed) + '" data-source-version="' + (state.memories.find(m => m.id === r.source_id)?.version || 0) + '">' + (r.review_needed ? (state.memories.find(m => m.id === r.source_id)?.withdrawn ? "依据已撤回，独立保留我的要求" : "按当前来处重新确认") : r.enabled ? "暂时取消这项要求" : "这是我的要求") + "</button>" : '<small class="subtle">等待本人选择，你可以查看但不能替他决定。</small>') + "</article>").join("");
   } else if (tab === "story") {
-    $("#panel").innerHTML = '<div class="panel-heading"><p class="eyebrow">02 / 这次决定，从哪里来</p><h2>生活里的事，有后文。</h2><p>这些是合成经历。一个人的说法，可以被补充，也可以有不同记忆。</p></div>' + state.memories.map(m =>
-      '<article class="memory">' + person(m.owner,"记录") + "<small>第 " + m.version + ' 版</small></div><p class="memory-text">' + (m.withdrawn ? "这段经历的来源已撤回。" : esc(m.text)) + "</p>" +
+    $("#panel").innerHTML = '<div class="panel-heading"><p class="eyebrow">02 / 这次决定，从哪里来</p><h2>生活里的事，有后文。</h2><p>预置内容是合成样例。你也可以带进新经历；一个人的说法，可以被补充，也可以有不同记忆。</p><button data-context="memory">带进一段新经历</button></div>' + state.memories.map(m =>
+      '<article class="memory">' + person(m.owner,"记录") + "<small>第 " + m.version + ' 版</small></div>' + memoryProvenance(m) + '<p class="memory-text">' + (m.withdrawn ? "这段经历的来源已撤回。" : esc(m.text)) + "</p>" +
       Object.entries(m.replies || {}).map(([id,r]) => '<p class="reply">' + esc(state.members[id]) + "：" + (r.status === "confirmed" ? "我的记忆也是这样" : "我记得有些不同") + " " + esc(r.note) + "</p>").join("") +
-      (!m.withdrawn && m.owner === session.viewer ? '<form data-memory="' + esc(m.id) + '"><label>补充或纠正<textarea aria-label="纠正' + esc(m.id) + '" maxlength="500">' + esc(m.text) + '</textarea></label><button>保存这段变化</button><button type="button" class="text-button" data-withdraw="' + esc(m.id) + '">撤回来源</button></form>' : "") +
-      (!m.withdrawn && m.owner !== session.viewer ? '<form data-reply="' + esc(m.id) + '"><label>我的补充<textarea aria-label="补充' + esc(m.id) + '" maxlength="500" placeholder="留下自己的记忆"></textarea></label><div class="button-row"><button name="status" value="confirmed">我也这样记得</button><button name="status" value="different">我记得不同</button></div></form>' : "") + "</article>").join("");
+      (!m.withdrawn && m.owner === session.viewer ? '<form data-memory="' + esc(m.id) + '" data-version="' + m.version + '"><label>补充或纠正<textarea aria-label="纠正' + esc(m.id) + '" maxlength="500">' + esc(m.text) + '</textarea></label><button>保存这段变化</button><button type="button" class="text-button" data-withdraw="' + esc(m.id) + '" data-version="' + m.version + '">撤回来源</button><button type="button" data-context="memory" data-context-id="' + esc(m.id) + '">修改日期与来源</button></form>' : "") +
+      (!m.withdrawn && m.owner !== session.viewer ? '<form data-reply="' + esc(m.id) + '" data-version="' + m.version + '"><label>我的补充<textarea aria-label="补充' + esc(m.id) + '" maxlength="500" placeholder="留下自己的记忆"></textarea></label><div class="button-row"><button name="status" value="confirmed">我也这样记得</button><button name="status" value="different">我记得不同</button></div></form>' : "") + "</article>").join("");
   } else {
     $("#panel").innerHTML = '<div class="panel-heading"><p class="eyebrow">03 / 不必急着达成一致</p><h2>这是我们都想要的吗？</h2><p>选择绑定当前方案 ' + state.revision + '。之后改变布局或要求，需要再看一次。</p></div><div class="decisions">' +
       Object.entries(state.members).map(([id,name]) => {
@@ -122,8 +135,10 @@ function renderPanel() {
   }
 }
 $("#panel").addEventListener("click", e => {
-  const r=e.target.closest("[data-requirement]"); if(r)send({type:"requirement.set",requirement_id:r.dataset.requirement,enabled:r.dataset.enabled==="true"});
-  const w=e.target.closest("[data-withdraw]"); if(w)send({type:"memory.withdraw",memory_id:w.dataset.withdraw});
+  const context = e.target.closest("[data-context]");
+  if (context && !busy) contextEditor.show(context.dataset.context, context.dataset.contextId || null);
+  const r=e.target.closest("[data-requirement]"); if(r)send({type:"requirement.set",requirement_id:r.dataset.requirement,enabled:r.dataset.enabled==="true",source_version:Number(r.dataset.sourceVersion)});
+  const w=e.target.closest("[data-withdraw]"); if(w)send({type:"memory.withdraw",memory_id:w.dataset.withdraw,basis_version:Number(w.dataset.version)});
   const measure = e.target.closest("[data-action-measurement]");
   if (measure && !busy && state) {
     const target = document.querySelector("#measurement-action");
@@ -154,8 +169,8 @@ $("#panel").addEventListener("click", e => {
 });
 $("#panel").addEventListener("submit", e => {
   e.preventDefault(); const f=e.target;
-  if(f.dataset.memory)send({type:"memory.edit",memory_id:f.dataset.memory,text:f.querySelector("textarea").value});
-  else if(f.dataset.reply)send({type:"memory.reply",memory_id:f.dataset.reply,status:e.submitter.value,note:f.querySelector("textarea").value});
+  if(f.dataset.memory)send({type:"memory.edit",memory_id:f.dataset.memory,text:f.querySelector("textarea").value,basis_version:Number(f.dataset.version)});
+  else if(f.dataset.reply)send({type:"memory.reply",memory_id:f.dataset.reply,status:e.submitter.value,note:f.querySelector("textarea").value,basis_version:Number(f.dataset.version)});
   else if(f.id==="decision-form")send({type:"decision.set",status:e.submitter.value,note:$("#decision-note").value});
   else if(f.id==="action-form")send({type:"action.add",text:$("#action-text").value,due_at:$("#action-due").value,completion_criteria:$("#action-criteria").value,measurement:$("#action-measurement").value,result_source:$("#action-source").value});
 });
@@ -175,7 +190,8 @@ $("#report-form").onsubmit = async e => {
     $("#report-submit").disabled = $("#report-cancel").disabled = false;
   }
 };
-for(const b of document.querySelectorAll("[data-tab]"))b.onclick=()=>{tab=b.dataset.tab;renderPanel();};
+$("#refresh-discussion").onclick = () => { renderPanel(); $("#panel-refresh").hidden = true; };
+for(const b of document.querySelectorAll("[data-tab]"))b.onclick=()=>{tab=b.dataset.tab;renderPanel();$("#panel-refresh").hidden=true;};
 for(const b of document.querySelectorAll("[data-preset]"))b.onclick=()=>send({type:"layout.preset",preset:b.dataset.preset});
 $("#move").onsubmit=e=>{e.preventDefault();send({type:"object.move",object_id:selected,x:Number($("#x").value),z:Number($("#z").value),rotation:Number($("#rotation").value)});};
 function setMode(next){mode=next;scene.setMode(mode);$("#mode3d").setAttribute("aria-pressed",String(mode==="3d"));$("#mode2d").setAttribute("aria-pressed",String(mode==="2d"));$("#control-help").textContent=mode==="3d"?"选中家具后拖动摆放 · 空白处拖动旋转 · 滚轮缩放":"平面中选择或拖动家具 · 精确尺寸与3D保持一致";}
@@ -189,10 +205,10 @@ const timer=setInterval(async()=>{
   if(!session||busy||polling||lost||document.hidden)return;polling=true;const token=session.token;
   try{
     const r=await request("/space-api/state",undefined,token);if(session?.token!==token||busy)return;
-    if(r.state.sequence!==state?.sequence){if(($("#report-dialog").open || document.activeElement?.matches("input,textarea,select")))$("#sync").textContent="对方有更新 · 输入结束后同步";else receive(r);}
+    if(r.state.sequence!==state?.sequence){if((contextEditor.open || $("#report-dialog").open || document.activeElement?.matches("input,textarea,select")))$("#sync").textContent="对方有更新 · 输入结束后同步";else receive(r);}
   }catch(e){
     if(session?.token!==token)return;
-    if(e.status===403){lost=true;measurements.clearPreview();measurements.update(null);proposals.reset();$("#report-dialog").close();state=null;scene.apply({room:{width:6,depth:5,height:2.8,door:{x:3,z:.55,width:1.2,depth:1.1}},objects:[],requirements:[],violations:[]});$("#panel").replaceChildren();$("#issues").replaceChildren();$("#move").hidden=true;$("#object-title").textContent="";$("#sync").textContent="当前角色访问已失效";delete window.__space;notify("当前访问已失效，需要新的加入链接。",true);}
+    if(e.status===403){lost=true;contextEditor.close();measurements.clearPreview();measurements.update(null);proposals.reset();$("#report-dialog").close();state=null;scene.apply({room:{width:6,depth:5,height:2.8,door:{x:3,z:.55,width:1.2,depth:1.1}},objects:[],requirements:[],violations:[]});$("#panel").replaceChildren();$("#panel-refresh").hidden=true;$("#issues").replaceChildren();$("#move").hidden=true;$("#object-title").textContent="";$("#sync").textContent="当前角色访问已失效";delete window.__space;notify("当前访问已失效，需要新的加入链接。",true);}
     else $("#sync").textContent="连接暂时中断，正在重试";
   }finally{polling=false;}
 },1200);
