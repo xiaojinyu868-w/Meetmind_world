@@ -13,6 +13,7 @@ from examples.shared_experience.serve import make_handler, lab_data_directory, T
 from examples.shared_experience.session_store import SQLiteSessionStore
 from examples.shared_experience.pair_access import PairAccessStore
 from .domain import initial_state, apply_command, evaluate, export_summary
+from .proposals import proposal_messages, parse_proposal, demo_proposal
 
 
 class Conflict(ValueError):
@@ -20,8 +21,11 @@ class Conflict(ValueError):
 
 
 class SpaceService:
-    def __init__(self, store):
+    def __init__(self, store, generator=None):
         self.store = store
+        self.generator = generator
+        self.proposals = {}
+        self.generating = set()
         self.lock = threading.RLock()
 
     def create(self):
@@ -48,14 +52,16 @@ class SpaceService:
             state = self._load(sid)[1]
             return {**state, "violations": evaluate(state)}
 
-    def command(self, sid, actor, body):
-        if set(body) != {"expected_sequence", "request_id", "command"}:
+    def command(self, sid, actor, body, *, from_proposal=False):
+        if type(body) is not dict or set(body) != {"expected_sequence", "request_id", "command"}:
             raise ValueError("命令字段不完整或包含未知字段")
         rid = body["request_id"]
         if not isinstance(rid, str) or not re.fullmatch(r"[A-Za-z0-9_-]{8,80}", rid):
             raise ValueError("无效请求标识")
         if type(body["expected_sequence"]) is not int or type(body["command"]) is not dict:
             raise ValueError("无效版本或命令")
+        if body["command"].get("type") == "layout.patch" and not from_proposal:
+            raise ValueError("布局提案必须从服务端已检查的提案应用")
         with self.lock:
             saved, state = self._load(sid)
             event = {"actor": actor, "command": body["command"], "request_id": rid}
@@ -77,6 +83,66 @@ class SpaceService:
             return result
 
 
+    def propose(self, sid, actor, body):
+        if type(body) is not dict or set(body) != {"mode", "instruction", "expected_sequence"}:
+            raise ValueError("提案请求字段无效")
+        if body["mode"] not in ("demo", "model") or type(body["expected_sequence"]) is not int:
+            raise ValueError("提案模式或版本无效")
+        key = (sid, actor)
+        with self.lock:
+            _, state = self._load(sid)
+            if state["sequence"] != body["expected_sequence"]:
+                raise Conflict("空间已更新，请查看最新方案后再提出修改")
+            if actor not in state["members"]:
+                raise ValueError("无效参与者")
+            messages = proposal_messages(state, body["instruction"])
+            if key in self.generating:
+                raise ValueError("你已有一个生成任务，请等待返回")
+            if body["mode"] == "model" and self.generator is None:
+                raise ValueError("当前服务未启用模型，人工提案入口仍可使用")
+            self.generating.add(key)
+        try:
+            if body["mode"] == "demo":
+                response = {"text": demo_proposal(state), "model": None, "latency_ms": 0}
+                provenance = {"kind": "manual-demo", "label": "人工B布局演示", "model": None}
+            else:
+                response = self.generator(messages)
+                if type(response) is not dict or not isinstance(response.get("model"), str):
+                    raise ValueError("模型响应缺少来源信息")
+                provenance = {"kind": "model", "label": "配置模型的布局提案", "model": response["model"]}
+            parsed = parse_proposal(response["text"], state)
+            with self.lock:
+                _, current = self._load(sid)
+                if current["revision"] != state["revision"]:
+                    raise Conflict("生成期间空间要求或布局有变化，此提案已过期，请重新生成")
+                proposal_id = uuid4().hex
+                result = {**parsed, "id": proposal_id, "basis_revision": state["revision"],
+                          "provenance": provenance, "latency_ms": response.get("latency_ms", 0),
+                          "review_required": any(r["review_needed"] for r in current["requirements"])}
+                # One proposal per viewer; pending drafts are not durable world events.
+                self.proposals[key] = deepcopy(result)
+                return result
+        finally:
+            with self.lock:
+                self.generating.discard(key)
+
+    def apply_proposal(self, sid, actor, body):
+        if type(body) is not dict or set(body) != {"proposal_id", "expected_sequence", "request_id"}:
+            raise ValueError("应用提案请求字段无效")
+        if not isinstance(body["proposal_id"], str):
+            raise ValueError("提案标识无效")
+        with self.lock:
+            result = self.proposals.get((sid, actor))
+            if not result or result["id"] != body["proposal_id"]:
+                raise ValueError("提案不存在或已被新的提案替代；重启服务后需重新生成")
+            command = {"type": "layout.patch", "basis_revision": result["basis_revision"],
+                       "moves": [{k: op[k] for k in ("object_id", "x", "z", "rotation")}
+                                 for op in result["proposal"]["operations"]],
+                       "provenance": result["provenance"]}
+            return self.command(sid, actor, {"expected_sequence": body["expected_sequence"],
+                                 "request_id": body["request_id"], "command": command}, from_proposal=True)
+
+
 def make_space_handler(service, access, directory, port):
     Base = make_handler(None, directory, port)
 
@@ -89,7 +155,8 @@ def make_space_handler(service, access, directory, port):
 
         def session(self, identity, token=None):
             return {"session_id": identity["session_id"], "viewer": identity["viewer"],
-                    "state": service.state(identity["session_id"]), **({"token": token} if token else {})}
+                    "state": service.state(identity["session_id"]), "model_enabled": service.generator is not None,
+                    **({"token": token} if token else {})}
 
         def do_GET(self):
             if not self.allowed():
@@ -137,6 +204,16 @@ def make_space_handler(service, access, directory, port):
                     identity = self.identity()
                 except ValueError as exc:
                     return self.respond(403, {"error": str(exc)})
+                if self.path == "/space-api/proposal":
+                    result = service.propose(identity["session_id"], identity["viewer"], body)
+                    # Recheck access after a potentially long-running model call.
+                    current_identity = self.identity()
+                    if current_identity != identity:
+                        raise ValueError("当前角色访问已变化")
+                    return self.respond(200, result)
+                if self.path == "/space-api/proposal/apply":
+                    state = service.apply_proposal(identity["session_id"], identity["viewer"], body)
+                    return self.respond(200, {"session_id": identity["session_id"], "viewer": identity["viewer"], "state": state})
                 if self.path == "/space-api/command":
                     state = service.command(identity["session_id"], identity["viewer"], body)
                     return self.respond(200, {"session_id": identity["session_id"], "viewer": identity["viewer"], "state": state})
@@ -160,6 +237,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=4197)
     parser.add_argument("--data-dir", type=Path, required=True)
+    parser.add_argument("--enable-model", action="store_true")
     args = parser.parse_args()
     directory = Path(__file__).parent.joinpath("web", "dist").resolve()
     if not (directory / "index.html").is_file():
@@ -167,10 +245,14 @@ def main():
     target = lab_data_directory(args.data_dir)
     if target == directory or directory in target.parents or target in directory.parents:
         parser.error("数据目录必须位于公开构建目录之外")
-    service = SpaceService(SQLiteSessionStore(target / "worlds"))
+    generator = None
+    if args.enable_model:
+        from examples.shared_experience.model_provider import generate_with_configured_model
+        generator = generate_with_configured_model
+    service = SpaceService(SQLiteSessionStore(target / "worlds"), generator)
     access = PairAccessStore(target / "access")
     server = ThreadingHTTPServer(("127.0.0.1", args.port), make_space_handler(service, access, directory, args.port))
-    print(f"Shared space: http://127.0.0.1:{args.port}/ ; synthetic, no model", flush=True)
+    print(f"Shared space: http://127.0.0.1:{args.port}/ ; synthetic, model_enabled={generator is not None}", flush=True)
     server.serve_forever()
 
 

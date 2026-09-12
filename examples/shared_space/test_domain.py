@@ -215,6 +215,71 @@ class DomainTests(unittest.TestCase):
         self.assertIn("\\[fake\\]", summary)
         self.assertIn("尚未选择", summary)
 
+    def patch_command(self, state, moves, **overrides):
+        return {"type": "layout.patch", "basis_revision": state["revision"], "moves": moves,
+                "provenance": {"kind": "manual-demo", "label": "人工 B 布局", "model": None}, **overrides}
+
+    def test_layout_patch_is_atomic_even_when_intermediate_position_conflicts(self):
+        state = initial_state()
+        # Moving the small table onto the sofa first would collide. A batch moves
+        # the sofa away too, and only its final geometry is evaluated.
+        moves = [{"object_id": "table", "x": 4.3, "z": 3.8, "rotation": 0},
+                 {"object_id": "sofa", "x": 4.65, "z": 1.3, "rotation": 0}]
+        intermediate = command(state, "alice", "object.move", **moves[0])
+        self.assertTrue(evaluate(intermediate))
+        before = deepcopy(state)
+        result = apply_command(state, "alice", self.patch_command(state, moves))
+        self.assertEqual(evaluate(result), [])
+        self.assertEqual(result["revision"], state["revision"] + 1)
+        self.assertEqual(result["sequence"], state["sequence"] + 1)
+        self.assertEqual(len(result["history"]), 1)
+        self.assertEqual(state, before)
+        self.assertEqual(item(result, "objects", "desk"), item(state, "objects", "desk"))
+        self.assertEqual(item(result, "objects", "shelf"), item(state, "objects", "shelf"))
+        for key in ("room", "requirements", "decisions", "memories", "actions"):
+            self.assertEqual(result[key], state[key])
+
+    def test_layout_patch_preserves_old_acceptance_and_records_true_provenance(self):
+        state = command(initial_state(), "alice", "decision.set", status="accepted", note="")
+        state = command(state, "bo", "decision.set", status="accepted", note="")
+        moves = [{"object_id": "sofa", "x": 4.65, "z": 1.3, "rotation": 0}]
+        provenance = {"kind": "model", "label": "布局候选", "model": "test-model"}
+        result = apply_command(state, "alice", self.patch_command(state, moves, provenance=provenance))
+        self.assertEqual(result["decisions"], state["decisions"])
+        self.assertTrue(all(choice["revision"] < result["revision"] for choice in result["decisions"].values()))
+        self.assertIn("模型提案：布局候选", result["history"][-1]["summary"])
+        self.assertIn("test-model", result["history"][-1]["summary"])
+        self.assertIn("仍需分别选择", result["history"][-1]["summary"])
+        self.assertIn("尚无当前共同认可", export_summary(result, "alice"))
+
+    def test_layout_patch_rejects_stale_conflicting_review_and_invalid_batches_without_partial_write(self):
+        state = initial_state()
+        valid = [{"object_id": "sofa", "x": 4.65, "z": 1.3, "rotation": 0}]
+        commands = [
+            self.patch_command(state, valid, basis_revision=state["revision"] + 1),
+            self.patch_command(state, valid, basis_revision=True),
+            self.patch_command(state, []),
+            self.patch_command(state, valid * 2),
+            self.patch_command(state, valid * 5),
+            self.patch_command(state, [{"object_id": "sofa", "x": 4.3, "z": 3.8, "rotation": 0}]),
+            self.patch_command(state, [{"object_id": "table", "x": 3, "z": .6, "rotation": 0}]),
+            self.patch_command(state, [{"object_id": "unknown", "x": 1, "z": 1, "rotation": 0}]),
+            self.patch_command(state, [{"object_id": "sofa", "x": True, "z": 1.3, "rotation": 0}]),
+            self.patch_command(state, [{"object_id": "sofa", "x": 21, "z": 1.3, "rotation": 0}]),
+            self.patch_command(state, [{"object_id": "sofa", "x": 4.65, "z": 1.3, "rotation": 0, "width": 1}]),
+            self.patch_command(state, valid, provenance={"kind": "manual-demo", "label": "假的来源", "model": "pretend"}),
+            self.patch_command(state, valid, provenance={"kind": "model", "label": "假的来源", "model": None}),
+            self.patch_command(state, valid, provenance={"kind": "model", "label": "假的来源", "model": "m", "token": "bad"}),
+        ]
+        for instruction in commands:
+            before = deepcopy(state)
+            with self.subTest(instruction=instruction), self.assertRaises(ValueError):
+                apply_command(state, "alice", instruction)
+            self.assertEqual(state, before)
+        stale_context = command(state, "alice", "memory.edit", memory_id="office", text="新的上下文")
+        with self.assertRaisesRegex(ValueError, "重新核对"):
+            apply_command(stale_context, "alice", self.patch_command(stale_context, valid))
+
 
 if __name__ == "__main__":
     unittest.main()

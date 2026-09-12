@@ -1,12 +1,13 @@
 import "./style.css";
 import { SpaceView } from "./SpaceView.js";
+import { ProposalPanel } from "./ProposalPanel.js";
 document.querySelector("#app").innerHTML = [
 '<header class="top"><a class="brand" href="/">MeetMind <span>world</span></a><span class="experiment">共同空间 · 实验 02</span><div class="account"><span id="identity">正在连接…</span><button id="invite" hidden>邀请另一位</button><button id="new">新建空间</button></div></header>',
 '<main><section class="intro"><div><p class="eyebrow">把生活里的要求，放进我们的空间</p><h1>一起安放，<br>下一段生活。</h1></div><div class="brief"><p>一个人需要安静办公，一个人想留出运动的位置。<br>还有那件一起做的纸桥，我们想把它放在哪里？</p><p class="subtle">6 × 5 米合成房间 · 人工样例，未调用模型</p></div></section>',
 '<section id="joining" class="joining" hidden><h2>一起看看这个房间</h2><p>加入后，你将以实验角色「阿博」表达自己的要求与选择。</p><button id="join" class="primary">以阿博加入</button></section><div id="notice" role="status" aria-live="polite"></div>',
 '<div class="workspace"><section class="studio"><div class="studio-bar"><div><span class="live-dot"></span><strong id="version">方案 01</strong><span id="sync" class="subtle">正在恢复空间</span></div><div class="segmented"><button id="mode3d" aria-pressed="true">3D 空间</button><button id="mode2d" aria-pressed="false">2D 平面</button></div></div>',
-'<div id="viewport"></div><div class="view-note"><span id="control-help">选中家具后拖动摆放 · 空白处拖动旋转 · 滚轮缩放</span><span>单位：米</span></div>',
-'<div class="layout-strip"><div><small>从两个想法开始</small><strong>先安排，再讨论</strong></div><button data-preset="A">方案 A · 围坐交流</button><button data-preset="B">方案 B · 留出活动区</button></div><div id="issues" class="issues"></div>',
+'<div id="preview-label" hidden>提案预览 · 仅你可见，共同方案尚未改变</div><div id="viewport"></div><div class="view-note"><span id="control-help">选中家具后拖动摆放 · 空白处拖动旋转 · 滚轮缩放</span><span>单位：米</span></div>',
+'<div class="layout-strip"><div><small>从两个想法开始</small><strong>先安排，再讨论</strong></div><button data-preset="A">方案 A · 围坐交流</button><button data-preset="B">方案 B · 留出活动区</button></div><div id="issues" class="issues"></div><section id="proposal-panel" class="proposal-panel"></section>',
 '<div class="editing"><div id="object-title"><h3>点击一件家具</h3><p class="subtle">查看它的尺寸与位置，或在空间里拖动。</p></div><form id="move" hidden><label>横向 X<input id="x" aria-label="横向 X" type="number" step=".1" required></label><label>纵向 Z<input id="z" aria-label="纵向 Z" type="number" step=".1" required></label><label>方向<select id="rotation" aria-label="家具方向"><option value="0">0°</option><option value="90">90°</option></select></label><button class="primary">更新位置</button></form></div></section>',
 '<aside><nav class="tabs" aria-label="空间讨论"><button data-tab="needs" aria-selected="true">我们的要求</button><button data-tab="story" aria-selected="false">来处</button><button data-tab="decide" aria-selected="false">一起决定</button></nav><div id="panel"></div></aside></div>',
 '<footer><span id="durable">合成实验 · 共同历史保存在独立实验目录</span><div><button id="export">导出当前方案</button><button id="revoke" hidden>撤销另一位访问</button></div><p>只检查简化的平面几何，不是装修或安全规范验收。加入链接仅供本机实验使用。</p></footer></main>',
@@ -16,7 +17,11 @@ const $ = (id) => document.querySelector(id), KEY = "meetmind.shared-space.sessi
 const pendingInvite = new URLSearchParams(location.hash.slice(1)).get("join");
 let session = null, state = null, selected = "desk", tab = "needs", mode = "3d";
 let busy = false, polling = false, lost = false, noticeTimer;
-const scene = new SpaceView($("#viewport"), { onSelect: select, onMove: fields => send({ type: "object.move", ...fields }) });
+const scene = new SpaceView($("#viewport"), { onSelect: select, onMove: fields => { if (proposals.previewing) { scene.apply({...proposals.proposal.preview,violations:proposals.proposal.violations}); notify("正在预览提案，请先退出预览再移动家具。", true); } else return send({ type: "object.move", ...fields }); } });
+const proposals = new ProposalPanel($("#proposal-panel"), {
+  getState: () => state, getSession: () => session, request, receive, notify,
+  preview: value => { $("#preview-label").hidden = !value; if (value || state) scene.apply(value || state); }
+});
 const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 function notify(text, error = false) {
   $("#notice").textContent = text; $("#notice").classList.toggle("error", error);
@@ -31,7 +36,10 @@ async function request(path, body, token = session?.token) {
   return value;
 }
 function receive(result) {
-  state = result.state; scene.apply(state); scene.select(selected);
+  state = result.state;
+  proposals.update(state, result.model_enabled);
+  scene.apply(proposals.previewing && proposals.proposal ? {...proposals.proposal.preview, violations:proposals.proposal.violations} : state);
+  scene.select(selected);
   $("#version").textContent = "方案 " + String(state.revision).padStart(2, "0");
   $("#sync").textContent = "历史已保存 · 自动同步"; $("#identity").textContent = state.members[session.viewer] + " · 我的实验身份";
   $("#invite").hidden = $("#revoke").hidden = session.viewer !== "alice"; $("#joining").hidden = true;
@@ -42,11 +50,11 @@ async function connect(fresh = false) {
   const previous = fresh ? null : saved();
   const result = previous?.token ? await request("/space-api/state", undefined, previous.token) : await request("/space-api/sessions", {}, null);
   session = { session_id: result.session_id, viewer: result.viewer, token: result.token || previous?.token };
-  lost = false; remember(); receive(result);
+  lost = false; proposals.reset(); remember(); receive(result);
 }
 async function send(command) {
   if (busy || !state || lost) { if (state) scene.apply(state); return; }
-  busy = true; $("#sync").textContent = "保存中…";
+  proposals.clearPreview(); busy = true; $("#sync").textContent = "保存中…";
   try {
     const result = await request("/space-api/command", { expected_sequence: state.sequence, request_id: crypto.randomUUID(), command });
     receive(result); notify(command.type === "decision.set" ? "已记录你对这个版本的选择。" : "变化已保存，对方会看到同一份方案。");
@@ -127,7 +135,7 @@ const timer=setInterval(async()=>{
     if(r.state.sequence!==state?.sequence){if(document.activeElement?.matches("input,textarea,select"))$("#sync").textContent="对方有更新 · 输入结束后同步";else receive(r);}
   }catch(e){
     if(session?.token!==token)return;
-    if(e.status===403){lost=true;state=null;scene.apply({room:{width:6,depth:5,height:2.8,door:{x:3,z:.55,width:1.2,depth:1.1}},objects:[],requirements:[],violations:[]});$("#panel").replaceChildren();$("#issues").replaceChildren();$("#move").hidden=true;$("#object-title").textContent="";$("#sync").textContent="当前角色访问已失效";delete window.__space;notify("当前访问已失效，需要新的加入链接。",true);}
+    if(e.status===403){lost=true;proposals.reset();state=null;scene.apply({room:{width:6,depth:5,height:2.8,door:{x:3,z:.55,width:1.2,depth:1.1}},objects:[],requirements:[],violations:[]});$("#panel").replaceChildren();$("#issues").replaceChildren();$("#move").hidden=true;$("#object-title").textContent="";$("#sync").textContent="当前角色访问已失效";delete window.__space;notify("当前访问已失效，需要新的加入链接。",true);}
     else $("#sync").textContent="连接暂时中断，正在重试";
   }finally{polling=false;}
 },1200);

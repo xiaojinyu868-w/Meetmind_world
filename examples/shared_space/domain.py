@@ -226,6 +226,30 @@ def _find(items, identity):
     return item
 
 
+
+def _preview_moves(state, moves, maximum=4):
+    """Copy and validate a batch without testing intermediate furniture positions."""
+    validate_state(state)
+    _require(type(moves) is list and 1 <= len(moves) <= min(maximum, len(state["objects"])),
+             "布局修改数量无效")
+    result = deepcopy(state)
+    seen, changed = set(), []
+    for move in moves:
+        _keys(move, ("object_id", "x", "z", "rotation"))
+        identity = _text(move["object_id"], "物品 ID", 80)
+        _require(identity not in seen, "布局修改不能重复指定物品")
+        seen.add(identity)
+        item = _find(result["objects"], identity)
+        x, z = _number(move["x"], "x"), _number(move["z"], "z")
+        _require(-10 <= x <= 20 and -10 <= z <= 20, "提案坐标必须在 -10 到 20 米之间")
+        _rotation(move["rotation"])
+        if (item["x"], item["z"], item["rotation"]) != (x, z, move["rotation"]):
+            changed.append(identity)
+        item.update(x=x, z=z, rotation=move["rotation"])
+    _require(bool(changed), "提案没有需要应用的位置变化")
+    return result, changed
+
+
 def apply_command(state, actor, command):
     """Validate and copy before mutation; deterministic action IDs enable replay."""
     _actor(actor)
@@ -235,6 +259,7 @@ def apply_command(state, actor, command):
     _require(type(kind) is str, "命令类型无效")
     schemas = {
         "object.move": ("object_id", "x", "z", "rotation"), "layout.preset": ("preset",),
+        "layout.patch": ("basis_revision", "moves", "provenance"),
         "requirement.set": ("requirement_id", "enabled"), "memory.edit": ("memory_id", "text"),
         "memory.withdraw": ("memory_id",), "memory.reply": ("memory_id", "status", "note"),
         "decision.set": ("status", "note"), "action.add": ("text",), "action.report": ("action_id", "status"),
@@ -258,6 +283,25 @@ def apply_command(state, actor, command):
             item["rotation"] = 0
         change_revision = True
         summary = f"应用人工布局样例 {command['preset']}"
+    elif kind == "layout.patch":
+        _integer(command["basis_revision"], 1)
+        _require(command["basis_revision"] == state["revision"], "布局提案依据版本已过期")
+        provenance = command["provenance"]
+        _keys(provenance, ("kind", "label", "model"))
+        _require(provenance["kind"] in ("manual-demo", "model"), "布局提案来源无效")
+        label = _text(provenance["label"], "来源名称", 120)
+        if provenance["kind"] == "manual-demo":
+            _require(provenance["model"] is None, "人工样例不能声明模型来源")
+            source = f"人工样例：{label}"
+        else:
+            model = _text(provenance["model"], "模型名称", 120)
+            source = f"模型提案：{label}；模型 {model}"
+        result, changed = _preview_moves(state, command["moves"])
+        _require(not any(item["review_needed"] for item in result["requirements"]),
+                 "经历依据已变化，请要求的本人重新核对后再应用提案")
+        _require(not evaluate(result), "布局提案最终仍有空间冲突，未应用任何修改")
+        change_revision = True
+        summary = f"应用布局提案，移动 {len(changed)} 个物品；{source}；参与者仍需分别选择是否接受"
     elif kind == "requirement.set":
         item = _find(result["requirements"], command["requirement_id"])
         _require(item["owner"] == actor, "只能确认本人的要求")

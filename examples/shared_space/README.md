@@ -44,5 +44,20 @@ node examples/shared_space/web/browser-test.cjs
 见[验收报告](../../docs/SHARED-SPACE-VERIFICATION.md)。
 
 房间/费用/经历均为人工合成。只检查水平矩形、入口及活动区，不提供装修或安全规范验收。
-当前没有模型提议、真实材料、尺寸/预算/妥协编辑、完整行动日历与任务对照分组。
+当前模型布局提案适配已接入，但未实测真实模型；仍缺真实材料、尺寸/预算/妥协编辑、完整行动日历与任务对照分组。
 没有真人价值或商业验证，未达到原始人物和完整世界品质。
+
+
+## 检查并应用布局提案
+
+在“先看变化，再作决定”中查看人工修改示例，可先预览再应用。人工B布局不理解输入，
+页面明确非AI；真正调用模型需服务启动时增加--enable-model。当前4197未启用模型。
+模型只接收房间、家具、已确认要求和输入文字，不发送经历/决定/行动原文。
+只能移动现有家具，运行时独立校验；不能替另一位改变要求或同意。
+预览只在本人视图，应用一次提交到共同状态；依据变更后旧提案不可应用。
+未应用提案重启会丢失，已应用patch持久保存。见[提案验收](../../docs/SPACE-PROPOSAL-VERIFICATION.md)。
+
+~~~bash
+backend/.venv/bin/python -m unittest discover -s examples/shared_space -t . -q
+node examples/shared_space/web/proposal-browser-test.cjs
+~~~
