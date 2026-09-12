@@ -29,7 +29,9 @@
 证据目录：C:/Users/Li Hao/AppData/Local/Temp/meetmind-space-evidence/
 含report.json、initial-desktop.png、conflict-desktop.png、plan-desktop.png、mobile.png、summary.md。
 截图不展示访问令牌，报告不存令牌。独立渲染图在服务器/tmp/shared-space-renderer-*.png。
-约55次绘制、1.08万三角形、1个1024阴影；未测低端真机/网络，不能当全设备性能结论。
+独立渲染补验约55次绘制、1.08万三角形；主流程最终捕获的更新帧为91次绘制、19,684三角形、
+43个几何、20个纹理，1个1024阴影。两者状态和采样帧不同，不将较低值当最终上限。
+未测低端真机/网络，不能当全设备性能结论。
 
 ## 视觉与范围
 
