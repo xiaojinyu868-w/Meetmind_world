@@ -44,7 +44,8 @@ const names = { alice: "小满", bo: "阿博", observer: "观察者" };
 const kindNames = { person: "身份", artifact: "共同作品", "memory-object": "共同经历", action: "下一次行动" };
 const eventNames = {
   "identity.claimed": "本人认领", "identity.candidate.observed": "发现候选",
-  "experience.confirmed": "记录经历", "artifact.observed": "创建作品",
+  "experience.confirmed": "记录经历", "experience.corrected": "本人更正经历",
+  "visual.basis.reviewed": "本人重核外观依据", "action.basis.reviewed": "本人重核行动依据", "artifact.observed": "创建作品",
   "inference.superseded": "纠正作品标题", "action.proposed": "提出下一步",
   "action.accepted": "接受行动", "action.declined": "拒绝行动",
   "action.outcome.recorded": "自报现实结果", "action.outcome.revoked": "撤回自报",
@@ -117,6 +118,7 @@ let generatingId = null;
 const proposals = new Map();
 const recipeDrafts = new Map();
 const actionDrafts = new Map();
+const correctionDrafts = new Map();
 let renderedFrames = 0;
 const SESSION_KEY = "meetmind.lab.session.v1";
 let pairMode = false, accessToken = null, pairAccessLost = false, polling = false;
@@ -218,9 +220,11 @@ async function command(command, fields = {}) {
       proposals.clear();
       recipeDrafts.clear();
       actionDrafts.clear();
-    } else if (["visual.recipe.applied", "visual.recipe.patched", "visual.recipe.removed", "inference.superseded", "experience.revoked"].includes(command)) {
+      correctionDrafts.clear();
+    } else if (["visual.recipe.applied", "visual.recipe.patched", "visual.recipe.removed", "visual.basis.reviewed", "inference.superseded", "experience.corrected", "experience.revoked"].includes(command)) {
       proposals.delete(viewer + ":" + selectedId);
     }
+    if (command === "experience.corrected") correctionDrafts.delete(viewer + ":" + selectedId);
     if (command === "action.proposed") {
       selectedId = "action-" + viewer + "-" + fields.request_id;
     }
@@ -228,7 +232,13 @@ async function command(command, fields = {}) {
     apply(next);
     notice(command === "reset" ? "已回放到所选时刻；本会话的后续实验操作已重置。" : command === "checkin.import" ? "签到已确认并导入。相同记录重复提交不会重复造物。" : "事件已记录，2D 与 3D 已同步。");
   } catch (error) {
-    notice(error.message, true);
+    if (/状态已更新|对象已变化/.test(error.message)) {
+      try {
+        const latest = await request("/lab-api/state?session_id=" + sessionId + "&viewer=" + viewer);
+        apply(latest);
+        notice(error.message + "；已加载最新记录，更正草稿保留，请重新核对后提交。", true);
+      } catch { notice(error.message, true); }
+    } else notice(error.message, true);
   } finally {
     busy = false;
     renderDetail();
@@ -265,7 +275,11 @@ function renderBaseline() {
     card.setAttribute("aria-pressed", String(item.id === selectedId));
     card.append(node("span", "baseline-kind", kindNames[item.kind] ?? item.kind),
       node("strong", "", item.title ?? item.display_name ?? "候选身份"));
-    if (item.kind === "person") {
+    if (item.source_basis_status && item.source_basis_status !== "active") {
+    root.append(node("p", "warning", item.source_basis_status === "withdrawn" ? "这件内容的部分来源已撤回。" : "这件内容引用的经历已更正，请核对当前说法。"));
+    appendCurrentBasis(root, item.source_basis_versions);
+  }
+  if (item.kind === "person") {
       card.append(node("small", "", item.claim === "confirmed" ? "本人已认领" : "候选 · 尚未认领"));
     }
     if (item.source) card.append(node("small", "baseline-source",
@@ -295,6 +309,7 @@ function renderBaseline() {
           " · " + (report ? "本人自报：" + (report.result === "completed" ? "已完成" : "未完成") : "没有当前现实结果报告")));
         if (report) card.append(node("small", "", report.note));
       }
+      if (item.basis_status === "changed") card.append(node("small", "warning", "原经历已更正 · 各自重新核对"));
       if (item.basis_status === "withdrawn") card.append(node("small", "warning", "原经历已撤回"));
     }
     card.addEventListener("click", () => select(item.id));
@@ -396,6 +411,14 @@ function renderActionComposer(root, item) {
   section.append(form);
   root.append(section);
 }
+function appendCurrentBasis(root, versions = []) {
+  const list = node("ul", "current-basis");
+  for (const ref of versions) {
+    const source = state.entities.find(item => (item.correction_event || item.source_event) === ref);
+    if (source) list.append(node("li", "", source.title || source.display_name || "当前来源"));
+  }
+  if (list.children.length) root.append(list);
+}
 function renderDetail() {
   const root = document.querySelector("#detail");
   root.replaceChildren();
@@ -423,6 +446,22 @@ function renderDetail() {
   }
   if (item.kind === "memory-object") {
     root.append(node("p", "muted", "参与关系来自" + (names[item.reported_by] ?? item.reported_by) + "的陈述，不等于所有人的共同确认。"));
+    if (item.created_by === viewer) {
+      const key = viewer + ":" + item.id;
+      const target = item.correction_event || item.source_event;
+      const draft = correctionDrafts.get(key) || { title: item.title, target };
+      const label = node("label", "field", "更正我记录的经历");
+      const input = node("textarea");
+      input.value = draft.title; input.maxLength = 600;
+      input.setAttribute("aria-label", "更正我记录的经历");
+      input.addEventListener("input", () => correctionDrafts.set(key, { title: input.value, target: draft.target }));
+      label.append(input); root.append(label);
+      if (draft.target !== target) root.append(node("p", "warning", "经历已有更新。草稿已保留，请先查看当前内容再重新填写。"));
+      const save = button(root, "保存经历更正", () => command("experience.corrected", { title: input.value, target_event_id: draft.target }), "primary");
+      save.disabled = busy || draft.target !== target;
+      if (correctionDrafts.has(key)) button(root, "放弃草稿并查看当前经历", () => { correctionDrafts.delete(key); renderDetail(); });
+      root.append(node("p", "footnote", "只更正本人的文字陈述，保留记录者、参与关系和来源。关联外观及行动将提示重新核对。"));
+    }
     if (item.created_by === viewer) button(root, "撤回这段经历", () => command("experience.revoked"), "quiet-danger");
   }
   if (item.kind === "action") {
@@ -452,6 +491,10 @@ function renderDetail() {
         root.append(link, node("p", "footnote", "下载后可自行导入日历。不会替其他人发邀请，下载也不代表已经参加。"));
       }
     }
+    if (item.basis_status === "changed") {
+      root.append(node("p", "warning", "行动依据中的经历已更正。原先选择和自报仍是历史，需要各自重新核对。"));
+      appendCurrentBasis(root, item.basis_versions);
+    }
     if (item.basis_status === "withdrawn") root.append(node("p", "warning", "原经历已撤回。这里保留行动历史，不再展示原依据。"));
     for (const person of item.participant_ids) {
       const decision = item.decisions[person]?.status;
@@ -460,9 +503,14 @@ function renderDetail() {
       row.append(node("strong", "", names[person] ?? person), node("span", "", decision === "accepted" ? "愿意参加" : decision === "declined" ? "这次不参加" : "尚未决定"));
       row.append(node("small", "", result ? (result.result === "completed" ? "本人自报：已完成" : "本人自报：未完成") : "没有当前现实结果报告"));
       if (result) row.append(node("p", "", result.note));
+      if (item.basis_status === "changed") row.append(node("small", "", item.basis_reviews?.[person]?.status === "active" ? "本人已核对当前依据" : "尚未核对当前依据"));
       root.append(row);
     }
     if (item.participant_ids.includes(viewer)) {
+      if (item.basis_status === "changed" && item.basis_reviews?.[viewer]?.status !== "active") {
+        button(root, "我已重新核对这些依据", () => command("action.basis.reviewed", { basis_event_ids: item.basis_versions }), "primary");
+        root.append(node("p", "footnote", "这只记录你已查看当前依据，不改变你或他人的原先选择，也不表示重新同意参加。"));
+      }
       const decision = item.decisions[viewer];
       const actions = node("div", "actions");
       if (!decision) {
@@ -549,6 +597,15 @@ function renderDetail() {
       card.append(review);
       button(card, "应用这个提案", () => command(proposal.mode === "patch" ? "visual.recipe.patched" : "visual.recipe.applied", { proposal_id: proposal.proposal_id }), "primary");
       generator.append(card);
+    }
+    if (item.appearance && item.appearance_basis_status !== "active") {
+      generator.append(node("p", "warning", item.appearance_basis_status === "withdrawn" ? "外观的部分来源已撤回；保留物件，不再当作当前经历的表达。" : "经历已更正，当前外观仍待本人核对。"));
+      appendCurrentBasis(generator, item.appearance_basis_versions);
+      if (item.created_by === viewer && item.appearance_basis_status === "changed") {
+        button(generator, "核对后保留这个外观", () => command("visual.basis.reviewed", {
+          basis_event_ids: item.appearance_basis_versions, appearance_event_id: item.appearance_event,
+        }));
+      }
     }
     if (item.appearance) {
       generator.append(node("p", "muted", "当前外观：" + item.appearance.title + " · " + item.appearance_model));
@@ -771,6 +828,7 @@ const pairPollTimer = setInterval(async () => {
       proposals.clear();
       recipeDrafts.clear();
       actionDrafts.clear();
+      correctionDrafts.clear();
       objects.apply({ entities: [], relationships: [] });
       for (const label of labels.values()) label.remove();
       labels.clear();

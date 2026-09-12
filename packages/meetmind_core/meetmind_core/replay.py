@@ -38,7 +38,7 @@ def _ids(value, *, empty=False):
 EVENT_TYPES = frozenset({
     "world.created", "identity.candidate.observed", "identity.claimed",
     "experience.confirmed", "artifact.observed", "inference.superseded",
-    "experience.revoked", "action.proposed", "action.accepted", "action.declined",
+    "experience.revoked", "experience.corrected", "visual.basis.reviewed", "action.basis.reviewed", "action.proposed", "action.accepted", "action.declined",
     "action.outcome.recorded", "action.outcome.revoked",
     "visual.recipe.applied", "visual.recipe.removed", "visual.recipe.patched",
 })
@@ -73,6 +73,34 @@ def project_events(events: Iterable[Mapping], *, viewer_id: str, members: Iterab
             person = entity(person_id, "person")
             _require(person["claim"] == "confirmed", "participant must have a confirmed identity")
             _require(audience <= person["_audience"], "participant identity is not shared with this audience")
+
+    def content_basis(refs):
+        # Traverse causal events, including intermediates, without rewriting history.
+        pending, visited, versions = list(refs), set(), {}
+        while pending:
+            ref = pending.pop()
+            if ref in visited:
+                continue
+            visited.add(ref)
+            origin = ledger[ref]
+            source = entities[origin["subject_id"]]
+            if source["kind"] in {"memory-object", "artifact"}:
+                versions[source["id"]] = source.get("correction_event", source["source_event"])
+            pending.extend(origin["source_refs"])
+        return versions
+
+    def basis_status(captured, current):
+        if any(subject in revoked for subject in current):
+            return "withdrawn"
+        return "active" if captured == current else "changed"
+
+    def require_current_basis(payload, current, extra=()):
+        _require(set(payload) == {"basis_event_ids", *extra}, "review fields do not match contract")
+        supplied = payload["basis_event_ids"]
+        _require(_ids(supplied) and set(supplied) == set(current.values()), "review must reference every current content version")
+        _require(not any(subject in revoked for subject in current), "withdrawn basis cannot be reviewed")
+        for ref in supplied:
+            require_ref(ref)
 
     for raw in events:
         _require(isinstance(raw, Mapping), "event must be an object")
@@ -112,6 +140,7 @@ def project_events(events: Iterable[Mapping], *, viewer_id: str, members: Iterab
             item = {
                 "id": subject, "kind": entity_kind, "created_by": actor,
                 "source_event": event_id, "_audience": audience, "_history": [],
+                "_source_basis": content_basis(refs),
                 **fields,
             }
             entities[subject] = item
@@ -178,6 +207,33 @@ def project_events(events: Iterable[Mapping], *, viewer_id: str, members: Iterab
             _require(payload.get("target_event_id") == target and _text(payload.get("new_title")), "correction must target current version and have a title")
             require_ref(target)
             item.update(title=payload["new_title"], correction_event=event_id)
+        elif kind == "experience.corrected":
+            item = modify("memory-object")
+            _require(actor == item["created_by"], "only reporter can correct experience")
+            _require(set(payload) == {"target_event_id", "new_title"}, "correction only changes the account text")
+            target = item.get("correction_event", item["source_event"])
+            _require(payload["target_event_id"] == target, "correction must target current content")
+            title = payload["new_title"]
+            _require(_text(title) and len(title.strip()) <= 600 and title.strip() != item["title"], "correction needs changed text of 1 to 600 characters")
+            require_ref(target)
+            item.update(title=title.strip(), correction_event=event_id)
+        elif kind == "visual.basis.reviewed":
+            item = entity(subject)
+            _require(item["kind"] in {"memory-object", "artifact"} and "appearance" in item, "visual review requires an appearance")
+            _require(actor == item["created_by"] and item["_audience"] == audience, "only representation author can review it")
+            current = content_basis([item["source_event"]])
+            require_current_basis(payload, current, ("appearance_event_id",))
+            _require(payload["appearance_event_id"] == item["appearance_event"], "appearance changed before review")
+            require_ref(item["appearance_event"])
+            item["_visual_basis"] = current
+            item["_visual_review_event"] = event_id
+        elif kind == "action.basis.reviewed":
+            item = modify("action")
+            _require(actor in item["participant_ids"], "only participant can review own action basis")
+            current = content_basis(item["basis_event_ids"])
+            require_current_basis(payload, current)
+            require_ref(item["source_event"])
+            item.setdefault("_basis_reviews", {})[actor] = {"versions": current, "event_id": event_id}
         elif kind == "experience.revoked":
             item = modify("memory-object")
             _require(actor == item["created_by"], "only reporter can withdraw experience")
@@ -205,6 +261,11 @@ def project_events(events: Iterable[Mapping], *, viewer_id: str, members: Iterab
                 item.pop("appearance")
                 item.pop("appearance_model")
                 item.pop("appearance_changes", None)
+            if kind != "visual.recipe.removed":
+                item["_visual_basis"] = content_basis([item["source_event"]])
+            else:
+                item.pop("_visual_basis", None)
+            item.pop("_visual_review_event", None)
             item["appearance_event"] = event_id
         elif kind == "action.proposed":
             participants = payload.get("participant_ids")
@@ -269,8 +330,25 @@ def project_events(events: Iterable[Mapping], *, viewer_id: str, members: Iterab
             ]
         if item["kind"] == "action":
             basis = item["basis_event_ids"]
-            dto["basis_status"] = "active" if all(visible_event(ref) for ref in basis) else "withdrawn"
+            current = content_basis(basis)
+            dto["basis_status"] = basis_status(item["_source_basis"], current)
             dto["basis_event_ids"] = [ref for ref in basis if visible_event(ref)]
+            dto["basis_versions"] = sorted(ref for ref in current.values() if visible_event(ref))
+            dto["basis_reviews"] = {
+                person: {"status": basis_status(review["versions"], current), "event_id": review["event_id"]}
+                for person, review in item.get("_basis_reviews", {}).items()
+            }
+        if item["kind"] in {"memory-object", "artifact"}:
+            original_refs = ledger[item["source_event"]]["source_refs"]
+            inherited = content_basis(original_refs)
+            dto["source_basis_status"] = basis_status(item["_source_basis"], inherited)
+            dto["source_basis_versions"] = sorted(ref for ref in inherited.values() if visible_event(ref))
+            if "appearance" in item:
+                current = content_basis([item["source_event"]])
+                dto["appearance_basis_status"] = basis_status(item["_visual_basis"], current)
+                dto["appearance_basis_versions"] = sorted(ref for ref in current.values() if visible_event(ref))
+                if item.get("_visual_review_event"):
+                    dto["appearance_review_event"] = item["_visual_review_event"]
         visible.append(dto)
     visible_ids = {item["id"] for item in visible}
     return {

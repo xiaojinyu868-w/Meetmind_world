@@ -36,3 +36,15 @@ wheel仅含5个内核Python模块与dist-info，没有fixture、服务、密钥�
 这不是外部开发者用户研究，也没有证明接入成本降低、API成熟度、付费、真实人行为改变或AI生成效果。
 没有发布PyPI，没有新增许可证；生产数据、模型配置、原始照片与环境资产未改变。
 空间实验的活动区域协商、来源文字纠正与测量机制尚未并入内核；完整产品与高质量人物仍未完成。
+
+
+## 更正与重新核对补充
+
+新增 `experience.corrected`、`visual.basis.reviewed` 与 `action.basis.reviewed`：记录者只能绑定当前内容头修改本人经历文字；
+物件和行动沿引用链计算依据状态，经历更正显示为 `changed`，撤回显示为 `withdrawn`，下游实体、稳定 ID、每个人原有选择和自报仍保留。
+每位参与者可以单独记录已经核对当前依据；这不等于重新接受行动，也不会替另一人确认。内容再次更正会让各自核对重新过期。
+新的严格复核必须列出全部当前来源版本；旧日志仍按旧规则回放，撤回来源后本人仍可撤回已有结果报告。
+
+技术验证补充：114项 shared_experience 单元测试（含多级/多来源传播、权限、精确版本复核、撤回兼容）通过；
+配对 fixture 的桌面/移动浏览器更正流程通过，证据目录为 `C:/Users/Li Hao/AppData/Local/Temp/meetmind-correction-evidence/`，
+包含 `report.json`、`reviewed-world-desktop.png`、`personal-review-mobile.png`。

@@ -46,9 +46,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=4192)
     parser.add_argument("--data-dir", type=Path)
+    parser.add_argument("--pair", action="store_true", help="Use separate synthetic role credentials")
     args = parser.parse_args()
     directory = Path(__file__).parent.joinpath("lab", "dist").resolve()
     store = SQLiteSessionStore(lab_data_directory(args.data_dir)) if args.data_dir else None
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(Lab(fixture_generator, store), directory, args.port))
+    lab = Lab(fixture_generator, store)
+    handler = make_handler(lab, directory, args.port)
+    if args.pair:
+        if args.data_dir is None:
+            parser.error("--pair requires --data-dir for isolated access credentials")
+        from .serve_pair import make_pair_handler
+        from .pair_access import PairAccessStore
+        handler = make_pair_handler(lab, PairAccessStore(lab_data_directory(args.data_dir) / "access"), directory, args.port)
+    server = ThreadingHTTPServer(("127.0.0.1", args.port), handler)
     print(f"Fixture-only QA server: http://127.0.0.1:{args.port}/ ; no model calls", flush=True)
     server.serve_forever()

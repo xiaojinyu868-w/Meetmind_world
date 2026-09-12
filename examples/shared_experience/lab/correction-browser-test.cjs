@@ -1,0 +1,88 @@
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
+const fs = require("node:fs"), path = require("node:path"), assert = require("node:assert/strict");
+(async () => {
+  const out = process.env.LAB_EVIDENCE_DIR || path.join(require("node:os").tmpdir(), "meetmind-correction-evidence");
+  const base = process.env.LAB_URL || "http://127.0.0.1:4198/";
+  fs.mkdirSync(out, { recursive: true });
+  const browser = await chromium.launch({ ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : {}), headless: true });
+  try {
+    const a = await browser.newContext({ viewport: { width: 1440, height: 1100 } });
+    const b = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const owner = await a.newPage(), guest = await b.newPage(), errors = [];
+    for (const p of [owner, guest]) p.on("pageerror", error => errors.push(error.message));
+    const state = async p => JSON.parse(await p.locator("#json").textContent());
+    const entity = async (p, id) => (await state(p)).entities.find(item => item.id === id);
+    const select = (p, id) => p.locator('#entities [data-entity-id="' + id + '"]').click();
+    const waitFor = async (p, id, field, value) => p.waitForFunction(({ id, field, value }) => {
+      const entity = JSON.parse(document.querySelector("#json").textContent).entities.find(x => x.id === id);
+      return entity?.[field] === value;
+    }, { id, field, value });
+    await owner.goto(base);
+    await owner.locator("#pair-status").filter({ hasText: "小满" }).waitFor();
+    await owner.getByRole("button", { name: "创建另一位参与者的加入链接", exact: true }).click();
+    await owner.locator("#pair-link").waitFor({ state: "visible" });
+    await guest.goto(await owner.locator("#pair-link").inputValue());
+    await guest.getByRole("button", { name: "以阿博加入这个共同世界", exact: true }).click();
+    await guest.locator("#pair-status").filter({ hasText: "阿博" }).waitFor();
+    await select(owner, "action-1");
+    await owner.getByRole("button", { name: "我愿意参加", exact: true }).click();
+    await select(guest, "action-1");
+    await guest.locator(".decision").filter({ hasText: "小满" }).filter({ hasText: "愿意参加" }).waitFor();
+    await guest.getByRole("button", { name: "这次不参加", exact: true }).click();
+    await owner.locator(".decision").filter({ hasText: "阿博" }).filter({ hasText: "这次不参加" }).waitFor();
+    await owner.getByLabel("现实结果说明", { exact: true }).fill("合成反馈：只有我完成，另一位没有参加。");
+    await owner.getByRole("button", { name: "自报已完成", exact: true }).click();
+    await guest.locator(".decision").filter({ hasText: "小满" }).filter({ hasText: "本人自报：已完成" }).waitFor();
+    const choices = await entity(owner, "action-1");
+    // The QA server provides an explicitly artificial response, with no paid provider.
+    await select(owner, "artifact-1");
+    await owner.getByRole("button", { name: "生成视觉提案", exact: true }).click();
+    await owner.getByRole("button", { name: "应用这个提案", exact: true }).click();
+    await owner.waitForFunction(() => JSON.parse(document.querySelector("#diagnostic").textContent).objects.some(o => o.id === "artifact-1" && o.recipeParts > 0));
+    const before = JSON.parse(await owner.locator("#diagnostic").textContent()).objects.find(o => o.id === "artifact-1");
+    const appearance = (await entity(owner, "artifact-1")).appearance;
+    await select(owner, "memory-1");
+    await owner.getByLabel("更正我记录的经历", { exact: true }).fill("合成更正：那次只是一起做初稿，还没有共同完成纸桥。");
+    await owner.getByRole("button", { name: "保存经历更正", exact: true }).click();
+    await waitFor(guest, "action-1", "basis_status", "changed");
+    await guest.locator("#detail").getByText("原先选择和自报仍是历史", { exact: false }).waitFor();
+    assert.equal(await guest.getByLabel("更正我记录的经历", { exact: true }).count(), 0);
+    await guest.getByRole("button", { name: "我已重新核对这些依据", exact: true }).click();
+    await guest.locator(".decision").filter({ hasText: "阿博" }).filter({ hasText: "本人已核对当前依据" }).waitFor();
+    assert.deepEqual((await entity(guest, "action-1")).decisions, choices.decisions);
+    assert.deepEqual((await entity(guest, "action-1")).outcomes, choices.outcomes);
+    assert.equal((await entity(guest, "action-1")).basis_reviews.alice, undefined);
+    await owner.waitForFunction(() => JSON.parse(document.querySelector("#json").textContent).entities.find(x => x.id === "action-1").basis_reviews.bo?.status === "active");
+    await select(owner, "artifact-1");
+    await owner.getByRole("button", { name: "核对后保留这个外观", exact: true }).click();
+    await waitFor(owner, "artifact-1", "appearance_basis_status", "active");
+    await owner.waitForTimeout(1100);
+    const after = JSON.parse(await owner.locator("#diagnostic").textContent()).objects.find(o => o.id === "artifact-1");
+    assert.equal(after.uuid, before.uuid);
+    assert.deepEqual(after.parts, before.parts);
+    assert.deepEqual((await entity(owner, "artifact-1")).appearance, appearance);
+    await owner.locator("#detail").scrollIntoViewIfNeeded();
+    await owner.screenshot({ path: path.join(out, "reviewed-world-desktop.png"), fullPage: true, mask: [owner.locator("#pair-link")] });
+    await guest.locator("#detail").scrollIntoViewIfNeeded();
+    await guest.screenshot({ path: path.join(out, "personal-review-mobile.png"), fullPage: true });
+    assert.equal(await guest.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    // A new source version invalidates the prior personal review again.
+    await select(owner, "memory-1");
+    await owner.getByLabel("更正我记录的经历", { exact: true }).fill("合成二次更正：只约好了创作，还没有开始。");
+    await owner.getByRole("button", { name: "保存经历更正", exact: true }).click();
+    await guest.waitForFunction(() => JSON.parse(document.querySelector("#json").textContent).entities.find(x => x.id === "action-1").basis_reviews.bo.status === "changed");
+    await waitFor(owner, "artifact-1", "appearance_basis_status", "changed");
+    await guest.reload();
+    await guest.locator("#pair-status").filter({ hasText: "阿博" }).waitFor();
+    assert.equal((await entity(guest, "action-1")).basis_reviews.bo.status, "changed");
+    await owner.getByRole("button", { name: "撤回这段经历", exact: true }).click();
+    await waitFor(guest, "action-1", "basis_status", "withdrawn");
+    await select(owner, "action-1");
+    await owner.getByRole("button", { name: "撤回我的结果报告", exact: true }).click();
+    await guest.waitForFunction(() => !JSON.parse(document.querySelector("#json").textContent).entities.find(x => x.id === "action-1").outcomes.alice);
+    assert.deepEqual(errors, []);
+    fs.writeFileSync(path.join(out, "report.json"), JSON.stringify({ mode: "synthetic-pair-fixture-no-model", errors,
+      passed: ["correction propagates to other browser", "independent personal review", "decisions and reports preserved", "source and appearance versions bound", "object and mesh identities retained", "repeat correction invalidates review", "reload restores state", "withdrawn basis still permits own report withdrawal", "mobile no overflow"] }, null, 2));
+    console.log(out);
+  } finally { await browser.close(); }
+})().catch(error => { console.error(error); process.exit(1); });

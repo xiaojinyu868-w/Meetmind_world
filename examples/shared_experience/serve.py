@@ -164,7 +164,7 @@ class Lab:
                          "sequence": len(events) + 1, "room_id": current["world_id"],
                          "actor_id": viewer, "subject_id": "action-" + viewer + "-" + request_id,
                          "type": "action.proposed", "payload": payload, "audience": sorted(participants),
-                         "source_refs": [source["source_event"]], "request_basis_id": source_id}
+                         "source_refs": list(dict.fromkeys([source["source_event"], source.get("correction_event", source["source_event"])])), "request_basis_id": source_id}
                 candidate = [*events, event]
                 projected = project_events(candidate, viewer_id=viewer, members=self.fixture["members"])
                 self._save(sid, candidate)
@@ -224,11 +224,23 @@ class Lab:
                         raise ValueError("提案类型与应用命令不匹配")
                     payload = ({"patch": proposal["patch"], "model": proposal["model"]}
                                if expected_mode == "patch" else {"recipe": proposal["recipe"], "model": proposal["model"]})
-                    refs = [item.get("appearance_event", item.get("correction_event", item["source_event"]))]
+                    refs = list(dict.fromkeys([item.get("appearance_event", item.get("correction_event", item["source_event"])), item.get("correction_event", item["source_event"])]))
                 elif command == "visual.recipe.removed":
                     refs = [item.get("appearance_event", item["source_event"])]
                 elif command in {"action.accepted", "action.declined", "experience.revoked"}:
                     refs = [item["source_event"]]
+                elif command == "experience.corrected":
+                    payload = {"target_event_id": body.get("target_event_id"), "new_title": body.get("title")}
+                    refs = [body.get("target_event_id")]
+                elif command in {"visual.basis.reviewed", "action.basis.reviewed"}:
+                    basis = body.get("basis_event_ids")
+                    if not isinstance(basis, list) or not all(isinstance(ref, str) for ref in basis):
+                        raise ValueError("请重新查看当前依据后核对")
+                    payload = {"basis_event_ids": basis}
+                    refs = list(dict.fromkeys([item["source_event"], *basis]))
+                    if command == "visual.basis.reviewed":
+                        payload["appearance_event_id"] = body.get("appearance_event_id")
+                        refs = list(dict.fromkeys([*refs, body.get("appearance_event_id")]))
                 elif command == "inference.superseded":
                     target = item.get("correction_event", item["source_event"])
                     payload = {"target_event_id": target, "new_title": body.get("title")}
