@@ -121,10 +121,14 @@ def validate_state(state):
         _require(decision["revision"] <= state["revision"] and type(decision["status"]) is str and decision["status"] in DECISIONS, "选择版本或状态无效")
         _text(decision["note"], empty=True)
     for action in state["actions"]:
-        _keys(action, ("id", "owner", "text", "status"))
+        _keys(action, ("id", "owner", "text", "status", "due_at", "completion_criteria",
+                       "measurement", "result_source", "report_note"))
         _actor(action["owner"])
         _text(action["text"], maximum=240)
         _require(type(action["status"]) is str and action["status"] in ACTION_STATUS, "行动状态无效")
+        for key, maximum in (("due_at", 80), ("completion_criteria", 360), ("measurement", 240),
+                             ("result_source", 240), ("report_note", 360)):
+            _text(action[key], key, maximum, empty=True)
     _require(type(state["history"]) is list and len(state["history"]) == state["sequence"], "历史游标不连续")
     for index, entry in enumerate(state["history"], 1):
         _keys(entry, ("sequence", "actor", "type", "summary", "revision"))
@@ -265,7 +269,12 @@ def apply_command(state, actor, command):
         "decision.set": ("status", "note"), "action.add": ("text",), "action.report": ("action_id", "status"),
     }
     _require(kind in schemas, "不支持的命令")
-    _keys(command, ("type",) + schemas[kind])
+    optional = ()
+    if kind == "action.add":
+        optional = ("due_at", "completion_criteria", "measurement", "result_source")
+    elif kind == "action.report":
+        optional = ("note", "result_source")
+    _keys(command, ("type",) + schemas[kind], optional)
     result = deepcopy(state)
     change_revision = False
     if kind == "object.move":
@@ -347,13 +356,22 @@ def apply_command(state, actor, command):
         summary = f"本人选择：{DECISIONS[command['status']]}第 {result['revision']} 版"
     elif kind == "action.add":
         text = _text(command["text"], maximum=240)
-        result["actions"].append({"id": f"action-{result['sequence'] + 1}", "owner": actor, "text": text, "status": "pending"})
+        fields = {
+            "due_at": _text(command.get("due_at", ""), "截止时间", 80, empty=True),
+            "completion_criteria": _text(command.get("completion_criteria", ""), "完成标准", 360, empty=True),
+            "measurement": _text(command.get("measurement", ""), "待测量事项", 240, empty=True),
+            "result_source": _text(command.get("result_source", ""), "结果来源", 240, empty=True),
+        }
+        result["actions"].append({"id": f"action-{result['sequence'] + 1}", "owner": actor, "text": text,
+                                   "status": "pending", **fields, "report_note": ""})
         summary = f"添加本人下一步：{text}"
     else:
         item = _find(result["actions"], command["action_id"])
         _require(item["owner"] == actor, "只能报告本人的行动结果")
         _require(type(command["status"]) is str and command["status"] in ACTION_STATUS, "行动状态无效")
         item["status"] = command["status"]
+        item["report_note"] = _text(command.get("note", ""), "行动报告", 360, empty=True)
+        item["result_source"] = _text(command.get("result_source", item["result_source"]), "结果来源", 240, empty=True)
         summary = f"{ACTION_STATUS[item['status']]}：{item['text']}"
     result["revision"] += int(change_revision)
     result["sequence"] += 1
@@ -411,6 +429,18 @@ def export_summary(state, actor):
     if not state["actions"]:
         lines.append("- 尚未添加行动；没有自动分配待办。")
     for action in state["actions"]:
-        lines.append(f"- {MEMBERS[action['owner']]}：{_md(action['text'])}；{ACTION_STATUS[action['status']]}。")
+        details = []
+        if action["due_at"]:
+            details.append(f"截止 {_md(action['due_at'])}")
+        if action["completion_criteria"]:
+            details.append(f"完成标准：{_md(action['completion_criteria'])}")
+        if action["measurement"]:
+            details.append(f"待测量：{_md(action['measurement'])}")
+        if action["result_source"]:
+            details.append(f"结果来源：{_md(action['result_source'])}")
+        if action["report_note"]:
+            details.append(f"自报：{_md(action['report_note'])}")
+        suffix = "；" + "；".join(details) if details else ""
+        lines.append(f"- {MEMBERS[action['owner']]}：{_md(action['text'])}；{ACTION_STATUS[action['status']]}{suffix}。")
     lines.extend(["", "行动结果仅为本人自报，不代表另一人完成、已经购买或现实安装成功。", ""])
     return "\n".join(lines)
