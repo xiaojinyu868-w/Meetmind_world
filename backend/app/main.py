@@ -42,7 +42,9 @@ from app.agents.tools import EventSummaryTool, MemoryQueryTool, ToolRegistry
 from app.application import CommandValidator
 from app.api import confirm as confirm_api
 from app.api import admin, agents as agents_api, auth as auth_api, dev_lab, experience, group, ingest, media, mobile, packages, physical_ai, pipeline, signals, search as search_api, wechat_auth
+from app.api import events as events_api
 from app.api import world as world_api
+from app.events import EventCheckinStore
 from app.group.service import GroupSessionService
 from app.api.v1 import rooms as rooms_v1_api
 from app.api.v1 import workflows as workflows_v1_api
@@ -287,6 +289,8 @@ def create_app() -> FastAPI:
     app.state.field_generation = FieldGenerationService(store)
     app.state.islands = IslandStore()
     app.state.island_builds = IslandBuildQueue(app.state.islands)
+    # 活动模式：碰卡入场事件流（<data>/events/<event_id>/），与人物包/世界快照互不耦合
+    app.state.event_checkins = EventCheckinStore(store.root / "events")
     app.state.scene_modules = SceneModuleRegistry(default_scene_modules())
     app.state.world_scheduler = WorldScheduler(
         app, interval_seconds=get_world_heartbeat_seconds()
@@ -339,6 +343,8 @@ def create_app() -> FastAPI:
     app.include_router(wechat_auth.pair_router)
     # 移动端产品页 + 入口二维码（桌面端「手机录入」指向）
     app.include_router(mobile.router)
+    # 活动模式：NFC/二维码碰卡 → 分身进入活动地图（event.html）
+    app.include_router(events_api.router)
     return app
 
 

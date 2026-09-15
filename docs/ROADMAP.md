@@ -201,7 +201,7 @@
 - [ ] 3.B.1 网络接触：双方世界授权部分互联（暂缓）
 - [ ] 3.B.2 跨网络匹配（暂缓）
 - [ ] 3.C.1 组织空间（暂缓）
-- [ ] 3.C.2 活动模式：黑客松/展会批量入场（暂缓；群体入场由 2.H 先行验证）
+- [~] 3.C.2 活动模式：黑客松/展会批量入场（2026-09-15 启动：MeetMind × 阿里巴巴联合活动，NFC 碰卡 → 像素分身 → 活动地图；策划/分档/排期见 docs/EVENT-MODE-PLAN.md；后端签到事件流 `/api/v0/events` 已落地）
 - [ ] 3.C.3 平台 API（暂缓）
 - [ ] 3.D.1 原 MVP3 验收（暂缓，随重议重设）
 - [ ] 3.E.1 云端联机（远期方向登记，2026-08-03，FR-3.6）：云端房间、陌生人匹配、好友互访个人岛屿；涉及实时同步架构，启动前需架构评审（ARCHITECTURE.md TBD-ARCH-4）；现场联机（2.H.3）是其前置验证
@@ -230,3 +230,4 @@
 - 2026-08-04 | K3 全链路下游完成：一个会话 Agent package 拆为共享会话事实与多个人物 Package；说话人音频/整段录音/人脸观测/声纹置信度、深度摘要与长期记忆、双向关系、体素 atlas/GLB、Ring `person-signal.v1`、资料包播放器和 L1/L2 Agent 授权均接通；K3 新人可进入 v1 咖啡厅 PersonAgent；正式 1.1 Schema 联调通过，203 tests 绿 | 人（边界）+ AI（实现）
 - 2026-08-08 | 工作区大统一：唯一权威 checkout = `/root/meetmind_go`（main = GitHub = 线上，wt_main 已归档）；CD 自动化——服务器 cron 每分钟跑 scripts/deploy.sh，push 到 main 约 1–2 分钟上线（GitHub Actions CI 因账号 billing 被锁搁置）；合并 codex/roundtable-real-model-and-movement-fixes（圆桌真实模型 + 移动恢复）；微信自建 OAuth + 配对扫码登录 + 移动录入页上线；后端 310 tests 绿 | AI（实现）
 - 2026-08-09 | MVP 2.5 设立：双视角呈现（2.5.A.1/2.5.A.2 已上线，备份分支 backup/main-20260809-pre-2.5d）；画风决策转向拓麻歌子×星露谷（MC 保留为变体），确立"不换运行时、只换呈现层"技术路线与头身分离人脸→像素管线；Agent 行为智能化三路调研完成入储备（docs/AGENT-FRONTIER-RESEARCH.md），人决策暂不启动 | 人（决策）+ AI（实现）
+- 2026-09-15 | 活动模式启动（3.C.2）：MeetMind × 阿里巴巴联合活动策划定稿（docs/EVENT-MODE-PLAN.md：三档范围、L2 直接排期、手环即身份、两级分身）；后端活动签到事件流 `/api/v0/events`（幂等/分区槽位/皮肤 PNG/二维码，7 测试）落地 | 人（决策）+ AI（策划与实现）
