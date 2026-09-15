@@ -1,0 +1,12 @@
+node_modules/
+server/data/
+artifacts/raw/
+.env
+
+artifacts/geometry/*.json
+artifacts/geometry/*.blend
+artifacts/geometry/*.png
+artifacts/geometry/frames/
+artifacts/capture/
+artifacts/qa/
+artifacts/video/

@@ -1,0 +1,3 @@
+import test from "node:test";import assert from "node:assert/strict";import {validateManifest,defaultManifest} from "../src/runtime/SceneManifest.js";
+test("default scenes preserve independent render and gameplay transforms",()=>{for(const type of ["glb","splat"]){const v=validateManifest(defaultManifest(type));assert.equal(v.type,type);assert.equal(v.spawn.y,0);assert.equal(v.rotation[0],type==="splat"?180:0);}});
+test("malformed scenes fail before loading or replacing the current scene",()=>{for(const patch of [{schema:"wrong"},{scale:0},{scale:Infinity},{rotation:[0,NaN,0]},{bounds:{minX:1,maxX:0,minZ:0,maxZ:1}},{url:"javascript:alert(1)"},{spawn:{x:NaN,y:0,z:0}}])assert.throws(()=>validateManifest({...defaultManifest(),...patch}));});

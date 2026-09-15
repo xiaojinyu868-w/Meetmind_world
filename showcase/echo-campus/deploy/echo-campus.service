@@ -1,0 +1,25 @@
+[Unit]
+Description=Echo Campus isolated partner showcase
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/meetmind_wt_main/showcase/echo-campus
+ExecStart=/usr/bin/node server/index.mjs
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=5191
+Environment=ECHO_EVENT_DATA=/var/lib/echo-campus/event.json
+Environment=ECHO_ALLOWED_ORIGINS=https://capture.meetmind.online,http://127.0.0.1:5191
+StateDirectory=echo-campus
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/echo-campus
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

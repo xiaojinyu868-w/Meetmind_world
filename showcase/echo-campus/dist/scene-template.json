@@ -1,0 +1,41 @@
+{
+  "schema": "echo-campus.scene.v1",
+  "name": "我的 Marble 世界",
+  "type": "splat",
+  "url": "./world.spz",
+  "scale": 1,
+  "position": [
+    0,
+    0,
+    0
+  ],
+  "rotation": [
+    180,
+    0,
+    0
+  ],
+  "bounds": {
+    "minX": -25,
+    "maxX": 25,
+    "minZ": -25,
+    "maxZ": 25
+  },
+  "spawn": {
+    "x": 0,
+    "y": 0,
+    "z": 8
+  },
+  "groundY": 0,
+  "anchors": {
+    "arrival": {
+      "x": 0,
+      "y": 0,
+      "z": 8
+    },
+    "meeting": {
+      "x": 4,
+      "y": 0,
+      "z": 6
+    }
+  }
+}

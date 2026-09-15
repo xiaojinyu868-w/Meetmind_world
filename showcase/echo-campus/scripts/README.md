@@ -1,0 +1,1 @@
+Runtime source belongs to this project. Browser QA uses independent test profiles only when explicitly authorized. No credentials in client code. Geometry/Blender renders are visual references, not browser screenshots.
