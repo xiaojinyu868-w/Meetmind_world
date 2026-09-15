@@ -155,6 +155,16 @@ def test_checkins_survive_service_restart(tmp_path, monkeypatch):
     assert len([line for line in log.splitlines() if line.strip()]) == 4
 
 
+def test_tag_lookup_distinguishes_first_visit_from_return(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    assert client.get("/api/v0/events/ali-demo/tags/04:A1:B2:C3").status_code == 404
+    created = _check_in(client).json()["checkin"]
+    found = client.get("/api/v0/events/ali-demo/tags/04:A1:B2:C3")
+    assert found.status_code == 200
+    assert found.json()["checkin"]["checkin_id"] == created["checkin_id"]
+    assert client.get("/api/v0/events/Bad!/tags/x").status_code == 404
+
+
 def test_event_qr_points_to_tap_page(tmp_path, monkeypatch):
     client = _client(tmp_path, monkeypatch)
     response = client.get("/api/v0/events/ali-demo/qr.png")

@@ -46,3 +46,6 @@ scripts/deploy.sh --force    # 强制重部署当前 HEAD（如配置变更后�
 - `.env` 不进仓库、不受 CD 影响；改 `.env` 后用 `--force` 触发重启生效
 - CD 不做 git 写操作；工作区必须保持干净（有未提交改动时 `pull` 会失败，日志可见）
 - 后端重启有约 2–4 秒世界状态真空（内存房间状态重建），属预期
+- **锁泄漏排查**（2026-09-15 事故）：若 `echoworld-deploy.log` 长时间没有任何新行（连 `up-to-date` 都没有），
+  先 `fuser -v /tmp/echoworld-deploy.lock`——曾因 uvicorn 从 cron 的 `flock` 继承锁 fd 而终身持锁，
+  导致 9/11–9/15 线上停在旧版本。deploy.sh 现用 `start_backend` 关闭所有高位 fd 后再 `exec uvicorn`。

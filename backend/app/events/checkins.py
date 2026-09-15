@@ -238,6 +238,15 @@ class EventCheckinStore:
             entry = state.checkins.get(checkin_id)
             return dict(entry) if entry else None
 
+    def get_by_tag(self, event_id: str, tag_id: str) -> dict | None:
+        """手环回访预检：同一 tag 之前是否已经入场（手机页据此显示"欢迎回来"）。"""
+        self.validate_event_id(event_id)
+        with self._lock:
+            state = self._state(event_id)
+            checkin_id = state.by_tag.get(tag_id)
+            entry = state.checkins.get(checkin_id) if checkin_id else None
+            return dict(entry) if entry else None
+
     def atlas_path(self, event_id: str, checkin_id: str) -> Path | None:
         entry = self.get_checkin(event_id, checkin_id)
         if not entry or not entry.get("atlas"):

@@ -18,6 +18,20 @@ DATA_DIR=${ECHO_DATA_DIR:-$BACKEND/data}
 UVICORN_LOG=/var/log/echoworld-uvicorn.log
 DEPLOYED_MARKER=/var/lib/echoworld-deployed-commit
 
+# 启动后端时必须关闭从 cron 那层 flock 继承来的锁 fd，否则 uvicorn 会终身持有
+# /tmp/echoworld-deploy.lock，之后每分钟的 flock -n 都静默失败、不再部署
+# （2026-09-15 事故：9/11 起线上停在 281d961 四天，日志无任何输出）。
+start_backend() {
+  (
+    for fd in $(ls /proc/$BASHPID/fd 2>/dev/null); do
+      [ "$fd" -gt 2 ] && eval "exec $fd>&-" 2>/dev/null || true
+    done
+    cd "$BACKEND"
+    ECHO_DATA_DIR="$DATA_DIR" exec nohup .venv/bin/uvicorn app.main:app \
+      --host 127.0.0.1 --port 8000 >> "$UVICORN_LOG" 2>&1
+  ) &
+}
+
 cd "$REPO"
 git fetch origin main --quiet
 REMOTE=$(git rev-parse origin/main)
@@ -32,9 +46,7 @@ if [ "$DEPLOYED" = "$REMOTE" ] && [ "$DEPLOYED" = "$(git rev-parse HEAD)" ] && [
   # 进程级自愈：仓库没变但后端死了（机器重启等）也要拉起——否则 cron 每分钟
   # 报 up-to-date 而服务永远 502（2026-08-31 服务器重启后实测踩中）。
   echo "[deploy] up-to-date 但 :8000 无监听，直接拉起后端"
-  cd "$BACKEND"
-  ECHO_DATA_DIR="$DATA_DIR" nohup .venv/bin/uvicorn app.main:app \
-    --host 127.0.0.1 --port 8000 >> "$UVICORN_LOG" 2>&1 &
+  start_backend
   sleep 4
   curl -fsS http://127.0.0.1:8000/api/health > /dev/null
   echo "[deploy] backend revived: pid $(ss -ltnp 2>/dev/null | grep ':8000' | grep -oP 'pid=\K[0-9]+' | head -1)"
@@ -60,9 +72,8 @@ if [ -n "${PID:-}" ]; then
   kill -9 "$PID" 2>/dev/null || true
   sleep 1
 fi
-cd "$BACKEND"
-ECHO_DATA_DIR="$DATA_DIR" nohup .venv/bin/uvicorn app.main:app \
-  --host 127.0.0.1 --port 8000 >> "$UVICORN_LOG" 2>&1 &
+start_backend
+cd "$REPO"
 sleep 4
 curl -fsS http://127.0.0.1:8000/api/health > /dev/null
 

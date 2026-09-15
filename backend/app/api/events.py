@@ -95,6 +95,18 @@ def check_in(request: Request, event_id: str, body: CheckInRequest):
     return JSONResponse(status_code=201 if created else 200, content=payload)
 
 
+@router.get("/{event_id}/tags/{tag_id}")
+def get_by_tag(request: Request, event_id: str, tag_id: str):
+    """手环回访预检：200 返回既有签到，404 表示首次入场。"""
+    try:
+        record = _store(request).get_by_tag(event_id, tag_id)
+    except EventNotFound:
+        raise HTTPException(status_code=404, detail=f"活动 ID 非法：{event_id}")
+    if record is None:
+        raise HTTPException(status_code=404, detail="该手环尚未入场")
+    return {"checkin": record}
+
+
 @router.get("/{event_id}/checkins/{checkin_id}/atlas.png")
 def get_atlas(request: Request, event_id: str, checkin_id: str):
     if not CHECKIN_ID_PATTERN.match(checkin_id):
