@@ -151,7 +151,7 @@ X = 180° 只是针对常见导出轴系的初始值，不保证适用于所有 
 
 ## 验证边界
 
-43 项 Node / DOM 测试覆盖配置验证、身份同步、导入失败清理与资源释放。文档编写时，尚未完成浏览器真实 GLB/SPZ 画面验收；这些测试不能证明某个新模型已在桌面或手机正确呈现。请将上述六步走查作为每次替换后的实际验收。
+48 项 Node / DOM 测试已通过，覆盖配置验证、身份同步、导入失败清理与资源释放。真实浏览器已完成随项目附带的 GLB 和 SPZ 测试场景可见性检查，也已确认白庭切到水上艺廊后身份与已确认关系保留。测试资产并非真实 Marble 导出；尚未对最终 Marble 文件与实体手机性能作验收。请将上述六步走查用于每次新模型替换，不把这批测试资产的成功推广为所有资产均已验证。
 
 ## 多人共用新场景：已接入启动配置
 
@@ -205,7 +205,7 @@ https://capture.meetmind.online/echo-campus/?sceneManifest=./scenes/my-campus.js
 | public/scenes/import-test.spz | 同一组高斯的 gzip SPZ v2 编码 |
 | 各自的 .json | 对应模型、人物锚点、四个镜头与碰撞圆 |
 
-测试文件为 Y 向上，rotation 使用 [0,0,0]。它们并非 Marble 导出，不能用其表现宣称真实 Marble 资产已验收。GLB 已由真实 GLTFLoader 在 Node 解析，SPZ 已验证头、块长度与坐标；GPU 实際显示仍需浏览器验收。
+测试文件为 Y 向上，rotation 使用 [0,0,0]。它们并非 Marble 导出，不能用其表现宣称真实 Marble 资产已验收。GLB 已由真实 GLTFLoader 在 Node 解析，SPZ 已验证头、块长度与坐标；这两个测试资产也已在真实浏览器显示。PLY 的结构测试不自动证明其在全部设备上的显示与性能。
 
 可以直接打开：
 - ?sceneManifest=./scenes/import-test.glb.json
