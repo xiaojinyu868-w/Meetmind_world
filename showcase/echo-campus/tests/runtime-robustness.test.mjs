@@ -16,6 +16,14 @@ function timers() {
 function response(status, data) { return { ok: status >= 200 && status < 300, status, json: async () => data }; }
 function snapshot(version = 1) { return { event: { id: "test" }, version, attendees: [], connections: [] }; }
 
+test("tab demo storage is explicit and ordinary URLs retain shared browser storage", () => {
+  const owner = { localStorage: storageWith("normal"), sessionStorage: storageWith("tab") };
+  for (const search of ["", "?persona=02", "?demoSession=window", "?demoSession=TAB"]) assert.equal(EventClient.storageFor(search, owner), owner.localStorage);
+  assert.equal(EventClient.storageFor("?entry=nfc&demoSession=tab", owner), owner.sessionStorage);
+  assert.equal(EventClient.storageFor(new URLSearchParams("demoSession=tab"), owner), owner.sessionStorage);
+  assert.equal(EventClient.storageFor("?demoSession=tab", { get sessionStorage() { throw new Error("blocked"); } }), null);
+});
+
 test("default browser fetch keeps the Window receiver through startup, join and identity refresh", async t => {
   const originalFetch = globalThis.fetch;
   const requests = [];

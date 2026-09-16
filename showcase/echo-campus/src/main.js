@@ -40,7 +40,7 @@ const env=pmrem.fromScene(room,.04);scene.environment=env.texture;scene.environm
 const actors=new THREE.Group();actors.name="Event attendees";scene.add(actors);
 const linkRoot=new THREE.Group();linkRoot.name="Confirmed encounters";scene.add(linkRoot);
 const markerRoot=new THREE.Group();scene.add(markerRoot);
-const client=new EventClient();
+const client=new EventClient({storage:EventClient.storageFor(params)});
 let currentScene=null,sceneId="campus",switchSerial=0,cameraMove=null,tour=null,paused=false,time=0,last=performance.now(),selectedId=null,showcaseStarted=false;
 const people=new Map(),keys=new Set(),raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
 let fpsFrames=0,fpsStart=performance.now(),fps=0,lastSnapshotVersion=-1,hasConnected=false;

@@ -1,4 +1,8 @@
 export class EventClient extends EventTarget {
+  static storageFor(search, owner = globalThis) {
+    try { return new URLSearchParams(search).get("demoSession") === "tab" ? owner.sessionStorage : owner.localStorage; }
+    catch { return null; }
+  }
   constructor({
     baseUrl = globalThis.document?.baseURI || "http://localhost:5189/",
     storage = globalThis.localStorage,

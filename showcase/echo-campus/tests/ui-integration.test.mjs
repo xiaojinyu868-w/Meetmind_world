@@ -33,10 +33,10 @@ async function fixture(t) {
     for(const s of sessions){s.client.dispose();s.ui.dispose();await s.win.happyDOM.abort();}
     await app.close();rmSync(dir,{recursive:true,force:true});restore();
   });
-  async function session(query="",callbacks={}) {
-    const win=new Window({url:base+query});win.document.body.innerHTML='<canvas id="world"></canvas><div id="ui"></div>';
+  async function session(query="",callbacks={},sharedStorage=null) {
+    const win=new Window({url:base+query});if(sharedStorage)Object.defineProperty(win,"localStorage",{value:sharedStorage,configurable:true});win.document.body.innerHTML='<canvas id="world"></canvas><div id="ui"></div>';
     activate(win);
-    const client=new EventClient({baseUrl:base,storage:win.localStorage,WebSocketImpl:WebSocket});
+    const client=new EventClient({baseUrl:base,storage:EventClient.storageFor(win.location.search,win),WebSocketImpl:WebSocket});
     const ui=new AppUI({client,...callbacks});
     client.addEventListener("snapshot",event=>ui.setSnapshot(event.detail));
     client.addEventListener("me",event=>ui.setMe(event.detail));
@@ -93,6 +93,27 @@ test("DOM + real server: onboarding, evidence recommendations, invitation, peer 
   assert.ok(a.ui.root.querySelector(".ec-confirmed"));
   assert.equal(a.ui.root.querySelector('[data-action="encounter"]'),null);
   const token=a.client.token;await a.client.refreshMe();assert.equal(a.client.token,token);
+});
+
+test("one-laptop visitor mode isolates identity, survives refresh and completes an encounter",async t=>{
+  const {session}=await fixture(t);
+  const a=await session();await submitJoin(a,A);
+  const normalToken=a.client.token;
+  const b=await session("?entry=nfc&persona=02&demoSession=tab",{},a.win.localStorage);
+  assert.equal(b.client.token,"");assert.equal(b.client.me,null);
+  await submitJoin(b,B);
+  assert.notEqual(b.client.me.attendee.id,a.client.me.attendee.id);
+  assert.equal(a.win.localStorage.getItem("echo-campus-token"),normalToken);
+  assert.equal(b.win.sessionStorage.getItem("echo-campus-token"),b.client.token);
+  const resumed=new EventClient({baseUrl:b.client.baseUrl,storage:EventClient.storageFor(b.win.location.search,b.win),WebSocketImpl:null});
+  t.after(()=>resumed.dispose());await resumed.refreshMe();
+  assert.equal(resumed.me.attendee.id,b.client.me.attendee.id);
+  const ordinaryTab=await session("",{},a.win.localStorage);
+  assert.equal(ordinaryTab.client.me.attendee.id,a.client.me.attendee.id);
+  await a.client.encounter(b.client.me.attendee.id);
+  await b.client.refreshMe();const incoming=b.client.me.encounters.find(item=>item.canConfirm);
+  assert.ok(incoming);await b.client.confirm(incoming.id);await a.client.refreshMe();
+  assert.ok(a.client.me.encounters.some(item=>item.id===incoming.id&&item.status==="confirmed"));
 });
 
 test("DOM validation requires explicit consent, recovers submit button after error and prevents duplicate input",async t=>{
@@ -200,17 +221,30 @@ test("new registered scene appears in selector and dispatches its exact factory 
 
 test("entry and stage URLs preserve only shared scene selection and strip capture/auth parameters",async t=>{
  const {session}=await fixture(t);
- const a=await session("?sceneManifest=./scenes/custom.json&scene=gallery&persona=02&code=private&badge=private&capture=1&debug=1&mode=stage&quality=low#camera");
+ const a=await session("?sceneManifest=./scenes/custom.json&scene=gallery&persona=02&code=private&badge=private&capture=1&debug=1&mode=stage&quality=low&demoSession=tab#camera");
  activate(a.win);
  for(const [serial,stage] of [["01",false],["02",false],[null,false],["01",true]]){
   const url=new URL(a.ui.demoUrl(serial,stage));
   assert.equal(url.searchParams.get("sceneManifest"),"./scenes/custom.json");
   assert.equal(url.searchParams.get("scene"),"gallery");
-  for(const key of ["code","badge","capture","debug","quality"])assert.equal(url.searchParams.has(key),false);
+  for(const key of ["code","badge","capture","debug","quality","demoSession"])assert.equal(url.searchParams.has(key),false);
   assert.equal(url.hash,"");
   assert.equal(url.searchParams.get("mode"),stage?"stage":null);
   assert.equal(url.searchParams.get("persona"),stage?null:serial);
  }
+});
+
+test("NFC panel offers an isolated tab visitor without changing phone or stage links",async t=>{
+ const {session}=await fixture(t);
+ const a=await session("?scene=gallery&capture=1&demoSession=tab");activate(a.win);a.ui.openDemoPanel();
+ const links=[...a.ui.root.querySelectorAll(".ec-demo-links a")];
+ const visitor=links.find(link=>link.textContent.includes("同机演示：独立访客窗口"));
+ assert.ok(visitor);assert.equal(visitor.target,"_blank");assert.equal(visitor.rel,"noopener");
+ const url=new URL(visitor.href);assert.equal(url.searchParams.get("demoSession"),"tab");
+ assert.equal(url.searchParams.get("entry"),"nfc");assert.equal(url.searchParams.get("persona"),"02");
+ assert.equal(url.searchParams.get("scene"),"gallery");assert.equal(url.searchParams.has("capture"),false);
+ for(const link of links.filter(link=>link!==visitor))assert.equal(new URL(link.href).searchParams.has("demoSession"),false);
+ assert.ok(a.ui.root.textContent.includes("真实双端体验可用两部手机"));
 });
 
 test("successful import tolerates blocked browser preference storage",async t=>{

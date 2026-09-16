@@ -367,6 +367,11 @@ export class AppUI {
     else { url.searchParams.set("entry", "nfc"); if (serial) url.searchParams.set("persona", serial); }
     return url.href;
   }
+  tabDemoUrl() {
+    const url = new URL(this.demoUrl("02"));
+    url.searchParams.set("demoSession", "tab");
+    return url.href;
+  }
   async renderStageQr() {
     const entry = new URL(this.demoUrl(null));
     const canvas = this.root.querySelector("[data-stage-qr]");
@@ -374,13 +379,13 @@ export class AppUI {
   }
   openDemoPanel() {
     this.openPanel("demo");
-    const first = this.demoUrl("01"), second = this.demoUrl("02"), stage = this.demoUrl("01", true);
+    const first = this.demoUrl("01"), second = this.demoUrl("02"), stage = this.demoUrl("01", true), tabDemo = this.tabDemoUrl();
     this.render(this.panelHeader("FROM A TAP TO A WORLD", "轻触一下，进入同一个世界", "手机负责入场，大屏见证每一位来宾的出现。") +
       `<div class="ec-demo-qr"><canvas data-demo-qr></canvas><div><span class="ec-tag">第一设备入口</span><h2>手机扫码<br>领取你的分身</h2><p>也可将同一入口写入 NFC 标签。</p></div></div>
       <ol class="ec-demo-steps"><li><span>01</span><div><strong>手机领取</strong><p>填写并确认公开资料，分身即时出现在园区。</p></div></li><li><span>02</span><div><strong>另一台设备加入</strong><p>打开第二设备入口，点选对方发起相遇。</p></div></li><li><span>03</span><div><strong>双方确认，点亮连接</strong><p>回到第一台设备确认请求，大屏同步展示关系。</p></div></li></ol>
-      <div class="ec-demo-links"><a href="${esc(first)}" target="_blank" rel="noopener">打开第一设备入口${icon("external")}</a><a href="${esc(second)}" target="_blank" rel="noopener">打开第二设备入口${icon("external")}</a><a href="${esc(stage)}" target="_blank" rel="noopener">打开大屏展示模式${icon("external")}</a></div>
+      <div class="ec-demo-links"><a href="${esc(first)}" target="_blank" rel="noopener">打开第一设备入口${icon("external")}</a><a href="${esc(second)}" target="_blank" rel="noopener">打开第二设备入口${icon("external")}</a><a href="${esc(stage)}" target="_blank" rel="noopener">打开大屏展示模式${icon("external")}</a><a href="${esc(tabDemo)}" target="_blank" rel="noopener">同机演示：独立访客窗口${icon("external")}</a></div>
       <button class="ec-secondary ec-full" data-action="copy-link" data-url="${esc(first)}">复制演示入口${icon("link")}</button>
-      <div class="ec-notice">${icon("nfc")}<span>两个人请使用不同设备或独立浏览器会话；同一浏览器的标签页共享当前身份。演示入口允许创建虚构身份，仅用于体验，不证明持卡人身份。真实 NFC 硬件读写、现场网络与身份领取需在活动前实机联调。</span></div>`);
+      <div class="ec-notice">${icon("nfc")}<span>真实双端体验可用两部手机；只有一台电脑时，请用「独立访客窗口」领取第二位来宾，身份仅保存在该窗口，关闭后需重新领取。普通标签页仍共享当前身份。演示入口允许创建虚构身份，仅用于体验，不证明持卡人身份。真实 NFC 硬件读写、现场网络与身份领取需在活动前实机联调。</span></div>`);
     const canvas = this.root.querySelector("[data-demo-qr]");
     QRCode.toCanvas(canvas, first, { width: 156, margin: 1, color: { dark: "#29483cff", light: "#ffffffff" } }).catch(() => this.toast("二维码暂未生成，可使用下方入口链接"));
   }
