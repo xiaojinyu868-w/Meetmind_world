@@ -24,9 +24,29 @@ export function installCanvasRecorder(canvas, diagnostics = () => ({})) {
   preview.hidden = true;
   preview.style.cssText = "width:320px;max-width:100%;max-height:180px;object-fit:contain;border-radius:7px;background:#132617";
   bar.append(preview);
+  const exportButton = doc.createElement("button");
+  exportButton.type = "button";
+  exportButton.dataset.captureExport = "";
+  exportButton.textContent = "导出录制数据";
+  exportButton.hidden = true;
+  exportButton.style.cssText = "align-self:flex-start;cursor:pointer;border:1px solid #bccabc;border-radius:7px;padding:6px 10px;background:#f3f6ef;color:#294a3a;font:inherit";
+  const exportNote = doc.createElement("small");
+  exportNote.textContent = "下载不可用时的数据备份，内容仅保留本页";
+  exportNote.hidden = true;
+  const exportData = doc.createElement("textarea");
+  exportData.dataset.captureData = "";
+  exportData.setAttribute("aria-label", "WebM 录制数据");
+  exportData.readOnly = true;
+  exportData.spellcheck = false;
+  exportData.wrap = "off";
+  exportData.hidden = true;
+  exportData.style.cssText = "width:320px;max-width:100%;height:60px;resize:vertical;font:10px/1.3 monospace;border:1px solid #bccabc;border-radius:5px;background:#fff;color:#294a3a";
+  bar.append(exportButton, exportNote, exportData);
   let recorder = null;
   let stream = null;
   let blobUrl = null;
+  let latestBlob = null;
+  let dataReader = null;
   let chunks = [];
   let started = 0;
   let durationTimer = null;
@@ -45,6 +65,14 @@ export function installCanvasRecorder(canvas, diagnostics = () => ({})) {
     durationTimer = null;
   }
   function revokeDownload() {
+    if (dataReader?.readyState === 1) dataReader.abort();
+    dataReader = null;
+    latestBlob = null;
+    exportButton.hidden = true;
+    exportButton.disabled = false;
+    exportNote.hidden = true;
+    exportData.value = "";
+    exportData.hidden = true;
     preview.pause();
     preview.removeAttribute("src");
     preview.load();
@@ -119,12 +147,15 @@ export function installCanvasRecorder(canvas, diagnostics = () => ({})) {
         }
         const blob = new Blob(chunks, {type:active.mimeType || mimeType});
         chunks = [];
+        latestBlob = blob;
         blobUrl = URL.createObjectURL(blob);
         download.href = blobUrl;
         download.download = "Echo-Campus-3D-" + new Date().toISOString().replace(/[:.]/g, "-") + ".webm";
         download.hidden = false;
         preview.src = blobUrl;
         preview.hidden = false;
+        exportButton.hidden = false;
+        exportNote.hidden = false;
         status.textContent = "录制完成 · " + (blob.size / 1048576).toFixed(1) + " MB · 仅 3D 画面";
       });
       active.start(1000);
@@ -140,6 +171,27 @@ export function installCanvasRecorder(canvas, diagnostics = () => ({})) {
       status.textContent = "无法开始录制：" + error.message;
     }
   }
+  function exportRecordingData() {
+    if (!latestBlob || disposed || dataReader?.readyState === 1) return;
+    const source = latestBlob;
+    const reader = new FileReader();
+    dataReader = reader;
+    exportButton.disabled = true;
+    status.textContent = "正在准备本页录制数据…";
+    reader.addEventListener("load", () => {
+      if (disposed || latestBlob !== source || dataReader !== reader) return;
+      exportData.value = String(reader.result);
+      exportData.hidden = false;
+      exportButton.disabled = false;
+      status.textContent = "录制数据已准备 · 可复制保存 · 未上传到服务器";
+    });
+    reader.addEventListener("error", () => {
+      if (disposed || dataReader !== reader) return;
+      exportButton.disabled = false;
+      status.textContent = "数据导出失败，请重试";
+    });
+    reader.readAsDataURL(source);
+  }
   function toggle() { if (recorder?.state === "recording") stop(); else start(); }
   function dispose() {
     if (disposed) return;
@@ -153,6 +205,7 @@ export function installCanvasRecorder(canvas, diagnostics = () => ({})) {
     revokeDownload();
     chunks = [];
     button.removeEventListener("click", toggle);
+    exportButton.removeEventListener("click", exportRecordingData);
     window.removeEventListener("pagehide", dispose);
     bar.remove();
   }
@@ -161,6 +214,7 @@ export function installCanvasRecorder(canvas, diagnostics = () => ({})) {
     status.textContent = "当前浏览器不支持 WebM 画面录制，请使用 Chrome 或 Edge";
   }
   button.addEventListener("click", toggle);
+  exportButton.addEventListener("click", exportRecordingData);
   window.addEventListener("pagehide", dispose);
   const metricsTimer = setInterval(updateMetrics, 1000);
   updateMetrics();
