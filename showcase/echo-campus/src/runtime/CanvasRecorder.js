@@ -15,6 +15,15 @@ export function installCanvasRecorder(canvas, diagnostics = () => ({})) {
   const download = bar.querySelector("[data-capture-download]");
   const status = bar.querySelector("[data-capture-status]");
   const metrics = bar.querySelector("[data-capture-diagnostics]");
+  const preview = doc.createElement("video");
+  preview.dataset.capturePreview = "";
+  preview.setAttribute("aria-label", "刚录制的 3D 画面回放");
+  preview.controls = true;
+  preview.playsInline = true;
+  preview.preload = "metadata";
+  preview.hidden = true;
+  preview.style.cssText = "width:320px;max-width:100%;max-height:180px;object-fit:contain;border-radius:7px;background:#132617";
+  bar.append(preview);
   let recorder = null;
   let stream = null;
   let blobUrl = null;
@@ -36,6 +45,10 @@ export function installCanvasRecorder(canvas, diagnostics = () => ({})) {
     durationTimer = null;
   }
   function revokeDownload() {
+    preview.pause();
+    preview.removeAttribute("src");
+    preview.load();
+    preview.hidden = true;
     if (blobUrl) URL.revokeObjectURL(blobUrl);
     blobUrl = null;
     download.hidden = true;
@@ -110,6 +123,8 @@ export function installCanvasRecorder(canvas, diagnostics = () => ({})) {
         download.href = blobUrl;
         download.download = "Echo-Campus-3D-" + new Date().toISOString().replace(/[:.]/g, "-") + ".webm";
         download.hidden = false;
+        preview.src = blobUrl;
+        preview.hidden = false;
         status.textContent = "录制完成 · " + (blob.size / 1048576).toFixed(1) + " MB · 仅 3D 画面";
       });
       active.start(1000);
