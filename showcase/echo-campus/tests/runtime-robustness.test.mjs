@@ -16,6 +16,37 @@ function timers() {
 function response(status, data) { return { ok: status >= 200 && status < 300, status, json: async () => data }; }
 function snapshot(version = 1) { return { event: { id: "test" }, version, attendees: [], connections: [] }; }
 
+test("default browser fetch keeps the Window receiver through startup, join and identity refresh", async t => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  // Node fetch accepts any receiver; browsers reject EventClient as an illegal Window receiver.
+  globalThis.fetch = async function(url, options) {
+    assert.equal(this, globalThis, "native browser fetch must be called on its owning global");
+    requests.push({ path: url.pathname, method: options.method || "GET" });
+    if (url.pathname.endsWith("/join")) return response(201, { token: "browser-token", attendee: { id: "browser-me" }, snapshot: snapshot(2) });
+    if (url.pathname.endsWith("/me")) return response(200, { attendee: { id: "browser-me" }, encounters: [], version: 2 });
+    return response(200, snapshot(1));
+  };
+  const client = new EventClient({ storage: storageWith(), WebSocketImpl: null, timers: timers() });
+  t.after(() => { globalThis.fetch = originalFetch; client.dispose(); });
+  assert.equal(await client.start(), true);
+  await client.join({ name: "Browser attendee", consent: true });
+  assert.equal(client.me.attendee.id, "browser-me");
+  assert.deepEqual(requests, [
+    { path: "/api/event", method: "GET" },
+    { path: "/api/join", method: "POST" },
+    { path: "/api/me", method: "GET" },
+  ]);
+});
+
+test("an injected fetch implementation is preserved without rebinding", async () => {
+  const injectedFetch = async () => response(200, snapshot(3));
+  const client = new EventClient({ storage: storageWith(), WebSocketImpl: null, timers: timers(), fetchImpl: injectedFetch });
+  assert.equal(client.fetchImpl, injectedFetch);
+  assert.equal((await client.request("event")).version, 3);
+  client.dispose();
+});
+
 test("expired sessions clear token and notify UI; transient outages preserve the authenticated identity", async () => {
   const storage = storageWith("test-session");
   let mode = "outage";

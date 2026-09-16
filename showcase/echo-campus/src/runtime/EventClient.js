@@ -2,7 +2,7 @@ export class EventClient extends EventTarget {
   constructor({
     baseUrl = globalThis.document?.baseURI || "http://localhost:5189/",
     storage = globalThis.localStorage,
-    fetchImpl = globalThis.fetch,
+    fetchImpl = globalThis.fetch?.bind(globalThis),
     WebSocketImpl = globalThis.WebSocket,
     timers = globalThis,
     timeoutMs = 12000,
