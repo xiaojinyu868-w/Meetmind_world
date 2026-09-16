@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import "./ui/world.css";
 import {OrbitControls} from "three/addons/controls/OrbitControls.js";
 import {RoomEnvironment} from "three/addons/environments/RoomEnvironment.js";
 import {getSceneDefinition} from "./runtime/SceneRegistry.js";
@@ -19,7 +20,7 @@ renderer.outputColorSpace=THREE.SRGBColorSpace;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure=1.03;
 renderer.shadowMap.enabled=true;
-renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.shadowMap.type=THREE.PCFShadowMap;
 const scene=new THREE.Scene();
 scene.background=new THREE.Color(0xe2e7df);
 scene.fog=new THREE.Fog(0xe2e7df,95,240);
@@ -124,7 +125,7 @@ async function switchScene(id,options={}){
   syncPeople(client.snapshot);goCamera("hero",0);
   UI.setSceneLabel(id==="import"?options.manifest.name||"我的场景":getSceneDefinition(id).displayName);UI.sceneId=id;
   try{localStorage.setItem("echo-campus-scene",id==="import"?"campus":id);}catch{}
-  UI.setBusy(null);document.getElementById("loading").classList.add("loaded");
+  UI.setBusy(null);document.getElementById("loading").classList.add("loaded");document.getElementById("loading").setAttribute("aria-hidden","true");
  }catch(error){result?.dispose?.();UI.setBusy(null);UI.toast("场景加载失败："+error.message);if(!currentScene)document.getElementById("loading-detail").textContent=error.message;throw error;}
 }
 function clearSelection(){
