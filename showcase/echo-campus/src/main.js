@@ -8,6 +8,7 @@ import {EventClient} from "./runtime/EventClient.js";
 import {importScene} from "./runtime/SceneImporter.js";
 import {readSceneStartup} from "./runtime/SceneStartup.js";
 import {AppUI} from "./ui/AppUI.js";
+import {installCanvasRecorder} from "./runtime/CanvasRecorder.js";
 
 const canvas=document.getElementById("world");
 const params=new URLSearchParams(location.search);
@@ -198,6 +199,7 @@ function diagnostics(){
  return {renderer:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures},fps,dpr:renderer.getPixelRatio(),scene:sceneId,people:people.size,meshes,materials:materials.size,geometries:geometries.size,postPasses:0,shadowMapSize:sun.shadow.mapSize.x,quality,online:UI.online};
 }
 window.__THREE_GAME_DIAGNOSTICS__=diagnostics;
+installCanvasRecorder(canvas, diagnostics);
 if(params.has("capture")||params.has("debug")){
  window.__ECHO_CAMPUS__={renderer,scene,camera,controls,client,UI,get currentScene(){return currentScene;},switchScene,goCamera,focusPerson,runShowcase,diagnostics,setPaused(value){paused=value;},setCamera(p,t,fov=43){cameraTo(p,t,fov,0);},setChromeHidden(value){UI.hideChrome(value);}};
  window.__THREE_GAME_TEST_HOOKS__={setState:async name=>{if(!currentScene)throw new Error("not ready");if(name==="active-play"||name==="hero"){UI.closePanel();goCamera("hero",0);}else if(name==="arrival"){UI.closePanel();goCamera("arrival",0);}else if(name==="garden"){UI.closePanel();goCamera("garden",0);}else if(name==="gallery"){await switchScene("gallery");}else if(name==="profile"){focusPerson(client.snapshot.attendees[0].id);}else throw new Error("unknown state: "+name);return {state:name};},setPausedForScreenshot(value){paused=value;},setSeed(){return 868;}};
