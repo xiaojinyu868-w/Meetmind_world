@@ -19,6 +19,8 @@ const MIME = {
   ".ply": "application/octet-stream", ".splat": "application/octet-stream",
   ".woff2": "font/woff2", ".mp4": "video/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav",
   ".ico": "image/x-icon", ".pdf": "application/pdf",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".md": "text/markdown; charset=utf-8", ".srt": "application/x-subrip; charset=utf-8", ".vtt": "text/vtt; charset=utf-8",
 };
 function token(req) {
   const auth = req.headers.authorization || "";

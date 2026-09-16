@@ -230,4 +230,14 @@ test("HTTP enforces origin, JSON/body limits, rate limiting and static data isol
   assert.equal(range.status, 206);
   assert.equal(await range.text(), "2345");
   assert.equal(range.headers.get("Content-Range"), "bytes 2-5/10");
+  for (const [extension, type] of Object.entries({
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    md: "text/markdown; charset=utf-8", srt: "application/x-subrip; charset=utf-8", vtt: "text/vtt; charset=utf-8",
+  })) {
+    writeFileSync(join(dir,"dist","guide."+extension),"delivery fixture");
+    const asset=await fetch(base+"/guide."+extension);
+    assert.equal(asset.status,200);
+    assert.equal(asset.headers.get("Content-Type"),type);
+    assert.equal(await asset.text(),"delivery fixture");
+  }
 });

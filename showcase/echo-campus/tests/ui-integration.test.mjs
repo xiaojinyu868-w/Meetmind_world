@@ -175,6 +175,44 @@ test("scene import failure preserves panel, clears busy state and does not issue
   assert.equal(a.ui.root.textContent.includes("场景已替换，相遇继续"),false);
 });
 
+test("scene URL and name input events apply immediately without blur",async t=>{
+  const {session}=await fixture(t);let received;
+  const a=await session("",{onImport:async payload=>{received=payload;}});
+  activate(a.win);a.ui.openScenePanel();
+  const input=a.ui.root.querySelector("[data-manifest-url]");
+  input.value="./scenes/import-test.glb";
+  input.dispatchEvent(new a.win.Event("input",{bubbles:true}));
+  const name=a.ui.root.querySelector("[data-manifest-name]");
+  name.value="即时输入的新场景";
+  name.dispatchEvent(new a.win.Event("input",{bubbles:true}));
+  await a.ui.onClick({target:a.ui.root.querySelector('[data-action="apply-manifest"]')});
+  assert.ok(received,"input events must synchronize the manifest before Apply reads it");
+  assert.equal(received.manifest.url,"./scenes/import-test.glb");
+  assert.equal(received.manifest.name,"即时输入的新场景");
+  assert.equal(a.ui.panel,null);
+});
+
+test("advanced scene JSON remains authoritative for save and apply",async t=>{
+  const {session}=await fixture(t);let received;
+  const a=await session("",{onImport:async payload=>{received=payload;}});
+  activate(a.win);a.ui.openScenePanel();
+  const input=a.ui.root.querySelector("[data-manifest-url]");
+  input.value="./scenes/controls.glb";
+  input.dispatchEvent(new a.win.Event("input",{bubbles:true}));
+  const json=a.ui.root.querySelector("[data-manifest-json]");
+  const advanced={...JSON.parse(json.value),name:"高级 JSON 场景",url:"./scenes/advanced.glb",scale:2};
+  json.value=JSON.stringify(advanced);
+  json.dispatchEvent(new a.win.Event("input",{bubbles:true}));
+  a.ui.saveManifest(false);
+  const saved=JSON.parse(a.win.localStorage.getItem("echo-campus-scene-manifest"));
+  assert.equal(saved.url,advanced.url);
+  assert.equal(saved.scale,2);
+  await a.ui.onClick({target:a.ui.root.querySelector('[data-action="apply-manifest"]')});
+  assert.equal(received.manifest.url,advanced.url);
+  assert.equal(received.manifest.name,advanced.name);
+  assert.equal(received.manifest.scale,2);
+});
+
 test("onboarding response does not steal a panel opened while submission is pending",async t=>{
   const {session}=await fixture(t);const a=await session();activate(a.win);
   let release;const original=a.client.join.bind(a.client);

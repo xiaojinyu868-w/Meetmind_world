@@ -50,7 +50,7 @@ export class AppUI {
     this.root.addEventListener("submit", e => this.onSubmit(e));
     this.root.addEventListener("change", e => this.onChange(e));
     this.root.addEventListener("input", e => {
-      if (e.target.matches("[data-transform]")) this.updateManifestFromControls();
+      if (e.target.matches("[data-transform],[data-manifest-name],[data-manifest-url]")) this.updateManifestFromControls();
     });
     this.keyHandler = e => this.onKey(e);
     document.addEventListener("keydown", this.keyHandler);
