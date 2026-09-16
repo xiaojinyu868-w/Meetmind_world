@@ -2,6 +2,12 @@
 
 目标是换一座园区，继续使用已有的分身、名片、供需推荐和相遇关系。模型只决定看到的空间；人物站位、活动边界与交互锚点在配置中独立定义。
 
+## 展示材料
+
+- [97 秒展示主片](https://capture.meetmind.online/echo-campus/Echo-Campus-Showcase.mp4)：1920×1080、30 帧，实际 3D 场景画布录屏与真实浏览器界面截图剪辑，配 DashScope 中文旁白和字幕。它包含场景实录与实际界面，不是全程交互录屏。
+- [合作展示方案 PDF](https://capture.meetmind.online/echo-campus/Echo-Campus-Partner-Showcase.pdf)：空间方向、活动体验与合作落点。
+- [旧版参考预览](https://capture.meetmind.online/echo-campus/Echo-Campus-97s-preview.mp4)：仅作为建筑参考与交互流程示意保留。对外介绍优先使用展示主片和在线 Demo。
+
 ## 先用 2 分钟验证风格
 
 1. 打开 <https://capture.meetmind.online/echo-campus/>。
@@ -10,6 +16,15 @@
 4. 切换底部四个镜头，检查构图和人物尺度。
 
 这两套是程序化场景，可继续直接修改 src/scenes/CampusScene.js 与 SceneKit.js。主界面和活动服务无需重做。
+
+## 同一台电脑演示两位参与者
+
+1. 第一窗口打开普通入口，领取第一位分身。
+2. 新窗口打开 <https://capture.meetmind.online/echo-campus/?demoSession=tab>，领取第二位分身。该入口使用单独会话，避免与普通窗口共享身份。
+3. 在第二窗口查看推荐，向第一位分身发起相遇；切回第一窗口，在“我的相遇”中确认。
+4. 双方应显示已点亮连接。再切换白庭校园与水上艺廊，检查身份与连接保留。
+
+普通入口的新标签页会共享身份，不能当作第二位参与者。实体第二台设备可直接打开普通入口；活动现场的身份核验仍需单独设计。
 
 ## 从 Marble 换一座世界
 
@@ -151,7 +166,7 @@ X = 180° 只是针对常见导出轴系的初始值，不保证适用于所有 
 
 ## 验证边界
 
-48 项 Node / DOM 测试已通过，覆盖配置验证、身份同步、导入失败清理与资源释放。真实浏览器已完成随项目附带的 GLB 和 SPZ 测试场景可见性检查，也已确认白庭切到水上艺廊后身份与已确认关系保留。测试资产并非真实 Marble 导出；尚未对最终 Marble 文件与实体手机性能作验收。请将上述六步走查用于每次新模型替换，不把这批测试资产的成功推广为所有资产均已验证。
+生产构建通过，50 项 Node / DOM 测试全部通过，覆盖配置验证、HTTP/WS 双会话与身份同步、请求确认、浏览器 fetch 调用、导入失败清理与资源释放。真实浏览器已验证 1440×900 桌面与 492×898 移动视口的 WebGL 画面、四个镜头、两套内置场景切换、领取分身、名片、推荐与发起请求，以及 GLB 和自造 SPZ 通过共享启动配置加载。真实浏览器的两个独立会话已完成推荐、请求与双向确认：周澈发起相遇，林予看到待确认请求并确认，双方均显示“已点亮的连接 1”。校园切换为艺廊后，身份与已确认连接保留。本轮验收时公共世界为 17 位人物、8 条连接，其中 15 位人物与 7 条连接为内置示例，另有两个实际领取的演示身份与 1 条已确认连接；这些人数会随新参与者变化。实体手机、NFC 标签与真实 Marble 导出文件未验收；请将上述六步走查作为每次替换后的实际验收。
 
 ## 多人共用新场景：已接入启动配置
 
@@ -205,7 +220,7 @@ https://capture.meetmind.online/echo-campus/?sceneManifest=./scenes/my-campus.js
 | public/scenes/import-test.spz | 同一组高斯的 gzip SPZ v2 编码 |
 | 各自的 .json | 对应模型、人物锚点、四个镜头与碰撞圆 |
 
-测试文件为 Y 向上，rotation 使用 [0,0,0]。它们并非 Marble 导出，不能用其表现宣称真实 Marble 资产已验收。GLB 已由真实 GLTFLoader 在 Node 解析，SPZ 已验证头、块长度与坐标；这两个测试资产也已在真实浏览器显示。PLY 的结构测试不自动证明其在全部设备上的显示与性能。
+测试文件为 Y 向上，rotation 使用 [0,0,0]。它们并非 Marble 导出，不能用其表现宣称真实 Marble 资产已验收。GLB 已由真实 GLTFLoader 在 Node 解析，SPZ 已验证头、块长度与坐标；GLB 和 SPZ 均已通过 sceneManifest 在真实浏览器中成功加载并显示。PLY 样本仍需单独验收。
 
 可以直接打开：
 - ?sceneManifest=./scenes/import-test.glb.json

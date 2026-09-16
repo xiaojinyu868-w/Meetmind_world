@@ -4,20 +4,21 @@
 
 ## 当前结论
 
-可交互原型的软件构建、48 项测试、实际浏览器画面、双隔离会话的相遇流程及测试场景导入已通过。真实 WebGL 录制素材已取得。97 秒展示主片的最终解码、画面、字幕、声音与线上播放验收仍由交付负责人完成；在下方状态更新前，不将成片视作最终通过。
+可交互原型的软件构建、50 项测试、实际浏览器画面、双隔离会话的相遇流程及测试场景导入已通过。97 秒展示主片完整解码、抽帧构图、字幕与音轨测量通过，并在合作展示页实际播放。PDF 7 页、DOCX 5 页均经最终渲染与视觉检查。实际链接输入、404 失败保留原场景、有效 GLB 链接替换也已在最终版本浏览器复测通过。
 
 ## 交付入口与源码
 
 | 内容 | 地址或位置 | 当前验收状态 |
 | --- | --- | --- |
+| 合作展示页 | <https://capture.meetmind.online/echo-campus/showcase.html> | 桌面与 390 像素窄屏检查通过；影片实际播放 |
 | 在线 Demo | <https://capture.meetmind.online/echo-campus/> | 已实际浏览器运行 |
 | 大屏入口 | <https://capture.meetmind.online/echo-campus/?mode=stage> | 使用同一独立活动服务 |
 | 真实场景录制入口 | <https://capture.meetmind.online/echo-campus/?capture> | 已录制并导出 WebM；普通入口不显示工具 |
 | 健康接口 | <https://capture.meetmind.online/echo-campus/api/health> | 本次文档审计实查 HTTP 成功，返回 `ok:true`、`service:echo-campus-event`、`mode:demo` |
-| 展示主片 | <https://capture.meetmind.online/echo-campus/Echo-Campus-Showcase.mp4> | 目标发布路径；最终成片 QA 与发布待负责人确认 |
-| 合作展示 PDF | <https://capture.meetmind.online/echo-campus/Echo-Campus-Partner-Showcase.pdf> | 已有交付文件；最终更新版与线上一致性待负责人确认 |
-| 可编辑使用指南 | <https://capture.meetmind.online/echo-campus/Echo-Campus-Guide.docx> | 目标发布路径；最终版渲染及发布待负责人确认 |
-| 换场景指南 | <https://capture.meetmind.online/echo-campus/SCENE-SWAP.md> | 目标发布路径；仓库 `docs/SCENE-SWAP.md` 已更新，在线副本待负责人发布确认 |
+| 展示主片 | <https://capture.meetmind.online/echo-campus/Echo-Campus-Showcase.mp4> | 最终成片已发布；完整解码与线上播放通过 |
+| 合作展示 PDF | <https://capture.meetmind.online/echo-campus/Echo-Campus-Partner-Showcase.pdf> | 最终 7 页 PDF 已发布；逐页视觉检查通过 |
+| 可编辑使用指南 | <https://capture.meetmind.online/echo-campus/Echo-Campus-Guide.docx> | 最终 5 页 DOCX 已发布；Word 渲染与视觉检查通过 |
+| 换场景指南 | <https://capture.meetmind.online/echo-campus/SCENE-SWAP.md> | 最终在线副本已发布；与仓库指南内容一致 |
 | 旧视觉参考片 | <https://capture.meetmind.online/echo-campus/Echo-Campus-97s-preview.mp4> | 单独保留，明确为建筑视觉参考与流程示意，不作为真实录屏证据 |
 | GitHub 源码 | <https://github.com/xiaojinyu868-w/Meetmind_world/tree/codex/echo-campus-showcase-20260916/showcase/echo-campus> | 分支 `codex/echo-campus-showcase-20260916` |
 | 权威检出 | `/root/meetmind_wt_main/showcase/echo-campus` | 与原 EchoWorld 服务及数据分离 |
@@ -28,7 +29,7 @@
 
 | 要求 | 已有直接证据 | 结论与范围 |
 | --- | --- | --- |
-| 自动测试 | `npm test`：48/48 通过；含 14 项 Happy DOM + 真实 HTTP/WebSocket 集成测试 | 通过；覆盖身份、供需推荐、双方确认、隔离访客、断线与导入等，不能替代 GPU 或硬件测试 |
+| 自动测试 | `npm test`：50/50 通过；含 16 项 Happy DOM + 真实 HTTP/WebSocket 集成测试 | 通过；覆盖身份、供需推荐、双方确认、隔离访客、断线与导入等，不能替代 GPU 或硬件测试 |
 | 生产构建 | `npm run build` 成功，构建页面已实际运行 | 通过；Spark 分包较大，真实手机加载和内存仍需测量 |
 | 桌面真实画面 | 1440×900 浏览器视口看到实际 WebGL 建筑、水庭、景观和分身 | 通过此视口的可见性与操作检查 |
 | 窄屏响应式画面 | 390×844、492×898 浏览器视口检查 | 通过响应式画面检查；不是实体手机性能结论 |
@@ -55,19 +56,19 @@
 
 ## 主片与文档的最终检查
 
-目标主片：`Echo-Campus-Showcase.mp4`，97 秒，1920×1080、30 FPS、H.264 视频与 AAC 音频；内容为真实场景录制、实际界面截图与 DashScope 旁白。
+最终主片：`Echo-Campus-Showcase.mp4`，97 秒，1920×1080、30 FPS、H.264 视频与 AAC 音频；内容为真实场景录制、实际界面截图与 DashScope 旁白。
 
-| 最终检查 | 状态 | 负责人完成后补充 |
+| 最终检查 | 状态 | 已执行检查 |
 | --- | --- | --- |
-| 成片编码、尺寸、帧率、时长与完整解码 | 待最终验收 | 媒体探测与解码结果 |
-| 关键画面、构图、文字与字幕无遮挡 | 待最终验收 | 抽帧/播放检查结论 |
-| 配音、音量与画面节奏 | 待最终验收 | 听审或音频检查范围 |
-| MP4 线上可取、可播放且与最终本地文件一致 | 待发布确认 | 地址及文件一致性证据 |
-| PDF 最终版渲染、分页与文字检查 | 待最终版确认 | 渲染检查结论 |
-| DOCX 最终版渲染、分页与文字检查 | 待最终版确认 | 渲染检查结论 |
-| 场景指南在线副本与仓库版本一致 | 待发布确认 | 下载与内容检查结论 |
+| 成片编码、尺寸、帧率、时长与完整解码 | 通过 | 97.00 秒、1920×1080、30 FPS、2,910 帧、H.264/AAC；全片 ffmpeg 解码无错误 |
+| 关键画面、构图、文字与字幕 | 通过 | 12 个最终编码抽帧人工查看；36 条字幕无重叠，末条结束 95.84 秒 |
+| 配音与音量 | 通过客观音频检查 | 复用 DashScope master；编码音轨均值 −19.3 dB、峰值 −1.5 dB；字幕使用既有语音时间戳对齐。没有把指标称作全片人工听审 |
+| MP4 线上播放 | 通过 | 合作展示页播放器显示 1:37 总时长，播放进度与画面连续推进 |
+| PDF 最终版 | 通过 | 7 页逐页检查；最终改动页复查，其余页与已审版本像素一致；视频链接正确 |
+| DOCX 最终版 | 通过 | Word COM 渲染 5 页；最终改动页复查；a11y 检查 0 问题 |
+| 交付文件一致性 | 发布脚本验收 | SHA-256、字节长度、HTTP 状态与 Content-Type 记录在 artifacts/release/delivery-manifest.json |
 
-此处未勾选的项目保持未完成状态，不能用软件测试通过代替媒体或文档视觉验收。
+主片 51,585,440 字节，由真实 canvas 录制和实际产品截图剪辑而成；并非全程交互录屏。素材、编排脚本、字幕、QA 报告与录屏保存在本地交付目录。可复用的制作脚本与最终 QA 摘要一并归档到 artifacts/release。
 
 ## 换场景与现场使用的剩余边界
 

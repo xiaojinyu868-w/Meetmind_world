@@ -1,0 +1,68 @@
+{
+  "verified_at_utc": "2026-09-16T02:09:11.094345+00:00",
+  "base_url": "https://capture.meetmind.online/echo-campus/",
+  "files": [
+    {
+      "file": "Echo-Campus-Showcase.mp4",
+      "status": 200,
+      "content_type": "video/mp4",
+      "bytes": 51585440,
+      "sha256": "a32033688e87cc9487eb067fd067899dcc78955050185221b0dab391649c183c",
+      "online_matches_local": true
+    },
+    {
+      "file": "Echo-Campus-Showcase.zh-CN.srt",
+      "status": 200,
+      "content_type": "application/x-subrip; charset=utf-8",
+      "bytes": 2818,
+      "sha256": "70dc48aad7809e066bd19c2d7c2b68c7f40b51f7bb1d9f3b96909f5ebf39405a",
+      "online_matches_local": true
+    },
+    {
+      "file": "Echo-Campus-Partner-Showcase.pdf",
+      "status": 200,
+      "content_type": "application/pdf",
+      "bytes": 6349867,
+      "sha256": "cfe58a901769370162d5edb4c1a79b98355497bcd9fb2b95ce23ee6b66b7b3c0",
+      "online_matches_local": true
+    },
+    {
+      "file": "Echo-Campus-Guide.docx",
+      "status": 200,
+      "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "bytes": 2959978,
+      "sha256": "c7eb088b02bf1990fa9c3f1f66ac506a6ecc3e91980f6bc978585d6166e3a6dd",
+      "online_matches_local": true
+    },
+    {
+      "file": "Echo-Campus-cover.jpg",
+      "status": 200,
+      "content_type": "image/jpeg",
+      "bytes": 301097,
+      "sha256": "17fea6f9c723fb4af45ef580613cd6cd6f853d5e727a02940d058f4386edcb04",
+      "online_matches_local": true
+    },
+    {
+      "file": "SCENE-SWAP.md",
+      "status": 200,
+      "content_type": "text/markdown; charset=utf-8",
+      "bytes": 13068,
+      "sha256": "f847d15eb2fa5e93b7ac858e24f336d8f566e53dc12b13f8fcc84c896317fe68",
+      "online_matches_local": true
+    },
+    {
+      "file": "showcase.html",
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "bytes": 7110,
+      "sha256": "87d2a6e88556188214db29bae046a93b26a15c4aa36ab245c347c5165c991030",
+      "online_matches_local": true
+    }
+  ],
+  "health": {
+    "ok": true,
+    "service": "echo-campus-event",
+    "mode": "demo",
+    "version": 6
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "decode_pass": true,
+  "duration_match_97s": true,
+  "video_1080p30": true,
+  "audio_aac": true,
+  "encoded_samples": [
+    3,
+    11,
+    23,
+    35,
+    42,
+    47,
+    54,
+    63,
+    70,
+    77,
+    86,
+    92
+  ],
+  "caption_count": 36,
+  "caption_overlaps": [],
+  "caption_last_s": 95.84,
+  "source_claim": "Browser-rendered live canvas recordings and real browser UI screenshots; no generated or simulated UI. Screenshots are explicitly labelled.",
+  "physical_nfc_verified": false,
+  "audio_unchanged_master": true,
+  "audio_volume_summary": [
+    "[Parsed_volumedetect_0 @ 000002ad2a361580] mean_volume: -19.3 dB",
+    "[Parsed_volumedetect_0 @ 000002ad2a361580] max_volume: -1.5 dB"
+  ],
+  "source_files": {
+    "campus-live.webm": {
+      "bytes": 23529453,
+      "sha256": "4475a36ddf726c6fb75fb1c0d3e1c994d8369c3a8850e4ab315f27eac4059390"
+    },
+    "confirmed-guest.png": {
+      "bytes": 33676,
+      "sha256": "16e0d1c70849c2ceb54d8df005373ec2106b03d5b0b8bd5d08adcd2cfd95abbd"
+    },
+    "confirmed-host.png": {
+      "bytes": 138605,
+      "sha256": "18059a7e8154c6922066fe3830dc8838c796db7abc24a5dc552b8179ee019377"
+    },
+    "gallery-confirmed-preserved.png": {
+      "bytes": 104806,
+      "sha256": "e2e6bebfa278219afa82aaaef21754890d2600adec71840d247d25ca01c35119"
+    },
+    "gallery-live.webm": {
+      "bytes": 22188603,
+      "sha256": "271089651e7ce0df86acbfcfc76d56d494fcefdb1cd1b9595580024e77c069a8"
+    },
+    "guest-matches.png": {
+      "bytes": 26669,
+      "sha256": "c378275251dbb513038cc3195ba12af9a04cbe400ab601e638597e628fbc586c"
+    },
+    "incoming-request.png": {
+      "bytes": 136983,
+      "sha256": "6c7d890fc55f2dbf2412eea6de907e819e5a85d7a4a49c0b314b58ca1ab0f9fb"
+    },
+    "nfc-entry.png": {
+      "bytes": 177782,
+      "sha256": "0b4884ba3239244a6b66eb9772e6ed52f89465326495d066fc1c15ef4afdd7ea"
+    },
+    "onboarding.png": {
+      "bytes": 165753,
+      "sha256": "721ec988c7fd95e5ba43e87151e44b1730c38f72950a1c1d1401a87f965abf12"
+    }
+  }
+}

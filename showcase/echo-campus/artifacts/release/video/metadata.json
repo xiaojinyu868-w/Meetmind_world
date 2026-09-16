@@ -1,0 +1,81 @@
+{
+  "output": "C:\\Users\\Li Hao\\.codex\\visualizations\\2026\\09\\15\\01a0a605-3960-77d3-a27c-e6b2145e32fa\\delivery\\Echo-Campus-Showcase.mp4",
+  "duration_s": 97,
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "frames": 2910,
+  "bytes": 51585440,
+  "elapsed_s": 136.9,
+  "sources": [
+    {
+      "start_s": 0,
+      "end_s": 16.76,
+      "source": "campus-live.webm",
+      "provenance": "browser live canvas recording"
+    },
+    {
+      "start_s": 16.76,
+      "end_s": 22.5,
+      "source": "nfc-entry.png",
+      "provenance": "actual captured browser UI screenshot"
+    },
+    {
+      "start_s": 22.5,
+      "end_s": 30.28,
+      "source": "onboarding.png",
+      "provenance": "actual captured browser UI screenshot"
+    },
+    {
+      "start_s": 30.28,
+      "end_s": 39.9,
+      "source": "guest-matches.png",
+      "provenance": "actual captured browser UI screenshot"
+    },
+    {
+      "start_s": 39.9,
+      "end_s": 44.06,
+      "source": "incoming-request.png",
+      "provenance": "actual captured browser UI screenshot"
+    },
+    {
+      "start_s": 44.06,
+      "end_s": 50.28,
+      "source": "confirmed-host.png",
+      "provenance": "actual captured browser UI screenshot"
+    },
+    {
+      "start_s": 50.28,
+      "end_s": 66.76,
+      "source": "gallery-live.webm",
+      "provenance": "browser live canvas recording"
+    },
+    {
+      "start_s": 66.76,
+      "end_s": 74.8,
+      "source": "confirmed-host.png",
+      "provenance": "actual captured browser UI screenshot"
+    },
+    {
+      "start_s": 74.8,
+      "end_s": 82.2,
+      "source": "gallery-confirmed-preserved.png",
+      "provenance": "actual captured browser UI screenshot"
+    },
+    {
+      "start_s": 82.2,
+      "end_s": 97,
+      "source": "campus-live.webm",
+      "provenance": "browser live canvas recording"
+    }
+  ],
+  "audio": "C:\\Users\\Li Hao\\.codex\\visualizations\\2026\\09\\15\\01a0a605-3960-77d3-a27c-e6b2145e32fa\\delivery\\voice\\Echo-Campus-narration-97s-mastered.wav",
+  "captions": "Existing ASR-aligned captions; unchanged narration",
+  "no_generated_or_simulated_ui": true,
+  "ui_crops": "Confirmed states and recommendation source crops remain pixel faithful; editorial layout only",
+  "additional_ui_sources": [
+    "confirmed-guest.png"
+  ],
+  "source_native_video_resolution": "1440x900, scaled and cropped to 1920x1080",
+  "actual_ui_note": "Onboarding screenshot shows existing persona editing, not a simulated first-join result."
+}

@@ -11,7 +11,7 @@ Scope: AppUI, EventClient, EventStore, HTTP/WebSocket service, SceneManifest/Imp
 
 ## Verified implementation evidence
 
-- npm test: 48/48 passed.
+- npm test: 50/50 passed.
 - npm run build: passed.
 - 14 Happy DOM integration tests use real HTTP/WebSocket EventClient/server flows and cover UI races, evidence rendering, fresh persona links, shared scene URLs and preference-storage failure.
 - API and static build remain isolated from the original EchoWorld service and data.
@@ -39,3 +39,7 @@ Scope: AppUI, EventClient, EventStore, HTTP/WebSocket service, SceneManifest/Imp
 - PLY/SPZ path is dynamically loaded; the compressed Spark module is substantial. Verify real target phones and the final asset.
 - Front-end styling imports Google Fonts with local fallback. Restricted networks can fall back to system fonts; visual output may differ.
 - Source matches/profile evidence fields agree with server DTO. Pending encounters are private to their two participants; public snapshot contains only confirmed relationships and no session/card credentials.
+
+## Final delivery verification
+
+The final 97-second film, seven-page PDF, five-page DOCX and scene guide are published through public/showcase.html. Final encoded frames were visually reviewed; full decode passed. See DELIVERY-QA.md and artifacts/release for evidence. The final scene URL input regression was reproduced, fixed, and passed in real browser use.
