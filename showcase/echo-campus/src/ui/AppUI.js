@@ -34,9 +34,9 @@ const INITIAL = { name: "林予", role: "AI 产品创始人", offer: "AI 产品�
 const CAMERA_LABELS = { overview: "全景", arrival: "入口", courtyard: "庭院", aerial: "俯瞰" };
 
 export class AppUI {
-  constructor({ client, onCamera = () => {}, onScene = () => {}, onImport = () => {}, onTour = () => {}, onSelectPerson = () => {}, onSound = () => {}, onShowcase = () => {} }) {
+  constructor({ client, onCamera = () => {}, onScene = () => {}, onImport = () => {}, onTour = () => {}, onSelectPerson = () => {}, onActivityCheckpoint = () => {}, onSound = () => {}, onShowcase = () => {} }) {
     this.client = client;
-    this.callbacks = { onCamera, onScene, onImport, onTour, onSelectPerson, onSound, onShowcase };
+    this.callbacks = { onCamera, onScene, onImport, onTour, onSelectPerson, onActivityCheckpoint, onSound, onShowcase };
     this.root = document.getElementById("ui");
     this.snapshot = null; this.me = null; this.activity = null; this.online = false; this.panel = null;
     this.selectedPerson = null; this.soundEnabled = false; this.selectedCamera = "overview";
@@ -75,7 +75,7 @@ export class AppUI {
           <button class="ec-tool ec-sound" data-action="sound" aria-label="开启环境声音" aria-pressed="false">${icon("mute")}<span>声音</span></button>
         </nav>
       </header>
-      <div class="ec-scene-caption"><span class="ec-caption-line"></span><span data-scene-name>白庭校园</span><span class="ec-caption-coordinate">WHITE COURT</span></div>
+      <div class="ec-scene-caption"><span class="ec-caption-line"></span><span data-scene-name>白庭校园</span><span class="ec-caption-coordinate" data-scene-coordinate>WHITE COURT</span></div>
       <div class="ec-hint" data-world-hint>拖动环看 <span>·</span> 滚轮缩放 <span>·</span> 点选人物</div>
       <footer class="ec-footer">
         <div class="ec-world-meta">
@@ -128,7 +128,14 @@ export class AppUI {
     if (this.panel === "person" && this.selectedPerson) this.renderPerson(this.selectedPerson);
   }
   setOnline(value) { this.online = !!value; this.syncChrome(); }
-  setSceneLabel(name) { this.sceneLabel = String(name || "我的场景"); this.sceneId = listSceneDefinitions().find(d => d.displayName === this.sceneLabel)?.id || "imported"; this.syncChrome(); }
+  setSceneLabel(name) {
+    this.sceneLabel = String(name || "我的场景");
+    this.sceneId = listSceneDefinitions().find(d => d.displayName === this.sceneLabel)?.id || "imported";
+    const coordinate = { campus: "WHITE COURT", gallery: "WATER GALLERY", imported: "IMPORTED SCENE" }[this.sceneId] || "IMPORTED SCENE";
+    const label = this.root.querySelector("[data-scene-coordinate]");
+    if (label) label.textContent = coordinate;
+    this.syncChrome();
+  }
   setBusy(text) {
     const busy = this.root.querySelector(".ec-busy");
     busy.hidden = !text;
@@ -214,6 +221,7 @@ export class AppUI {
     if (action === "demo") return this.openDemoPanel();
     if (action === "inbox") return this.openInbox();
     if (action === "activity") return this.openActivity();
+    if (action === "checkpoint") return this.run("onActivityCheckpoint", id);
     if (action === "select-person") {
       const person = this.snapshot?.attendees.find(a => a.id === id);
       if (person) { this.setSelectedPerson(person); return this.run("onSelectPerson", person); }
@@ -353,23 +361,30 @@ export class AppUI {
       if (this.panel === "matches" && this.panelRevision === revision) this.render(this.panelHeader("MEANINGFUL ENCOUNTERS", "相遇线索暂未就绪") + `<p class="ec-empty-state">${esc(error.message)}</p><button class="ec-secondary ec-full" data-action="matches">重新获取</button>`);
     }
   }
-  async openActivity() {
+  async openActivity(focusId = null) {
     this.openPanel("activity");
+    this.activityFocusId = focusId || null;
     this.activity = this.snapshot?.activity || this.activity || { checkpoints: [] };
     const mine = new Set((this.me?.activity?.checkins || []).map(item => item.checkpointId));
     const renderActivity = () => {
       const points = this.me?.activity?.points || 0;
       const checkpoints = this.activity?.checkpoints || [];
-      this.render(this.panelHeader("ACTIVITY PASSPORT", "把现场，变成一条可见的路径", "每个点位只计一次；积分只用于本次活动互动，不代表身份或合作概率。") +
+      this.render(this.panelHeader("ACTIVITY PASSPORT", "把现场，变成一条可见的路径", "点击场景里的标记可快速定位；每个点位只计一次，积分只用于本次活动互动。") +
         `<div class="ec-activity-total"><div><span>我的积分</span><strong>${points}</strong><small>/ ${checkpoints.reduce((sum, item) => sum + item.points, 0)} 可得</small></div><div><span>已完成</span><strong>${mine.size}</strong><small>/ ${checkpoints.length} 点位</small></div></div>` +
-        `<div class="ec-checkpoint-list">${checkpoints.map(item => { const done = mine.has(item.id); return `<article class="ec-checkpoint-card ${done ? "is-done" : ""}"><div class="ec-checkpoint-index">${done ? icon("check") : icon("flag")}</div><div class="ec-checkpoint-copy"><strong>${esc(item.label)}</strong><small>${esc(item.partner)} · ${item.points} 分</small><p>${esc(item.description)}</p></div>${this.me?.attendee ? `<button class="${done ? "ec-checkpoint-done" : "ec-small-primary"}" data-action="checkin" data-id="${esc(item.id)}" ${done ? "disabled" : ""}>${done ? "已完成" : "打卡"}</button>` : ""}</article>`; }).join("") || `<div class="ec-empty-state">活动点位将在这里出现。</div>`}</div>` +
+        `<div class="ec-checkpoint-list">${checkpoints.map(item => { const done = mine.has(item.id); return `<article class="ec-checkpoint-card ${done ? "is-done" : ""}" data-checkpoint-id="${esc(item.id)}"><div class="ec-checkpoint-index">${done ? icon("check") : icon("flag")}</div><div class="ec-checkpoint-copy"><strong>${esc(item.label)}</strong><small>${esc(item.partner)} · ${item.points} 分</small><p>${esc(item.description)}</p></div>${this.me?.attendee ? `<button class="${done ? "ec-checkpoint-done" : "ec-small-primary"}" data-action="checkin" data-id="${esc(item.id)}" ${done ? "disabled" : ""}>${done ? "已完成" : "打卡"}</button>` : ""}</article>`; }).join("") || `<div class="ec-empty-state">活动点位将在这里出现。</div>`}</div>` +
         `<div class="ec-notice ec-notice-soft">${icon("nfc")}<span>现场可用 NFC 触碰完成同一动作；当前演示也支持网页按钮和二维码。重复触碰不会重复加分。</span></div>` +
         (!this.me?.attendee ? `<button class="ec-primary ec-full" data-action="join">先领取分身，再开始打卡${icon("arrow")}</button>` : ""));
     };
     renderActivity();
+    if (this.activityFocusId) {
+      requestAnimationFrame(() => {
+        const card = this.root.querySelector(`[data-checkpoint-id="${CSS.escape(this.activityFocusId)}"]`);
+        if (card) { card.classList.add("is-focus"); card.scrollIntoView({ block: "center", behavior: "smooth" }); setTimeout(() => card.classList.remove("is-focus"), 1800); }
+      });
+    }
     if (this.me?.attendee) {
       try { const result = await this.client.activity(); this.activity = result; } catch {}
-      if (this.panel === "activity") renderActivity();
+      if (this.panel === "activity") { renderActivity(); if (this.activityFocusId) { const card = this.root.querySelector(`[data-checkpoint-id="${CSS.escape(this.activityFocusId)}"]`); if (card) { card.classList.add("is-focus"); card.scrollIntoView({ block: "center", behavior: "smooth" }); } } }
     }
   }
   async checkin(checkpointId, button) {

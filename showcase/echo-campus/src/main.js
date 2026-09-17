@@ -41,6 +41,7 @@ const env=pmrem.fromScene(room,.04);scene.environment=env.texture;scene.environm
 const actors=new THREE.Group();actors.name="Event attendees";scene.add(actors);
 const linkRoot=new THREE.Group();linkRoot.name="Confirmed encounters";scene.add(linkRoot);
 const markerRoot=new THREE.Group();scene.add(markerRoot);
+const activityMarkerRoot=new THREE.Group();activityMarkerRoot.name="Activity checkpoints";scene.add(activityMarkerRoot);
 const client=new EventClient({storage:EventClient.storageFor(params)});
 let currentScene=null,sceneId="campus",switchSerial=0,cameraMove=null,tour=null,paused=false,time=0,last=performance.now(),selectedId=null,showcaseStarted=false;
 const people=new Map(),keys=new Set(),raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
@@ -53,6 +54,7 @@ const UI=new AppUI({
  onImport:async ({manifest,file})=>{await switchScene("import",{manifest,file});},
  onTour:()=>toggleTour(),
  onSelectPerson:person=>{if(person?.id)focusPerson(person.id);},
+ onActivityCheckpoint:id=>focusActivityCheckpoint(id),
  onSound:enabled=>{soundEnabled=enabled;if(enabled)chime("on");},
  onShowcase:()=>runShowcase()
 });
@@ -123,7 +125,7 @@ async function switchScene(id,options={}){
   currentScene=result;sceneId=id;scene.add(result.root);
   scene.environment=result.environment||env.texture;
   previous?.dispose?.();renderer.renderLists.dispose();
-  syncPeople(client.snapshot);goCamera("hero",0);
+  syncPeople(client.snapshot);buildActivityMarkers();goCamera("hero",0);
   UI.setSceneLabel(id==="import"?options.manifest.name||"我的场景":getSceneDefinition(id).displayName);UI.sceneId=id;
   try{localStorage.setItem("echo-campus-scene",id==="import"?"campus":id);}catch{}
   UI.setBusy(null);document.getElementById("loading").classList.add("loaded");document.getElementById("loading").setAttribute("aria-hidden","true");
@@ -131,6 +133,44 @@ async function switchScene(id,options={}){
 }
 function clearSelection(){
  selectedId=null;for(const o of [...markerRoot.children]){o.geometry.dispose();o.material.dispose();markerRoot.remove(o);}
+}
+const ACTIVITY_MARKERS={
+ welcome:{label:"入场签到",partner:"ECHO CAMPUS",color:0x9e7651,positions:{campus:[3.65,.2,22.3],gallery:[3,.2,24.9]}},
+ future:{label:"未来计算",partner:"中科曙光 · 海光信息",color:0x567e88,positions:{campus:[-19,.2,9],gallery:[-25,.2,1]}},
+ platform:{label:"平台共创",partner:"字节 · 豆包 · 飞书",color:0x7f6f9d,positions:{campus:[22,.2,14],gallery:[24,.2,-8]}},
+ gallery:{label:"水上艺廊",partner:"空间体验站",color:0x5b8e83,positions:{campus:[-9,.2,-.7],gallery:[0,.2,1.4]}},
+ connection:{label:"相遇确认",partner:"ECHO CAMPUS",color:0xb1844c,positions:{campus:[22,.2,19.5],gallery:[25,.2,19.5]}},
+};
+function markerLabelTexture(label,partner,color){
+ const canvas=document.createElement("canvas");canvas.width=720;canvas.height=180;const ctx=canvas.getContext("2d");
+ ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle="rgba(248,250,242,.94)";ctx.beginPath();ctx.roundRect(12,12,696,156,26,26);ctx.fill();
+ ctx.strokeStyle=`#${color.toString(16).padStart(6,"0")}`;ctx.lineWidth=5;ctx.stroke();ctx.fillStyle="#3f5946";ctx.font="600 42px Microsoft YaHei, sans-serif";ctx.textAlign="center";ctx.fillText(label,360,78);
+ ctx.fillStyle="#81917f";ctx.font="24px Microsoft YaHei, sans-serif";ctx.fillText(partner,360,122);
+ const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=4;return texture;
+}
+function disposeActivityMarkers(){
+ activityMarkerRoot.traverse(o=>{if(o.geometry)o.geometry.dispose();const mats=Array.isArray(o.material)?o.material:[o.material];for(const m of mats){if(!m)continue;const map=m.map;if(map?.isTexture)map.dispose();m.dispose?.();}});
+ activityMarkerRoot.clear();
+}
+function buildActivityMarkers(){
+ disposeActivityMarkers();if(!currentScene||!currentScene.anchors)return;
+ const sceneKey=sceneId==="gallery"?"gallery":"campus";
+ const customPositions=sceneId!=="gallery"&&sceneId!=="campus"?(()=>{const b=currentScene.bounds||{minX:-20,maxX:20,minZ:-20,maxZ:20},a=currentScene.anchors?.arrival||currentScene.spawn,m=currentScene.anchors?.meeting||{x:(b.minX+b.maxX)/2,z:(b.minZ+b.maxZ)/2};const w=b.maxX-b.minX,d=b.maxZ-b.minZ;return {welcome:[a.x,(a.y||0)+.2,a.z],future:[b.minX+w*.2,.2,b.minZ+d*.64],platform:[b.maxX-w*.2,.2,(b.minZ+b.maxZ)/2],gallery:[(b.minX+b.maxX)/2,.2,b.maxZ-d*.2],connection:[m.x,(m.y||0)+.2,m.z]};})():null;
+ for(const [id,definition] of Object.entries(ACTIVITY_MARKERS)){
+  const position=customPositions?.[id]||definition.positions[sceneKey];if(!position)continue;
+  const group=new THREE.Group();group.name=`activity-marker-${id}`;group.position.set(...position);group.userData.activityMarkerId=id;
+  const color=new THREE.Color(definition.color);
+  const base=new THREE.Mesh(new THREE.CylinderGeometry(.30,.42,.08,24),new THREE.MeshStandardMaterial({color:0xf4f0df,roughness:.75}));base.position.y=.04;base.castShadow=true;
+  const stem=new THREE.Mesh(new THREE.CylinderGeometry(.028,.045,1.28,10),new THREE.MeshStandardMaterial({color,metalness:.3,roughness:.42}));stem.position.y=.72;stem.castShadow=true;
+  const orb=new THREE.Mesh(new THREE.SphereGeometry(.16,18,12),new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:.72,metalness:.24,roughness:.28}));orb.position.y=1.43;orb.castShadow=true;
+  const halo=new THREE.Mesh(new THREE.TorusGeometry(.24,.022,8,32),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.82}));halo.rotation.x=Math.PI/2;halo.position.y=1.43;
+  const label=new THREE.Sprite(new THREE.SpriteMaterial({map:markerLabelTexture(definition.label,definition.partner,definition.color),transparent:true,depthWrite:false}));label.scale.set(2.36,.59,1);label.position.set(0,2.08,0);
+  group.add(base,stem,orb,halo,label);group.traverse(o=>{o.userData.activityMarkerId=id;});activityMarkerRoot.add(group);
+ }
+}
+function focusActivityCheckpoint(id){
+ const marker=activityMarkerRoot.children.find(item=>item.userData.activityMarkerId===id);if(!marker)return UI.openActivity(id);
+ UI.openActivity(id);const target=marker.position.clone().add(new THREE.Vector3(0,.82,0));const position=target.clone().add(new THREE.Vector3(5.4,3.1,6.7));cameraTo(position.toArray(),target.toArray(),45,1000);
 }
 function focusPerson(id){
  const p=people.get(id);if(!p)return;selectedId=id;UI.setSelectedPerson(p.person);
@@ -149,7 +189,7 @@ canvas.addEventListener("pointerdown",e=>{downPoint={x:e.clientX,y:e.clientY};})
 canvas.addEventListener("pointerup",e=>{
  if(!downPoint||Math.hypot(e.clientX-downPoint.x,e.clientY-downPoint.y)>6)return;downPoint=null;
  const rect=canvas.getBoundingClientRect();pointer.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(pointer,camera);
- const hit=raycaster.intersectObjects(actors.children,true)[0];if(hit?.object.userData.personId)focusPerson(hit.object.userData.personId);
+ const hits=raycaster.intersectObjects([...actors.children,...activityMarkerRoot.children],true);const hit=hits[0];if(hit?.object.userData.personId)focusPerson(hit.object.userData.personId);else if(hit?.object.userData.activityMarkerId)focusActivityCheckpoint(hit.object.userData.activityMarkerId);
 });
 window.addEventListener("keydown",e=>{if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;if(["w","a","s","d","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)){keys.add(e.key.toLowerCase());e.preventDefault();}if(e.key==="Escape"){UI.closePanel();cameraMove=null;tour=null;}});
 window.addEventListener("keyup",e=>keys.delete(e.key.toLowerCase()));window.addEventListener("blur",()=>keys.clear());
@@ -190,7 +230,7 @@ function tick(now){
  if(cameraMove){const p=Math.min(1,(now-cameraMove.start)/cameraMove.duration),e=p*p*(3-2*p);camera.position.lerpVectors(cameraMove.fromP,cameraMove.toP,e);controls.target.lerpVectors(cameraMove.fromT,cameraMove.toT,e);camera.fov=THREE.MathUtils.lerp(cameraMove.fromFov,cameraMove.toFov,e);camera.updateProjectionMatrix();if(p>=1)cameraMove=null;}
  if(tour&&!paused){const t=(now-tour.started)/1000,angle=t*.035;const offset=tour.base.clone().sub(tour.target).applyAxisAngle(new THREE.Vector3(0,1,0),angle);camera.position.copy(tour.target).add(offset);controls.target.copy(tour.target);}
  controls.update();
- if(!paused){currentScene?.update(dt,time);for(const value of people.values()){value.walking=false;}moveSelf(dt);for(const value of people.values()){if(value.arrival!==null){const progress=Math.min(1,(time-value.arrival)/.75);value.root.scale.setScalar(Math.max(.02,1-Math.pow(1-progress,3)));if(progress===1)value.arrival=null;}value.update(dt,time,value.walking?"walking":selectedId===value.person.id?"wave":value.index%4===0?"talking":"idle");}}
+ if(!paused){currentScene?.update(dt,time);for(const marker of activityMarkerRoot.children){const orb=marker.children[2],halo=marker.children[3];if(orb)orb.position.y=1.43+Math.sin(time*2.5+marker.position.x)*.08;if(halo){halo.rotation.z=time*.45;halo.scale.setScalar(1+.08*Math.sin(time*2+marker.position.z));}}for(const value of people.values()){value.walking=false;}moveSelf(dt);for(const value of people.values()){if(value.arrival!==null){const progress=Math.min(1,(time-value.arrival)/.75);value.root.scale.setScalar(Math.max(.02,1-Math.pow(1-progress,3)));if(progress===1)value.arrival=null;}value.update(dt,time,value.walking?"walking":selectedId===value.person.id?"wave":value.index%4===0?"talking":"idle");}}
  renderer.render(scene,camera);fpsFrames++;if(now-fpsStart>1000){fps=Math.round(fpsFrames*1000/(now-fpsStart));fpsFrames=0;fpsStart=now;}
 }
 requestAnimationFrame(tick);
