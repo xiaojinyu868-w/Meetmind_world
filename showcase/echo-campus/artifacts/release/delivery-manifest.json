@@ -1,5 +1,5 @@
 {
-  "verified_at_utc": "2026-09-16T02:09:11.094345+00:00",
+  "verified_at_utc": "2026-09-17T19:53:26.810Z",
   "base_url": "https://capture.meetmind.online/echo-campus/",
   "files": [
     {
@@ -54,8 +54,8 @@
       "file": "showcase.html",
       "status": 200,
       "content_type": "text/html; charset=utf-8",
-      "bytes": 7110,
-      "sha256": "87d2a6e88556188214db29bae046a93b26a15c4aa36ab245c347c5165c991030",
+      "bytes": 7313,
+      "sha256": "36e1ac681ab9a4e31fadec46fcd2cbec6a298a7c183938909d396d6aa37b56be",
       "online_matches_local": true
     }
   ],
@@ -63,6 +63,6 @@
     "ok": true,
     "service": "echo-campus-event",
     "mode": "demo",
-    "version": 6
+    "version": 9
   }
 }
