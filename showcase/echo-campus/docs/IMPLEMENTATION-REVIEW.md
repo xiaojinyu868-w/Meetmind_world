@@ -11,7 +11,7 @@ Scope: AppUI, EventClient, EventStore, HTTP/WebSocket service, SceneManifest/Imp
 
 ## Verified implementation evidence
 
-- npm test: 50/50 passed.
+- npm test: 51/51 passed.
 - npm run build: passed.
 - 14 Happy DOM integration tests use real HTTP/WebSocket EventClient/server flows and cover UI races, evidence rendering, fresh persona links, shared scene URLs and preference-storage failure.
 - API and static build remain isolated from the original EchoWorld service and data.
