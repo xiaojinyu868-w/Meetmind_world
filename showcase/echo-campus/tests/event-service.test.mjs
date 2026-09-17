@@ -79,6 +79,20 @@ test("badge activation, claim ownership and authenticated resume prevent identit
   assert.throws(() => store.join({ ...ALICE, badgeId: "demo-visitor-02", activationCode: "ECHO-DEMO-02" }, owner.token), isError(409, "ALREADY_HAS_BADGE"));
 });
 
+test("activity categories, optional contact privacy, and idempotent checkins", () => {
+  const store = new EventStore();
+  const claim = store.join({ ...ALICE, category: "investor", organization: "Demo Fund", contact: "secret@example.invalid", publicContact: false });
+  assert.equal(claim.attendee.category, "investor");
+  assert.equal(claim.attendee.wristbandColor, "#8066a8");
+  assert.equal("contact" in claim.attendee, false);
+  const first = store.checkin(claim.token, "welcome");
+  const second = store.checkin(claim.token, "welcome");
+  assert.equal(first.checkin.points, 10);
+  assert.equal(second.idempotent, true);
+  assert.equal(store.me(claim.token).activity.points, 10);
+  assert.equal(store.snapshot().activity.totalCheckins, 1);
+});
+
 test("encounters require recipient confirmation, remain private while pending, and are idempotent", () => {
   const store = new EventStore();
   const a = store.join(ALICE), b = store.join(BOB), c = store.join({ ...ALICE, name: "无关第三方" });

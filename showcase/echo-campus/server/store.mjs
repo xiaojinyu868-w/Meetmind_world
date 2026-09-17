@@ -1,10 +1,12 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { mkdirSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { DEMO_EVENT, seedAttendees, seedConnections, demoBadges } from "./seed.mjs";
+import { DEMO_EVENT, seedAttendees, seedConnections, demoBadges, ATTENDEE_CATEGORIES, CHECKPOINTS } from "./seed.mjs";
 
 const TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const HEX = /^#[0-9a-fA-F]{6}$/;
+const CATEGORY_IDS = new Set(ATTENDEE_CATEGORIES.map(item => item.id));
+const category = id => ATTENDEE_CATEGORIES.find(item => item.id === id) || ATTENDEE_CATEGORIES.at(-1);
 export const hashSecret = value => createHash("sha256").update(value).digest("hex");
 
 export class HttpError extends Error {
@@ -29,18 +31,33 @@ function profile(body) {
   if (body.consent !== true) fail(400, "CONSENT_REQUIRED", "请确认在本活动公开展示这些资料");
   const avatarColor = body.avatarColor || "#758b79";
   if (typeof avatarColor !== "string" || !HEX.test(avatarColor)) fail(400, "INVALID_INPUT", "分身颜色格式不正确");
+  const categoryId = body.category || "guest";
+  if (typeof categoryId !== "string" || !CATEGORY_IDS.has(categoryId)) fail(400, "INVALID_INPUT", "参会类别不正确");
+  const optional = (value, field, max) => value === undefined || value === "" ? "" : cleanText(value, field, 1, max);
   return {
     name: cleanText(body.name, "昵称", 1, 24),
     role: cleanText(body.role, "角色", 1, 60),
     offer: cleanText(body.offer, "我能提供", 1, 160),
     need: cleanText(body.need, "我在寻找", 1, 160),
+    organization: optional(body.organization, "机构", 80),
+    contact: optional(body.contact, "联系入口", 120),
+    bio: optional(body.bio, "一句话介绍", 160),
+    publicContact: body.publicContact === true,
+    category: categoryId,
+    wristbandColor: category(categoryId).wristbandColor,
     avatarColor: avatarColor.toLowerCase(),
     consent: true,
   };
 }
 function publicAttendee(a) {
-  const { id, name, role, offer, need, avatarColor, position, synthetic, source, joinedAt } = a;
-  return { id, name, role, offer, need, avatarColor, position, synthetic, source, joinedAt };
+  const { id, name, role, offer, need, organization, contact, bio, publicContact, category: categoryId, wristbandColor, avatarColor, position, synthetic, source, joinedAt } = a;
+  return {
+    id, name, role, offer, need, organization, bio, avatarColor,
+    ...(publicContact && contact ? { contact } : {}),
+    publicContact: !!publicContact, category: categoryId || "guest",
+    wristbandColor: wristbandColor || category(categoryId).wristbandColor,
+    position, synthetic, source, joinedAt,
+  };
 }
 function publicConnection(c) {
   const { id, fromId, toId, status, createdAt, confirmedAt, synthetic } = c;
@@ -83,11 +100,21 @@ export class EventStore {
     if (file && existsSync(file)) {
       this.state = JSON.parse(readFileSync(file, "utf8"));
       if (this.state.schema !== "echo-campus-store.v1") throw new Error("Unsupported demo store schema");
+      this.state.event = { ...DEMO_EVENT, ...this.state.event };
+      this.state.checkins ||= [];
+      this.state.event = { ...DEMO_EVENT, ...this.state.event, activityMode: this.state.event.activityMode || "checkpoints-v1", categories: this.state.event.categories || ATTENDEE_CATEGORIES, checkpoints: this.state.event.checkpoints || CHECKPOINTS };
+      this.state.attendees.forEach(attendee => {
+        attendee.category ||= "guest";
+        attendee.wristbandColor ||= category(attendee.category).wristbandColor;
+        attendee.organization ||= "";
+        attendee.bio ||= "";
+        attendee.publicContact = attendee.publicContact === true;
+      });
     } else {
       const date = new Date(now()).toISOString();
       this.state = {
         schema: "echo-campus-store.v1", version: 1, event: { ...DEMO_EVENT },
-        attendees: seedAttendees(date), encounters: seedConnections(date), sessions: [],
+        attendees: seedAttendees(date), encounters: seedConnections(date), sessions: [], checkins: [],
         badges: demoBadges().map(b => ({ badgeId: b.badgeId, activationHash: hashSecret(b.activationCode), attendeeId: null })),
       };
       this.persist();
@@ -105,12 +132,41 @@ export class EventStore {
     this.persist();
     this.onChange(this.snapshot());
   }
+  activitySnapshot() {
+    const uniqueByCheckpoint = checkpointId => new Set(this.state.checkins.filter(item => item.checkpointId === checkpointId).map(item => item.attendeeId)).size;
+    const totalPoints = this.state.checkins.reduce((sum, item) => sum + item.points, 0);
+    return {
+      checkpoints: CHECKPOINTS.map(item => ({ ...item, attendees: uniqueByCheckpoint(item.id) })),
+      checkedInAttendees: new Set(this.state.checkins.map(item => item.attendeeId)).size,
+      totalCheckins: this.state.checkins.length,
+      totalPoints,
+    };
+  }
+  meActivity(attendeeId) {
+    const items = this.state.checkins.filter(item => item.attendeeId === attendeeId);
+    return {
+      points: items.reduce((sum, item) => sum + item.points, 0),
+      checkins: items.map(item => ({ checkpointId: item.checkpointId, points: item.points, checkedInAt: item.createdAt })),
+    };
+  }
+  checkin(token, checkpointId) {
+    const attendee = this.authenticate(token);
+    const checkpoint = CHECKPOINTS.find(item => item.id === checkpointId);
+    if (!checkpoint) fail(404, "CHECKPOINT_NOT_FOUND", "这个打卡点尚未开放");
+    const existing = this.state.checkins.find(item => item.attendeeId === attendee.id && item.checkpointId === checkpoint.id);
+    if (existing) return { checkin: { checkpointId: existing.checkpointId, points: existing.points, checkedInAt: existing.createdAt }, activity: this.meActivity(attendee.id), snapshot: this.snapshot(), idempotent: true };
+    const item = { id: "checkin-" + randomUUID(), attendeeId: attendee.id, checkpointId: checkpoint.id, points: checkpoint.points, createdAt: new Date(this.now()).toISOString() };
+    this.state.checkins.push(item);
+    this.changed();
+    return { checkin: { checkpointId: item.checkpointId, points: item.points, checkedInAt: item.createdAt }, activity: this.meActivity(attendee.id), snapshot: this.snapshot(), idempotent: false };
+  }
   snapshot() {
     return {
       event: { ...this.state.event },
       version: this.state.version,
       attendees: this.state.attendees.filter(a => a.consent).map(publicAttendee),
       connections: this.state.encounters.filter(c => c.status === "confirmed").map(publicConnection),
+      activity: this.activitySnapshot(),
     };
   }
   authenticate(token, required = true) {
@@ -173,6 +229,7 @@ export class EventStore {
     return {
       attendee: publicAttendee(attendee),
       version: this.state.version,
+      activity: this.meActivity(attendee.id),
       encounters: this.state.encounters.filter(c => c.fromId === attendee.id || c.toId === attendee.id).map(c => ({
         ...publicConnection(c),
         direction: c.fromId === attendee.id ? "outgoing" : "incoming",

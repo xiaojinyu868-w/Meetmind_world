@@ -108,6 +108,12 @@ export function createEventServer({
         if (req.method === "GET" && url.pathname === "/api/event") return json(res, 200, store.snapshot());
         if (req.method === "GET" && url.pathname === "/api/me") return json(res, 200, store.me(token(req)));
         if (req.method === "GET" && url.pathname === "/api/matches") return json(res, 200, store.matches(token(req)));
+        if (req.method === "GET" && url.pathname === "/api/activity") return json(res, 200, store.activitySnapshot());
+        if (req.method === "POST" && url.pathname === "/api/checkins") {
+          const body = await readBody(req);
+          const checkpointId = typeof body.checkpointId === "string" ? body.checkpointId : "";
+          return json(res, 200, store.checkin(token(req), checkpointId));
+        }
         if (req.method === "POST" && url.pathname === "/api/join") {
           const result = store.join(await readBody(req), token(req));
           return json(res, result.resumed ? 200 : 201, result);

@@ -1,3 +1,20 @@
+export const ATTENDEE_CATEGORIES = Object.freeze([
+  Object.freeze({ id: "investor", label: "投资人", wristbandColor: "#8066a8" }),
+  Object.freeze({ id: "founder", label: "创业者", wristbandColor: "#4f82bd" }),
+  Object.freeze({ id: "audience", label: "观众", wristbandColor: "#6d946f" }),
+  Object.freeze({ id: "media", label: "媒体", wristbandColor: "#313845" }),
+  Object.freeze({ id: "platform", label: "平台伙伴", wristbandColor: "#b7794c" }),
+  Object.freeze({ id: "organizer", label: "主办方", wristbandColor: "#a65f70" }),
+  Object.freeze({ id: "guest", label: "其他来宾", wristbandColor: "#778879" }),
+]);
+export const CHECKPOINTS = Object.freeze([
+  Object.freeze({ id: "welcome", label: "入场签到", partner: "ECHO CAMPUS", description: "领取你的数字分身，进入共同世界。", points: 10 }),
+  Object.freeze({ id: "future", label: "未来计算", partner: "中科曙光 · 海光信息", description: "在算力与智能的交叉点，留下一个问题。", points: 20 }),
+  Object.freeze({ id: "platform", label: "平台共创", partner: "字节 · 豆包 · 飞书", description: "发现一个可以一起验证的产品想法。", points: 20 }),
+  Object.freeze({ id: "gallery", label: "水上艺廊", partner: "空间体验站", description: "在另一座场景里，找到一位值得认识的人。", points: 15 }),
+  Object.freeze({ id: "connection", label: "相遇确认", partner: "ECHO CAMPUS", description: "与一位伙伴互相确认，让连接在世界中点亮。", points: 25 }),
+]);
+const categoryById = id => ATTENDEE_CATEGORIES.find(item => item.id === id) || ATTENDEE_CATEGORIES.at(-1);
 export const DEMO_EVENT = Object.freeze({
   id: "echo-campus-preview",
   name: "ECHO CAMPUS",
@@ -5,6 +22,9 @@ export const DEMO_EVENT = Object.freeze({
   mode: "demo",
   demoMode: true,
   disclosure: "园区内置人物为虚构演示资料。新加入的昵称、角色、供给与需求经确认后向本活动公开展示。NFC 演示链接不代表身份认证。",
+  activityMode: "checkpoints-v1",
+  categories: ATTENDEE_CATEGORIES,
+  checkpoints: CHECKPOINTS,
   startsAt: "2026-10-01T09:00:00+08:00",
   location: "白庭 · 创造者相遇之夜",
   schema: "echo-campus-event.v1",
@@ -32,6 +52,8 @@ export function seedAttendees(now = new Date().toISOString()) {
   return PEOPLE.map(([name, role, offer, need, avatarColor], i) => ({
     id: "seed-" + String(i + 1).padStart(2, "0"),
     name, role, offer, need, avatarColor,
+    category: ([ "founder", "founder", "platform", "platform", "organizer", "investor", "founder", "organizer", "platform", "audience", "founder", "founder", "media", "platform", "media" ])[i] || "guest",
+    wristbandColor: categoryById(([ "founder", "founder", "platform", "platform", "organizer", "investor", "founder", "organizer", "platform", "audience", "founder", "founder", "media", "platform", "media" ])[i] || "guest").wristbandColor,
     position: {
       x: Math.cos(i * 2.399963) * (8 + i % 3 * 2),
       z: Math.sin(i * 2.399963) * (6 + i % 4),

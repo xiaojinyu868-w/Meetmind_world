@@ -62,7 +62,7 @@ export class EventClient extends EventTarget {
   setSnapshot(data) {
     if (!data || !data.event || !Number.isSafeInteger(data.version) || data.version < 1 || !Array.isArray(data.attendees) || !Array.isArray(data.connections)) return false;
     if (this.snapshot && data.event.id === this.snapshot.event.id && data.version <= this.snapshot.version) return false;
-    this.snapshot = { event: data.event, version: data.version, attendees: data.attendees, connections: data.connections };
+    this.snapshot = { event: data.event, version: data.version, attendees: data.attendees, connections: data.connections, activity: data.activity || null };
     this.emit("snapshot", this.snapshot);
     return true;
   }
@@ -103,6 +103,14 @@ export class EventClient extends EventTarget {
     return data;
   }
   async matches() { return this.request("matches"); }
+  async activity() { return this.request("activity"); }
+  async checkin(checkpointId) {
+    const result = await this.request("checkins", { method: "POST", body: JSON.stringify({ checkpointId }) });
+    if (result.snapshot) this.setSnapshot(result.snapshot);
+    this.me = this.me ? { ...this.me, activity: result.activity } : this.me;
+    this.emit("me", this.me);
+    return result;
+  }
   async encounter(peerId) {
     const result = await this.request("encounters", { method: "POST", body: JSON.stringify({ peerId }) });
     this.meTargetVersion = Math.max(this.meTargetVersion, result.version || 0);

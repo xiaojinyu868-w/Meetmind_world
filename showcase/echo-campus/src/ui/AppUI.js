@@ -28,7 +28,9 @@ const icon = name => '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" st
 const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const color = value => /^#[0-9a-fA-F]{6}$/.test(value || "") ? value : "#778879";
 const COLORS = ["#778879", "#b98878", "#758e9d", "#b5a27d", "#9287a7", "#505e79"];
-const INITIAL = { name: "林予", role: "AI 产品创始人", offer: "AI 产品研发、快速原型", need: "品牌设计、用户访谈", avatarColor: COLORS[0] };
+const CATEGORIES = [["investor", "投资人"], ["founder", "创业者"], ["audience", "观众"], ["media", "媒体"], ["platform", "平台伙伴"], ["organizer", "主办方"], ["guest", "其他来宾"]];
+const CATEGORY_LABELS = Object.fromEntries(CATEGORIES);
+const INITIAL = { name: "林予", role: "AI 产品创始人", offer: "AI 产品研发、快速原型", need: "品牌设计、用户访谈", category: "founder", avatarColor: COLORS[0] };
 const CAMERA_LABELS = { overview: "全景", arrival: "入口", courtyard: "庭院", aerial: "俯瞰" };
 
 export class AppUI {
@@ -36,7 +38,7 @@ export class AppUI {
     this.client = client;
     this.callbacks = { onCamera, onScene, onImport, onTour, onSelectPerson, onSound, onShowcase };
     this.root = document.getElementById("ui");
-    this.snapshot = null; this.me = null; this.online = false; this.panel = null;
+    this.snapshot = null; this.me = null; this.activity = null; this.online = false; this.panel = null;
     this.selectedPerson = null; this.soundEnabled = false; this.selectedCamera = "overview";
     this.sceneId = "campus"; this.sceneLabel = "白庭校园"; this.sceneFile = null;
     this.stage = new URL(location.href).searchParams.get("mode") === "stage";
@@ -81,7 +83,7 @@ export class AppUI {
           <div><span data-connection>正在连接活动</span><small data-world-count>一座为相遇而生的世界</small></div>
         </div>
         <nav class="ec-camera-dock" aria-label="园区视角">${Object.entries(CAMERA_LABELS).map(([id,label],i) => `<button type="button" data-action="camera" data-id="${id}" class="${i === 0 ? "is-active" : ""}" aria-pressed="${i === 0}"><span class="ec-camera-number">0${i+1}</span>${label}</button>`).join("")}</nav>
-        <div class="ec-entry-actions"><button type="button" class="ec-inbox-button" data-action="inbox" aria-label="我的相遇" hidden>${icon("inbox")}<span data-inbox-count hidden>0</span></button><button type="button" class="ec-primary ec-entry-button" data-action="join">${icon("nfc")}<span data-entry-label>领取我的分身</span>${icon("arrow")}</button></div>
+        <div class="ec-entry-actions"><button type="button" class="ec-activity-button" data-action="activity" aria-label="活动任务与积分">${icon("flag")}<span data-activity-points hidden>0</span></button><button type="button" class="ec-inbox-button" data-action="inbox" aria-label="我的相遇" hidden>${icon("inbox")}<span data-inbox-count hidden>0</span></button><button type="button" class="ec-primary ec-entry-button" data-action="join">${icon("nfc")}<span data-entry-label>领取我的分身</span>${icon("arrow")}</button></div>
       </footer>
       ${this.stage ? '<aside class="ec-stage-qr"><canvas data-stage-qr></canvas><div><strong>让相遇进入世界</strong><span>手机扫码领取演示分身</span><button type="button" data-action="demo">双端演示 ' + icon("arrow") + '</button></div></aside>' : ''}
       <button type="button" class="ec-demo-link" data-action="demo">NFC / 双端体验 ${icon("external")}</button>
@@ -96,6 +98,9 @@ export class AppUI {
     this.root.querySelector("[data-live-dot]")?.classList.toggle("is-online", this.online);
     const count = this.root.querySelector("[data-world-count]");
     if (count && this.snapshot) count.textContent = this.snapshot.attendees.length + " 位演示分身 · " + this.snapshot.connections.length + " 次已确认相遇";
+    this.activity = this.snapshot?.activity || this.activity;
+    const points = this.root.querySelector("[data-activity-points]");
+    if (points) { const value = this.me?.activity?.points || 0; points.textContent = value; points.hidden = !this.me?.attendee; }
     const entry = this.root.querySelector("[data-entry-label]");
     if (entry) entry.textContent = this.me?.attendee ? "我的分身" : "领取我的分身";
     const inbox = this.root.querySelector(".ec-inbox-button");
@@ -208,12 +213,14 @@ export class AppUI {
     if (action === "matches") return this.openMatches();
     if (action === "demo") return this.openDemoPanel();
     if (action === "inbox") return this.openInbox();
+    if (action === "activity") return this.openActivity();
     if (action === "select-person") {
       const person = this.snapshot?.attendees.find(a => a.id === id);
       if (person) { this.setSelectedPerson(person); return this.run("onSelectPerson", person); }
     }
     if (action === "encounter") return this.requestEncounter(id, button);
     if (action === "confirm") return this.confirmEncounter(id, button);
+    if (action === "checkin") return this.checkin(id, button);
     if (action === "locate") { this.closePanel(); return this.run("onSelectPerson", this.selectedPerson); }
     if (action === "copy-link") {
       try { await navigator.clipboard.writeText(button.dataset.url); this.toast("演示入口已复制"); }
@@ -245,7 +252,7 @@ export class AppUI {
   openOnboarding() {
     const params = new URL(location.href).searchParams;
     const secondIdentity = (params.get("persona") === "02" || params.get("badge") === "demo-visitor-02");
-    const values = this.me?.attendee || (secondIdentity ? { name: "周澈", role: "品牌设计师", offer: "品牌设计、用户访谈", need: "AI 产品研发、快速原型", avatarColor: COLORS[1] } : INITIAL);
+    const values = this.me?.attendee || (secondIdentity ? { name: "周澈", role: "品牌设计师", offer: "品牌设计、用户访谈", need: "AI 产品研发、快速原型", category: "founder", avatarColor: COLORS[1] } : INITIAL);
     const badgeId = params.get("badge") || "";
     const code = params.get("code") || "";
     this.openPanel("join");
@@ -254,6 +261,10 @@ export class AppUI {
         <div class="ec-profile-preview"><div class="ec-avatar-figure" style="--avatar:${color(values.avatarColor)}"><i class="ec-avatar-head"></i><i class="ec-avatar-body"></i><i class="ec-avatar-leg l"></i><i class="ec-avatar-leg r"></i></div><div><span class="ec-tag">风格化演示分身</span><p>以你的意愿和兴趣<br>开启第一场对话</p></div></div>
         ${badgeId ? `<div class="ec-notice ec-notice-soft">${icon("nfc")}<span>已识别演示入场卡。领取仍需激活凭据，公开链接不用于证明真实身份。</span></div>` : ""}
         <div class="ec-two-cols"><label>昵称<input name="name" required maxlength="24" autocomplete="off" value="${esc(values.name)}" placeholder="你的名字"></label><label>我的身份<input name="role" required maxlength="60" value="${esc(values.role)}" placeholder="例：产品创始人"></label></div>
+        <div class="ec-two-cols"><label>活动身份<select name="category">${Object.entries(CATEGORY_LABELS).map(([id,label]) => `<option value="${id}" ${values.category === id ? "selected" : ""}>${label}</option>`).join("")}</select><small>手环颜色由活动身份自动匹配</small></label><label>机构 / 单位（选填）<input name="organization" maxlength="80" value="${esc(values.organization || "")}" placeholder="可不填写"></label></div>
+        <label>一句话介绍（选填）<textarea name="bio" maxlength="160" rows="2" placeholder="让别人更快了解你">${esc(values.bio || "")}</textarea></label>
+        <label>联系入口（选填）<input name="contact" maxlength="120" value="${esc(values.contact || "")}" placeholder="邮箱、主页或社交账号"></label>
+        <label class="ec-consent ec-optional"><input type="checkbox" name="publicContact" ${values.publicContact ? "checked" : ""}><span>我愿意在公开名片中展示联系入口（可随时关闭）</span></label>
         <label>我能提供<textarea name="offer" required maxlength="160" rows="2" placeholder="技能、资源，或你愿意分享的经验">${esc(values.offer)}</textarea></label>
         <label>我想认识<textarea name="need" required maxlength="160" rows="2" placeholder="希望遇见的伙伴，或想一起解决的问题">${esc(values.need)}</textarea></label>
         <fieldset class="ec-colors"><legend>选择分身色彩</legend>${COLORS.map(c => `<label style="--swatch:${c}"><input type="radio" name="avatarColor" value="${c}" ${c === color(values.avatarColor) ? "checked" : ""}><span aria-label="${c}">${icon("check")}</span></label>`).join("")}</fieldset>
@@ -273,6 +284,8 @@ export class AppUI {
     this.joinPending = true;
     const data = Object.fromEntries(new FormData(form));
     data.consent = form.elements.consent.checked;
+    data.publicContact = form.elements.publicContact?.checked === true;
+    for (const field of ["organization", "contact", "bio"]) if (!data[field]) delete data[field];
     if (!data.badgeId) { delete data.badgeId; delete data.activationCode; }
     const submit = form.querySelector('[type="submit"]'), errorBox = form.querySelector(".ec-form-error");
     submit.disabled = true; errorBox.hidden = true;
@@ -299,8 +312,8 @@ export class AppUI {
       encounter ? '<div class="ec-pending">相遇请求已送出，等待对方确认</div>' :
       `<button class="ec-primary ec-full" data-action="encounter" data-id="${esc(person.id)}">${icon("link")}发起一次相遇${icon("arrow")}</button>`;
     this.render(this.panelHeader(own ? "MY DIGITAL PRESENCE" : "A NEW CONNECTION", own ? "这是你的名片" : "每个人，都是一个入口") +
-      `<div class="ec-person-header"><div class="ec-person-avatar" style="--avatar:${color(person.avatarColor)}">${esc(person.name?.slice(0,1))}<span></span></div><div><h2>${esc(person.name)}</h2><p>${esc(person.role)}</p><span class="ec-tag">${person.source === "curated-demo" ? "虚构演示人物" : "演示活动分身"}</span></div></div>
-      <div class="ec-profile-fields"><section><span>我能提供</span><p>${esc(person.offer)}</p></section><section><span>我想认识</span><p>${esc(person.need)}</p></section></div>
+      `<div class="ec-person-header"><div class="ec-person-avatar" style="--avatar:${color(person.avatarColor)}">${esc(person.name?.slice(0,1))}<span></span></div><div><h2>${esc(person.name)}</h2><p>${esc(person.role)}</p><span class="ec-tag" style="border-color:${color(person.wristbandColor)}55">${esc(CATEGORY_LABELS[person.category] || "其他来宾")} · ${person.source === "curated-demo" ? "虚构演示人物" : "演示活动分身"}</span></div></div>
+      <div class="ec-profile-fields"><section><span>我能提供</span><p>${esc(person.offer)}</p></section><section><span>我想认识</span><p>${esc(person.need)}</p></section>${person.organization ? `<section><span>机构 / 单位</span><p>${esc(person.organization)}</p></section>` : ""}${person.bio ? `<section><span>一句话介绍</span><p>${esc(person.bio)}</p></section>` : ""}${person.publicContact && person.contact ? `<section><span>联系入口</span><p>${esc(person.contact)}</p></section>` : ""}</div>
       <div class="ec-panel-actions">${action}<button class="ec-text-button" data-action="locate">${icon("pin")}在园区中定位</button></div>
       ${person.source === "curated-demo" && !own ? '<p class="ec-field-note">此人物为虚构演示资料，无法代替本人确认相遇。可使用「双端体验」让另一台设备真实接收并确认。</p>' : '<p class="ec-field-note">只有双方确认后，关系才会点亮在共同的世界中。</p>'}
       <div class="ec-person-bottom"><button data-action="inbox">${icon("inbox")}我的相遇</button><button data-action="demo">${icon("nfc")}双端体验</button></div>`, false);
@@ -339,6 +352,31 @@ export class AppUI {
     } catch (error) {
       if (this.panel === "matches" && this.panelRevision === revision) this.render(this.panelHeader("MEANINGFUL ENCOUNTERS", "相遇线索暂未就绪") + `<p class="ec-empty-state">${esc(error.message)}</p><button class="ec-secondary ec-full" data-action="matches">重新获取</button>`);
     }
+  }
+  async openActivity() {
+    this.openPanel("activity");
+    this.activity = this.snapshot?.activity || this.activity || { checkpoints: [] };
+    const mine = new Set((this.me?.activity?.checkins || []).map(item => item.checkpointId));
+    const renderActivity = () => {
+      const points = this.me?.activity?.points || 0;
+      const checkpoints = this.activity?.checkpoints || [];
+      this.render(this.panelHeader("ACTIVITY PASSPORT", "把现场，变成一条可见的路径", "每个点位只计一次；积分只用于本次活动互动，不代表身份或合作概率。") +
+        `<div class="ec-activity-total"><div><span>我的积分</span><strong>${points}</strong><small>/ ${checkpoints.reduce((sum, item) => sum + item.points, 0)} 可得</small></div><div><span>已完成</span><strong>${mine.size}</strong><small>/ ${checkpoints.length} 点位</small></div></div>` +
+        `<div class="ec-checkpoint-list">${checkpoints.map(item => { const done = mine.has(item.id); return `<article class="ec-checkpoint-card ${done ? "is-done" : ""}"><div class="ec-checkpoint-index">${done ? icon("check") : icon("flag")}</div><div class="ec-checkpoint-copy"><strong>${esc(item.label)}</strong><small>${esc(item.partner)} · ${item.points} 分</small><p>${esc(item.description)}</p></div>${this.me?.attendee ? `<button class="${done ? "ec-checkpoint-done" : "ec-small-primary"}" data-action="checkin" data-id="${esc(item.id)}" ${done ? "disabled" : ""}>${done ? "已完成" : "打卡"}</button>` : ""}</article>`; }).join("") || `<div class="ec-empty-state">活动点位将在这里出现。</div>`}</div>` +
+        `<div class="ec-notice ec-notice-soft">${icon("nfc")}<span>现场可用 NFC 触碰完成同一动作；当前演示也支持网页按钮和二维码。重复触碰不会重复加分。</span></div>` +
+        (!this.me?.attendee ? `<button class="ec-primary ec-full" data-action="join">先领取分身，再开始打卡${icon("arrow")}</button>` : ""));
+    };
+    renderActivity();
+    if (this.me?.attendee) {
+      try { const result = await this.client.activity(); this.activity = result; } catch {}
+      if (this.panel === "activity") renderActivity();
+    }
+  }
+  async checkin(checkpointId, button) {
+    if (!this.me?.attendee || button.disabled) return this.openOnboarding();
+    button.disabled = true;
+    try { const result = await this.client.checkin(checkpointId); this.activity = result.snapshot?.activity || this.activity; this.me = this.client.me; this.toast(result.idempotent ? "这个点位已经完成" : `打卡成功，获得 ${result.checkin.points} 分`); if (this.panel === "activity") this.openActivity(); }
+    catch (error) { button.disabled = false; this.toast(error.message || "打卡暂未完成"); }
   }
   async openInbox() {
     if (!this.me?.attendee) return this.openOnboarding();
