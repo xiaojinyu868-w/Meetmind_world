@@ -7,6 +7,15 @@ const TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const CATEGORY_IDS = new Set(ATTENDEE_CATEGORIES.map(item => item.id));
 const category = id => ATTENDEE_CATEGORIES.find(item => item.id === id) || ATTENDEE_CATEGORIES.at(-1);
+function inferCategory(attendee) {
+  const text = `${attendee?.role || ""} ${attendee?.offer || ""} ${attendee?.need || ""}`.toLowerCase();
+  if (/投资|融资|资本|基金/.test(text)) return "investor";
+  if (/媒体|内容|传播/.test(text)) return "media";
+  if (/平台|云计算|硬件|nfc|物联网/.test(text)) return "platform";
+  if (/活动|社群|主理|主办|志愿/.test(text)) return "organizer";
+  if (/创始|创业|开发者|工程师|设计师/.test(text)) return "founder";
+  return "guest";
+}
 export const hashSecret = value => createHash("sha256").update(value).digest("hex");
 
 export class HttpError extends Error {
@@ -103,13 +112,16 @@ export class EventStore {
       this.state.event = { ...DEMO_EVENT, ...this.state.event };
       this.state.checkins ||= [];
       this.state.event = { ...DEMO_EVENT, ...this.state.event, activityMode: this.state.event.activityMode || "checkpoints-v1", categories: this.state.event.categories || ATTENDEE_CATEGORIES, checkpoints: this.state.event.checkpoints || CHECKPOINTS };
+      let migrated = false;
       this.state.attendees.forEach(attendee => {
-        attendee.category ||= "guest";
-        attendee.wristbandColor ||= category(attendee.category).wristbandColor;
-        attendee.organization ||= "";
-        attendee.bio ||= "";
-        attendee.publicContact = attendee.publicContact === true;
+        if (!attendee.category || !CATEGORY_IDS.has(attendee.category) || attendee.category === "guest") { const inferred = inferCategory(attendee); if (attendee.category !== inferred) { attendee.category = inferred; migrated = true; } }
+        if (!attendee.wristbandColor || attendee.wristbandColor === "#778879") { const wristband = category(attendee.category).wristbandColor; if (attendee.wristbandColor !== wristband) { attendee.wristbandColor = wristband; migrated = true; } }
+        if (attendee.organization === undefined) { attendee.organization = ""; migrated = true; }
+        if (attendee.bio === undefined) { attendee.bio = ""; migrated = true; }
+        const publicContact = attendee.publicContact === true;
+        if (attendee.publicContact !== publicContact) { attendee.publicContact = publicContact; migrated = true; }
       });
+      if (migrated || !this.state.event.activityMode) this.persist();
     } else {
       const date = new Date(now()).toISOString();
       this.state = {
