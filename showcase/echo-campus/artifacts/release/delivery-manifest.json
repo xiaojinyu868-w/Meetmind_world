@@ -1,5 +1,5 @@
 {
-  "verified_at_utc": "2026-09-17T19:53:26.810Z",
+  "verified_at_utc": "2026-09-18T04:05:00+08:00",
   "base_url": "https://capture.meetmind.online/echo-campus/",
   "files": [
     {
@@ -63,6 +63,6 @@
     "ok": true,
     "service": "echo-campus-event",
     "mode": "demo",
-    "version": 9
+    "version": 10
   }
 }
