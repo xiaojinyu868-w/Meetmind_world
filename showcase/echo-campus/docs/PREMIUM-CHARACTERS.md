@@ -9,6 +9,7 @@
 - 生成、绑骨前检查、v1.0 Tripo 绑骨、3 个独立 FBX 重定向、Blender 5.2 合并 3 动作导出 GLB、2K 彩色 + 1K 法线纹理缩放、浏览器方向与落脚校准。
 - 脚底为局部 Y=0，高度女 1.68m / 男 1.78m；最终源 GLB 正面 +X，运行时 forwardYaw=-π/2 校准到 +Z。
 - 角色颜色只用于外置胸牌，不把面孔染色。不创建外描边副本网格。
+- 角色衣料做了窄色域蒙版变体：女只重染绿色外套，男只重染深蓝绿色裤子；男的沙色衬衫保持原纹理，因为它与皮肤在纹理上无法安全分离。每种模型五个稳定色款，最多十份材质 uniform，仍共享几何和纹理。蒙版证据在 `wardrobe-qa/female-wardrobe-montage.jpg` / `male-wardrobe-montage.jpg`；脸、手、裸露皮肤保护框的最大蒙版权重均为0。
 - 全部模型几何、纹理、材质共享，每个实例拥有独立 skeleton 和 mixer；单人 dispose 不删共享资源。
 - 原 Characters.js 保留，由主线在角色库加载失败时决定使用兜底。
 
@@ -44,6 +45,7 @@ API：`const library = await loadCharacterLibrary({baseUrl:document.baseURI})`�
 4. `node --test tests/premium-characters.test.mjs` 两项通过：独立骨架、共享资源安全释放、米制归一化、Root仅去水平位移、单次Wave回Idle。
 5. Chrome + Three.js 真实播放 idle→walk→wave→talk，含中段截图；最终 `qa-grounded/report.json` errors=[]。每个阶段都未暂停播放。截图：`qa-grounded/face.png`、`walk-a.png`、`walk-b.png`、`wave.png`、`wave-late.png`。
 6. 独立两人测试画面7 draw calls/93,422渲染三角（含阴影）；5几何/10纹理（含环境、阴影和骨纹理）。此数据不是最终园区/手机性能结论。
+7. 创建第一帧直接以 Idle 权重1评估，避免从导出的 T/A pose 淡入造成切场瞬间双臂张开；只有后续状态切换使用 0.26s crossfade。
 
 ## 明确限制
 

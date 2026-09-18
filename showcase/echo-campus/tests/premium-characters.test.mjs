@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
-import { loadCharacterLibrary } from "../src/scenes/PremiumCharacters.js";
+import { loadCharacterLibrary, premiumWardrobeForSeed } from "../src/scenes/PremiumCharacters.js";
 
 if (!globalThis.ProgressEvent) globalThis.ProgressEvent = class ProgressEvent {
   constructor(type, data) { this.type = type; Object.assign(this, data); }
@@ -52,6 +52,7 @@ test("premium clones have individual rigs, ground normalization, shared art and 
   const library = await loadCharacterLibrary({ assets: [{ id: "fixture", path: fixture(), height: 1.78 }] });
   assert.equal(library.assets[0].skinnedMeshes, 1);
   const a = library.createPremiumCharacter({ name: "A", seed: 1 }), b = library.createPremiumCharacter({ name: "B", seed: 1 });
+  assert.equal(a.mixer.existingAction(library.templates[0].clipByState.get("idle")).getEffectiveWeight(),1,"first frame is real Idle, never an A-pose blend");
   const meshA = a.model.getObjectByName("Avatar"), meshB = b.model.getObjectByName("Avatar");
   assert.notEqual(meshA.skeleton, meshB.skeleton);
   assert.notEqual(meshA.skeleton.bones[0], meshB.skeleton.bones[0]);
@@ -79,6 +80,26 @@ test("premium clones have individual rigs, ground normalization, shared art and 
   b.dispose();
   assert.equal(geometryDisposed, 1);
   assert.equal(library.released, true);
+});
+
+test("known outfits vary without copying shared geometry or recoloring material base", async () => {
+  const choices=Array.from({length:10},(_,index)=>premiumWardrobeForSeed("host-female",index+23));
+  assert.equal(new Set(choices.map(choice=>choice.index)).size,5);
+  assert.ok(choices.every(choice=>choice.heightFactor>=.95&&choice.heightFactor<=1.04));
+  const library=await loadCharacterLibrary({assets:[{id:"host-female",path:fixture(),height:1.68}]});
+  const a=library.createPremiumCharacter({seed:24}), b=library.createPremiumCharacter({seed:26});
+  const ma=a.model.getObjectByName("Avatar"), mb=b.model.getObjectByName("Avatar");
+  assert.equal(ma.geometry,mb.geometry);
+  assert.notEqual(ma.material,mb.material);
+  assert.deepEqual(ma.material.color.toArray(),mb.material.color.toArray());
+  assert.equal(a.height,1.68*premiumWardrobeForSeed("host-female",24).heightFactor);
+  assert.ok(new THREE.Box3().setFromObject(a.root,true).min.y>-.0001);
+  const shader={uniforms:{},fragmentShader:"#include <map_fragment>\n#include <emissivemap_fragment>"};
+  ma.material.onBeforeCompile(shader);
+  assert.equal(shader.uniforms.premiumWardrobeKind.value,1);
+  assert.match(shader.fragmentShader,/sourceTexel.g-sourceTexel.r/);
+  a.dispose();b.dispose();library.dispose();
+  assert.equal(library.wardrobeMaterials.size,0);
 });
 
 test("one-shot greeting returns to Idle while selection remains active", async () => {

@@ -41,6 +41,20 @@ export function planEventGarden(config, { venueId = "", quality = "high" } = {})
   // Small tables and soft seats read as a social space, not an ornamental sculpture court.
   for(const [u,v] of (narrow?[[.36,.21],[.59,.8]]:[[.30,.60],[.65,.53]]))put("coffee",u,v,.78);
   if(quality!=="low")for(const [u,v] of [[.13,.12],[.88,.89]])put("flowers",u,v,.46);
+  // Canopy is a long terrace: group planting around seating and punctuate the
+  // edges with three different tree poses, keeping the original clear aisles.
+  const canopy=venueId==="venue-ab-canopy" || (narrow&&Math.abs(y-6.2991)<.05);
+  if(canopy&&config.eventGarden?.socialIslands!==false){
+    for(const [u,v,treeScale,yaw] of [[.215,.91,1.06,.42],[.65,.085,.88,2.1],[.80,.92,1.16,-.85]]){
+      put("tree-island",u,v,.64,yaw,{treeScale,cluster:true});
+    }
+    for(const seat of placed.filter(p=>p.kind==="lounge")){
+      const angles=[-.7,.7,2.45,-2.45,Math.PI/2,-Math.PI/2,0,Math.PI];let planted=0;
+      for(const a of angles){const x=seat.x+Math.cos(a)*2.13,z=seat.z+Math.sin(a)*2.13,r=.38;
+        if(fits(x,z,r)){placed.push({kind:"companion-flowers",x,y,z,r,yaw:a,cluster:true});if(++planted===2)break;}
+      }
+    }
+  }
   return { venueId, y, bounds:{...b}, protectedPoints:points.map(p=>({x:p.x,z:p.z})), protectedGap:PROTECTED_GAP, corridors:{x:corridorX,z:corridorZ}, items:placed };
 }
 
@@ -166,6 +180,29 @@ export async function createEventGarden({ venueId="", config, quality="high", pr
     cylinder(p,mats.soil,0,h-.065,0,r-.06,r-.06,.015);
     planting(p,flowers?.45:1.05,quality==="low"?20:42,r-.11);
   }
+  function botanicalCluster(p,tree=false){
+    // A tall narrow vessel plus a low, wider companion gives each island a
+    // tiered silhouette. Their entire base remains in its tested footprint.
+    const h=tree?.52:.36,r=tree?.45:.27;
+    const profile=[new THREE.Vector2(r*.78,0),new THREE.Vector2(r*.94,.045),new THREE.Vector2(r,h-.035),new THREE.Vector2(r,h),new THREE.Vector2(r-.03,h),new THREE.Vector2(r-.03,h-.06),new THREE.Vector2(r*.75,.04)];
+    batch.add(new THREE.LatheGeometry(profile,quality==="low"?14:20),tree?mats.stone:mats.clay,p);
+    cylinder(p,mats.soil,0,h-.05,0,r-.04,r-.04,.008,16);
+    const count=quality==="low"?16:26;
+    // Broad foliage sits low and reads clearly; slender grasses rise behind it.
+    for(let i=0;i<count;i++){
+      const a=i*2.399+.4,rr=Math.sqrt((i+.5)/count)*(r-.07),len=.18+rng()*.2;
+      leafInstances.push({p,v:new THREE.Vector3(Math.sin(a)*rr,h-.025,Math.cos(a)*rr),q:new THREE.Quaternion().setFromEuler(new THREE.Euler(-.85-rng()*.35,a,(rng()-.5)*.2)),scale:new THREE.Vector3(.10+rng()*.06,.6,len),color:new THREE.Color().setHSL(.23+rng()*.045,.27,.24+rng()*.18)});
+    }
+    for(let i=0;i<(quality==="low"?12:24);i++){
+      const a=rng()*TAU,rr=rng()*(r*.65),hBlade=.30+rng()*.42;
+      grassInstances.push({p,v:new THREE.Vector3(Math.cos(a)*rr,h-.025,Math.sin(a)*rr),q:new THREE.Quaternion().setFromEuler(new THREE.Euler(-1.23-rng()*.2,a,0)),scale:new THREE.Vector3(.018+rng()*.014,1,hBlade),color:new THREE.Color(i%3?0x849068:0xb0ad79)});
+    }
+    for(let i=0;i<(tree?6:4);i++){
+      const a=i*2.4,rr=r*.48,x=Math.cos(a)*rr,z=Math.sin(a)*rr,flowerY=h+.28+(i%3)*.065;
+      cylinder(p,mats.stems,x,(h+flowerY)/2,z,.003,.004,flowerY-h,4);
+      for(let k=0;k<4;k++){const a=k*TAU/4;petalInstances.push({p,v:new THREE.Vector3(x+Math.sin(a)*.027,flowerY,z+Math.cos(a)*.027),q:new THREE.Quaternion().setFromEuler(new THREE.Euler(.2,0,a)),scale:new THREE.Vector3(.021,.035,.011),color:new THREE.Color(i%2?0xefe2bd:0xb68ba1)});}
+    }
+  }
   function lounge(p) {
     if(benchSource){stampProp(benchSource,p,"bench");return;}
     // Open crescent bench with separate oak slats and upholstered seating, no pedestal disc.
@@ -195,14 +232,22 @@ export async function createEventGarden({ venueId="", config, quality="high", pr
     const group=new THREE.Group();group.position.set(p.x,p.y,p.z);group.rotation.y=p.yaw;group.add(mesh);root.add(group);resources.geometries.add(g);
     batch.add(new THREE.BoxGeometry(.39,.018,.013),mats.brass,p,0,.27,.111);
   }
-  for(const p of layout.items){if(p.kind==="lounge")lounge(p);else if(p.kind==="planter"||p.kind==="flowers")planter(p,p.kind==="flowers");else if(p.kind==="coffee")coffee(p);else if(p.kind==="guide")guide(p);}
+  const grassInstances=[];
+  for(const p of layout.items){if(p.kind==="lounge")lounge(p);else if(p.kind==="tree-island"||p.kind==="companion-flowers")botanicalCluster(p,p.kind==="tree-island");else if(p.kind==="planter"||p.kind==="flowers")planter(p,p.kind==="flowers");else if(p.kind==="coffee")coffee(p);else if(p.kind==="guide")guide(p);}
   batch.flush();
   function addInstances(name,geometry,material,items){if(!items.length){geometry.dispose();return;}const mesh=new THREE.InstancedMesh(geometry,material,items.length);mesh.name=name;const local=new THREE.Matrix4(),world=new THREE.Matrix4(),q=new THREE.Quaternion();
     items.forEach((item,i)=>{local.compose(item.v,item.q,item.scale);q.setFromAxisAngle(new THREE.Vector3(0,1,0),item.p.yaw||0);world.compose(new THREE.Vector3(item.p.x,item.p.y,item.p.z),q,new THREE.Vector3(1,1,1)).multiply(local);mesh.setMatrixAt(i,world);mesh.setColorAt(i,item.color);});mesh.instanceMatrix.needsUpdate=true;mesh.instanceColor.needsUpdate=true;mesh.computeBoundingBox();mesh.computeBoundingSphere();mesh.castShadow=quality!=="low";mesh.receiveShadow=true;root.add(mesh);}
   addInstances("layered botanical leaves",leafGeometry(),mats.foliage,leafInstances);
   addInstances("garden blossom clusters",new THREE.SphereGeometry(1,5,4),mats.petals,petalInstances);
+  addInstances("terrace ornamental grasses",leafGeometry(),mats.foliage,grassInstances);
 
   if(treeSource)for(const p of layout.items.filter(item=>item.kind==="planter").slice(0,quality==="low"?2:3))stampProp(treeSource,p,"tree",.49);
+  if(treeSource)for(const p of layout.items.filter(item=>item.kind==="tree-island").slice(0,quality==="low"?2:3)){
+    const tree=stampProp(treeSource,p,"tree",.47);tree.scale.setScalar(p.treeScale);tree.userData.boundaryTree=true;
+    // These leafy edge accents reuse the generated mesh without another heavy
+    // shadow submission. Main trees and the authored vessels retain grounding.
+    tree.traverse(o=>{if(o.isMesh)o.castShadow=false;});
+  }
   registerObject(root);
   const colliders=layout.items.map(p=>({x:p.x,z:p.z,r:p.r,source:"event-garden",kind:p.kind}));
   let disposed=false;

@@ -76,3 +76,20 @@ test("Unavailable bench keeps the authored lounge instead of a blank prop slot",
     assert.equal(garden.warnings.length,1);assert.ok(garden.root.getObjectByName("event-garden-oiled oak"));assert.equal(garden.root.children.filter(o=>o.name==="generated garden bench").length,0);garden.dispose();
   }finally{globalThis.document=previous;}
 });
+
+test("Canopy social islands add layered planting while keeping added geometry below 60k triangles / 20 calls",async()=>{
+  const previous=globalThis.document;globalThis.document=fakeDocument();
+  try{
+    const config=JSON.parse(await readFile(new URL("../public/scenes/venue/venue-ab-canopy.json",import.meta.url),"utf8"));
+    // Fixture carries the verified 11,766-triangle generated tree cost without GPU/texture decoding.
+    const loader=async()=>{const geometry=new THREE.BufferGeometry(),positions=new Float32Array(11766*9);positions[0]=-.4;positions[1]=-.5;positions[2]=-.4;positions[3]=.4;positions[4]=.5;positions[5]=.4;geometry.setAttribute("position",new THREE.BufferAttribute(positions,3));geometry.computeBoundingBox();const scene=new THREE.Group();scene.add(new THREE.Mesh(geometry,new THREE.MeshStandardMaterial()));return {scene};};
+    const before=await createEventGarden({venueId:"venue-ab-canopy",config:{...config,eventGarden:{socialIslands:false}},props:{treeUrl:"tree.glb"},loadGLTF:loader});
+    const after=await createEventGarden({venueId:"venue-ab-canopy",config,props:{treeUrl:"tree.glb"},loadGLTF:loader});
+    const count=root=>{let triangles=0,calls=0;root.traverse(o=>{if(o.isMesh){const repeat=o.isInstancedMesh?o.count:1;triangles+=(o.geometry.index?.count??o.geometry.attributes.position.count)/3*repeat;calls++;}});return {triangles,calls};};
+    const a=count(before.root),b=count(after.root),extra={triangles:b.triangles-a.triangles,calls:b.calls-a.calls};
+    assert.ok(extra.triangles<60000,`Added triangle budget: ${extra.triangles}`);assert.ok(extra.calls<20,`Added draw-call budget: ${extra.calls}`);
+    assert.equal(after.layout.items.filter(p=>p.kind==="tree-island").length,3);assert.equal(after.layout.items.filter(p=>p.kind==="companion-flowers").length,4);
+    assert.ok(after.root.getObjectByName("terrace ornamental grasses"));
+    console.log("canopy social island added budget",JSON.stringify(extra));before.dispose();after.dispose();
+  }finally{globalThis.document=previous;}
+});

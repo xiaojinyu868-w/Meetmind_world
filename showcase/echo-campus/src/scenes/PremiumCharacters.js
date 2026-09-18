@@ -21,6 +21,59 @@ const CLIP_ALIASES = Object.freeze({
   talk: /talk|speak|conversation|交谈/i,
 });
 let defaultLibrary = null;
+const WARDROBE_COLORS = Object.freeze({
+  "host-female": Object.freeze([0x667e70, 0x617987, 0x897985, 0xa48d73, 0xa6ac9f]),
+  "host-male": Object.freeze([0x354c58, 0x596367, 0x696b58, 0x6d5d63, 0x446558]),
+});
+
+export function premiumWardrobeForSeed(assetId, seed = 1) {
+  const palette = WARDROBE_COLORS[assetId];
+  if (!palette) return null;
+  const value = Math.abs(Math.trunc(Number(seed) || 1));
+  // Consecutive seeds alternate models; divide by two so each model cycles
+  // through all five outfits, rather than correlating one outfit with sex.
+  const index = Math.floor(value / 2) % palette.length;
+  return Object.freeze({ index, color: palette[index], kind: assetId === "host-female" ? 1 : 2,
+    heightFactor: 0.95 + ((value * 37 + 11) % 10) * 0.01 });
+}
+
+function installCharacterShader(material, wardrobe = null) {
+  material.onBeforeCompile = shader => {
+    shader.uniforms.premiumRimColor = { value: new THREE.Color(0xffdfb8) };
+    shader.uniforms.premiumWardrobeColor = { value: new THREE.Color(wardrobe?.color ?? 0xffffff) };
+    shader.uniforms.premiumWardrobeKind = { value: wardrobe?.kind ?? 0 };
+    shader.fragmentShader = "uniform vec3 premiumRimColor;\nuniform vec3 premiumWardrobeColor;\nuniform float premiumWardrobeKind;\n" + shader.fragmentShader.replace(
+      "#include <map_fragment>",
+      `#include <map_fragment>
+      if (premiumWardrobeKind > 0.5) {
+        vec3 sourceTexel = diffuseColor.rgb;
+        float luminance = dot(sourceTexel, vec3(0.2126, 0.7152, 0.0722));
+        float clothMask = 0.0;
+        float referenceLuminance = 0.178;
+        if (premiumWardrobeKind < 1.5) {
+          // Only green-biased sage blazer texels. Every protected face/hand
+          // island has red > green, and therefore exactly zero mask weight.
+          clothMask = smoothstep(0.001,0.008,sourceTexel.g-sourceTexel.r)
+            * smoothstep(0.008,0.020,sourceTexel.g-sourceTexel.b)
+            * smoothstep(0.020,0.055,luminance) * (1.0-smoothstep(0.42,0.65,luminance));
+        } else {
+          // Only dark blue-green trouser texels; sand overshirt is preserved
+          // because warm beige fabric and skin cannot be separated by hue.
+          clothMask = smoothstep(0.007,0.022,sourceTexel.b-sourceTexel.r)
+            * smoothstep(0.006,0.016,sourceTexel.g-sourceTexel.r)
+            * smoothstep(0.008,0.018,luminance) * (1.0-smoothstep(0.10,0.18,luminance));
+          referenceLuminance = 0.036;
+        }
+        vec3 dyedCloth = premiumWardrobeColor * clamp(luminance/referenceLuminance,0.30,2.25);
+        diffuseColor.rgb = mix(sourceTexel,dyedCloth,clothMask);
+      }`,
+    ).replace(
+      "#include <emissivemap_fragment>",
+      "#include <emissivemap_fragment>\nfloat premiumFresnel = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);\ntotalEmissiveRadiance += premiumRimColor * premiumFresnel * 0.055;",
+    );
+  };
+  material.customProgramCacheKey = () => "echo-premium-character-cloth-rim-v2";
+}
 
 function baseLocation(baseUrl) {
   const fallback = typeof document !== "undefined" ? document.baseURI : "http://localhost/";
@@ -45,14 +98,7 @@ function softenMaterial(source, materialCache) {
     material.envMapIntensity = 0.7;
     // A small warm bounce keeps the painted silhouette readable, with no hull
     // copies, no outline extrusion and no modification to skinning transforms.
-    material.onBeforeCompile = shader => {
-      shader.uniforms.premiumRimColor = { value: new THREE.Color(0xffdfb8) };
-      shader.fragmentShader = "uniform vec3 premiumRimColor;\n" + shader.fragmentShader.replace(
-        "#include <emissivemap_fragment>",
-        "#include <emissivemap_fragment>\nfloat premiumFresnel = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);\ntotalEmissiveRadiance += premiumRimColor * premiumFresnel * 0.055;",
-      );
-    };
-    material.customProgramCacheKey = () => "echo-premium-character-warm-rim-v1";
+    installCharacterShader(material);
   }
   materialCache.set(source, material);
   return material;
@@ -168,6 +214,26 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
   root.userData.personName = name;
   root.userData.characterAsset = template.definition.id;
   const motion = new THREE.Group(), visual = new THREE.Group(), model = cloneSkeleton(template.scene);
+  // Fixtures and future custom libraries may have an unrelated id; only the
+  // two authored host assets receive the cloth-mask variants.
+  const wardrobe = premiumWardrobeForSeed(template.definition.id, seed);
+  const height = template.definition.height * (wardrobe?.heightFactor || 1);
+  if (wardrobe) model.traverse(object => {
+    if (!object.isMesh) return;
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
+    const variants = materials.map(material => {
+      if (!material.isMeshStandardMaterial) return material;
+      const key = `${material.uuid}:${wardrobe.index}`;
+      if (!library.wardrobeMaterials.has(key)) {
+        const variant = material.clone();
+        installCharacterShader(variant, wardrobe);
+        variant.name = `${material.name}-outfit-${wardrobe.index}`;
+        library.wardrobeMaterials.set(key, variant);
+      }
+      return library.wardrobeMaterials.get(key);
+    });
+    object.material = Array.isArray(object.material) ? variants : variants[0];
+  });
   // SkinnedMesh raycasting otherwise caches only the first pose's sphere;
   // a raised hand can then become unclickable outside its idle bounds.
   model.traverse(object => {
@@ -182,7 +248,7 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
   visual.add(model); motion.add(visual); root.add(motion);
   root.updateMatrixWorld(true);
   let bounds = new THREE.Box3().setFromObject(visual, true);
-  const scale = template.definition.height / (bounds.max.y - bounds.min.y);
+  const scale = height / (bounds.max.y - bounds.min.y);
   visual.scale.setScalar(scale);
   root.updateMatrixWorld(true);
   bounds = new THREE.Box3().setFromObject(visual, true);
@@ -215,7 +281,7 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
   if (!library.badgeGeometries.has(palette)) library.badgeGeometries.set(palette, roundedBadge(color));
   const badge = new THREE.Mesh(library.badgeGeometries.get(palette), library.badgeMaterial);
   badge.name = "attendee-nfc-badge";
-  const badgeY = template.definition.height * 0.725, badgeX = template.definition.height * 0.045;
+  const badgeY = height * 0.725, badgeX = height * 0.045;
   const origin = new THREE.Vector3(badgeX, badgeY, bounds.max.z + 0.2);
   const probe = new THREE.Raycaster(origin, new THREE.Vector3(0, 0, -1));
   const surface = probe.intersectObject(visual, true)[0];
@@ -245,7 +311,9 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
     if (action) {
       action.reset().setEffectiveWeight(1).setEffectiveTimeScale(1).play();
       if (!previous && action !== actions.get("wave")) action.time = phase / (Math.PI * 2) * action.getClip().duration;
-      if (previous) { action.crossFadeFrom(previous, 0.26, false); } else action.fadeIn(0.18);
+      if (previous) action.crossFadeFrom(previous, 0.26, false);
+      // First creation must evaluate the fully weighted Idle immediately.
+      // Fading from weight zero blends against the exported T/A bind pose.
     } else previous?.fadeOut(0.2);
   }
   const onFinished = event => {
@@ -259,7 +327,7 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
   }
   library.instances++;
   const character = {
-    root, model, mixer, height: template.definition.height, assetInfo: template.info,
+    root, model, mixer, height, assetInfo: wardrobe ? Object.freeze({ ...template.info, height, wardrobe }) : template.info,
     update(dt, time, state = "idle") {
       if (disposed) return;
       for (const { bone, before } of modified) bone.quaternion.copy(before);
@@ -332,7 +400,7 @@ export async function loadCharacterLibrary({ baseUrl, assets = PREMIUM_CHARACTER
     if (!templates.length) { materialCache.forEach(material => material.dispose()); throw new Error(`角色模型暂未加载：${errors.map(error => `${error.id} ${error.message}`).join("；")}`); }
     const library = {
       templates, errors: Object.freeze(errors), assets: Object.freeze(templates.map(template => template.info)),
-      instances: 0, disposed: false, released: false, badgeGeometries: new Map(),
+      instances: 0, disposed: false, released: false, badgeGeometries: new Map(), wardrobeMaterials: new Map(),
       badgeMaterial: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.68, metalness: 0.08 }),
       createPremiumCharacter(options = {}) {
         const seed = Math.abs(Math.trunc(Number(options.seed) || 1));
@@ -359,6 +427,7 @@ export async function loadCharacterLibrary({ baseUrl, assets = PREMIUM_CHARACTER
         }));
         library.badgeGeometries.forEach(geometry => geometry.dispose()); library.badgeGeometries.clear();
         library.badgeMaterial.dispose();
+        library.wardrobeMaterials.forEach(material => material.dispose()); library.wardrobeMaterials.clear();
         geometries.forEach(geometry => geometry.dispose()); materials.forEach(material => material.dispose());
         textures.forEach(texture => texture.dispose()); skeletons.forEach(skeleton => skeleton.dispose());
       },

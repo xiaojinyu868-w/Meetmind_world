@@ -6,6 +6,7 @@ import {getSceneDefinition} from "./runtime/SceneRegistry.js";
 import {createCharacter} from "./scenes/Characters.js";
 import {loadCharacterLibrary} from "./scenes/PremiumCharacters.js";
 import {createEventGarden} from "./scenes/EventGarden.js";
+import {socialPeopleLayout} from "./runtime/SocialPeopleLayout.js";
 import {createEventLook} from "./runtime/EventLook.js";
 import {prepareVenueEntourage} from "./runtime/VenueEntourage.js";
 import {EventClient} from "./runtime/EventClient.js";
@@ -86,13 +87,13 @@ function fitPreset(preset,id){
 function goCamera(id,duration=1700){if(!currentScene)return;const presets=venueView==="event"?{...currentScene.cameras,...currentScene.eventCameras}:currentScene.cameras,actual=presets[id]?id:"hero",preset=fitPreset(presets[actual],actual);if(activeVenue&&venuePresentationBounds){const distance=new THREE.Vector3(...preset.position).distanceTo(new THREE.Vector3(...preset.target)),reach=distance+venuePresentationBounds.radius;controls.maxDistance=Math.max(controls.maxDistance,distance*1.1);camera.far=Math.max(camera.far,reach*2);scene.fog.near=Math.max(scene.fog.near,reach*1.05);scene.fog.far=Math.max(scene.fog.far,reach*1.7);}cameraTo(preset.position,preset.target,preset.fov||43,duration);UI.setCameraSelection(actual);if(activeVenue){const url=new URL(location.href);url.searchParams.set("camera",actual);history.replaceState(null,"",url);}}
 function personPosition(index,isSelf=false){
  if(isSelf)return {...currentScene.spawn};
- const points=currentScene.anchors.people;return {...points[index%points.length]};
+ const points=currentScene.eventPeople||currentScene.anchors.people;return {...points[index%points.length]};
 }
 function addPerson(person,index,animate=false){
  const character=(premiumLibrary?.createPremiumCharacter||createCharacter)({color:person.avatarColor||"#a59074",seed:index+23,name:person.name});
  character.root.userData.personId=person.id;
  character.root.traverse(o=>{o.userData.personId=person.id;});
- const pos=personPosition(index,person.id===client.me?.attendee?.id);character.root.position.set(pos.x,pos.y||0,pos.z);character.root.rotation.y=(activeVenue?.id==="venue-c"?0:pos.yaw||0)+(index%3-1)*.32;
+ const pos=personPosition(index,person.id===client.me?.attendee?.id);character.root.position.set(pos.x,pos.y||0,pos.z);character.root.rotation.y=pos.yaw||0;
  actors.add(character.root);people.set(person.id,{...character,person,index,pos,arrival:animate?time:null});
  if(animate){character.root.scale.setScalar(.02);chime();}
  return character;
@@ -162,6 +163,7 @@ async function switchScene(id,options={}){
    result.eventEntourage=await prepareVenueEntourage(result.modelRoot,{venueId:id,baseUrl:new URL("./",document.baseURI).href});
    result.eventGarden=await createEventGarden({venueId:id,config:manifest,quality,props:{treeUrl:new URL("assets/premium/garden-tree.glb",document.baseURI).href,treeHeight:3.2,benchUrl:new URL("assets/premium/garden-seat.glb",document.baseURI).href,benchWidth:2.6}});
    result.root.add(result.eventGarden.root);
+   result.eventPeople=socialPeopleLayout(manifest,result.eventGarden.colliders);
    const a=manifest.anchors.arrival,y=manifest.groundY;
    result.eventCameras=id==="venue-ab-canopy"?{
     arrival:{position:[91.5,y+2.5,215],target:[84,y+1.45,205.3],fov:52},

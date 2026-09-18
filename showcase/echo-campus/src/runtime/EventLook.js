@@ -59,8 +59,8 @@ function cloneEventMaterial(original, profile) {
   if (profile === "glass") {
     material.color.set(0x82a8b7);
     material.metalness = .24;
-    material.roughness = .24;
-    material.envMapIntensity = .9;
+    material.roughness = .16;
+    material.envMapIntensity = 1.25;
     // The source lacks interior glazing depth. Opaque reflections preserve its
     // authored silhouette without transparency sorting through entire towers.
     material.transparent = false;
@@ -140,10 +140,12 @@ export async function createEventLook({
   },
 } = {}) {
   if (!scene?.isScene || !modelRoot?.isObject3D || !sun?.shadow?.camera) throw new Error("Event look needs scene, model and shadow light");
-  const frame = eventLightFrame(config), records = [], clones = new Map(), warnings = [];
+  const frame = eventLightFrame(config), records = [], shadowRecords = [], clones = new Map(), warnings = [];
   const diagnostics = { enabled: false, sky: "unavailable", overrides: {}, materialClones: 0, hiddenBillboards: 0, shadowSpan: frame.span, warnings };
   modelRoot.traverse(object => {
     if (!object.isMesh || !object.material) return;
+    const triangles=(object.geometry?.index?.count||object.geometry?.attributes.position?.count||0)/3;
+    if(object.castShadow&&triangles>100000)shadowRecords.push({object,castShadow:object.castShadow});
     const sourceMaterials = Array.isArray(object.material) ? object.material : [object.material];
     const materials = sourceMaterials.map(material => {
       const profile = eventMaterialProfile(material);
@@ -158,7 +160,7 @@ export async function createEventLook({
     if (hidden) diagnostics.hiddenBillboards++;
     if (hidden || materials.some((m, i) => m !== sourceMaterials[i])) records.push({ object, material: object.material, visible: object.visible, eventMaterials: Array.isArray(object.material) ? materials : materials[0], hidden });
   });
-  diagnostics.materialClones = clones.size;
+  diagnostics.materialClones = clones.size;diagnostics.heavyShadowMeshesSkipped=shadowRecords.length;
   let sky = null, environment = null;
   if (skyUrl) {
     let loaded = null;
@@ -195,6 +197,7 @@ export async function createEventLook({
     if (next === enabled) return enabled;
     if (next) {
       source = captureSource();
+      for(const record of shadowRecords)record.object.castShadow=false;
       for (const record of records) { record.object.material = record.eventMaterials; if (record.hidden) record.object.visible = false; }
       scene.background = sky || new THREE.Color(0xc3d8e1);
       if (environment) scene.environment = environment.texture;
@@ -208,14 +211,15 @@ export async function createEventLook({
       scene.environmentRotation.set(0, skyRotation, 0);
       scene.fog = new THREE.Fog(0xd9e0db, Math.max(110, source.fog?.near || 0), Math.max(420, source.fog?.far || 0));
       if (renderer) renderer.toneMappingExposure = 1.01;
-      sun.color.set(0xffedce); sun.intensity = 2.55;
+      sun.color.set(0xffedce); sun.intensity = 2.85;
       sun.position.copy(frame.sunPosition); sun.target.position.copy(frame.center); sun.target.updateMatrixWorld();
       Object.assign(sun.shadow.camera, { left: -frame.span, right: frame.span, top: frame.span, bottom: -frame.span, near: frame.near, far: frame.far, zoom: 1 });
       sun.shadow.bias = -.00018; sun.shadow.normalBias = .045; sun.shadow.radius = 2; sun.shadow.intensity = .85;
-      if (hemi) { hemi.color.set(0xc8e2f5); hemi.groundColor.set(0xc4b393); hemi.intensity = 1.18; }
-      if (fill) { fill.color.set(0xdcecff); fill.intensity = .62; fill.position.copy(frame.center).add(new THREE.Vector3(34, 22, -28)); }
+      if (hemi) { hemi.color.set(0xc8e2f5); hemi.groundColor.set(0xc4b393); hemi.intensity = .83; }
+      if (fill) { fill.color.set(0xdcecff); fill.intensity = .38; fill.position.copy(frame.center).add(new THREE.Vector3(34, 22, -28)); }
     } else {
       for (const record of records) { record.object.material = record.material; record.object.visible = record.visible; }
+      for(const record of shadowRecords)record.object.castShadow=record.castShadow;
       scene.background = source.background; scene.environment = source.environment; scene.fog = source.fog;
       scene.environmentIntensity = source.environmentIntensity; scene.backgroundIntensity = source.backgroundIntensity; scene.backgroundBlurriness = source.backgroundBlurriness;
       scene.backgroundRotation.copy(source.backgroundRotation); scene.environmentRotation.copy(source.environmentRotation);
