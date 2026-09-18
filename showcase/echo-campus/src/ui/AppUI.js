@@ -43,8 +43,6 @@ export class AppUI {
     this.selectedPerson = null; this.soundEnabled = false; this.selectedCamera = "overview";
     this.sceneId = "campus"; this.sceneLabel = "白庭校园"; this.sceneFile = null;
     this.stage = new URL(location.href).searchParams.get("mode") === "stage";
-    const welcomeQuery = new URL(location.href).searchParams;
-    this.welcomeVisible = !this.stage && !welcomeQuery.has("capture") && welcomeQuery.get("entry") !== "nfc" && !welcomeQuery.has("badge") && welcomeQuery.get("welcome") !== "0";
     this.sceneManifest = defaultManifest("glb");
     try {
       const saved = localStorage.getItem("echo-campus-scene-manifest");
