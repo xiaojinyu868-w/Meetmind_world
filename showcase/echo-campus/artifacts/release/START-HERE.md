@@ -60,3 +60,7 @@ python .\partner\build_handoff.py
 `build_showcase.py` 从 `build_preview.py` 复用字体与排版函数，因此两者都需保留。`build_preview.py` 是历史概念预览制作源，不是当前主片入口；单独重建旧预览还需旧项目的参考素材与路径，不应把它当作本包的一键重建命令。`voice/narration-timeline.json` 留存原配音时间与来源记录；主片重建只需要包内 mastered.wav 与 aligned-subtitles.json，不需要API密钥。
 
 首次重建会覆盖同名输出，建议先复制交付包。配音调用凭据、活动私密数据、调试传输文件和部署脚本均不在本包内。
+
+## 本次更新：A/B/C 真实场地候选
+
+互动 Demo 的「场景」面板新增 A / B / C 外景方向预览，详情和验证边界见 A-B-C-SITE-CANDIDATES.md。线上入口：https://capture.meetmind.online/echo-campus/。
