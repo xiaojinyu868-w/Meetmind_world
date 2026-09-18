@@ -1,8 +1,14 @@
 import * as THREE from "three";
+import { finishArchitecturalMaterial } from "./ArchitecturalMaterials.js";
 
 // Overrides are keyed to material names inspected in the three delivered GLBs.
 // Never infer that arbitrary green/blue geometry is vegetation/glass.
 const MATERIAL_PROFILES = new Map([
+  ["[Water Sparkling]", "water"],
+  ["[Color A04]2", "site"],
+  ["[Color A04]", "site-dark"],
+  ["[Color_005]", "road"],
+  ["[Color M05]", "road"],
   ["[Translucent_Glass_Safety]", "glass"],
   ["[Color H01]1", "glass"],
   ["Source material 0", "glass"],
@@ -47,7 +53,7 @@ export function eventLightFrame(config = {}) {
   return { center, sunPosition: center.clone().add(offset), span, near: .5, far: offset.length() + span * 3, groundY };
 }
 
-function cloneEventMaterial(original, profile) {
+function cloneEventMaterial(original, profile, time) {
   const material = original.clone();
   material.name = original.name;
   material.userData = { ...original.userData, eventLook: true, sourceMaterialName: original.name };
@@ -57,36 +63,50 @@ function cloneEventMaterial(original, profile) {
   }
   if (!material.isMeshStandardMaterial) return material;
   if (profile === "glass") {
-    material.color.set(0x82a8b7);
-    material.metalness = .24;
-    material.roughness = .16;
-    material.envMapIntensity = 1.25;
+    material.color.set(0x94b8c2);
+    material.metalness = .84;
+    material.roughness = .13;
+    material.envMapIntensity = 1.7;
     // The source lacks interior glazing depth. Opaque reflections preserve its
     // authored silhouette without transparency sorting through entire towers.
     material.transparent = false;
     material.opacity = 1;
     material.depthWrite = true;
   } else if (profile === "stone" || profile === "ivory") {
-    material.color.set(profile === "ivory" ? 0xe8e5da : 0xd4d2c7);
+    material.color.set(profile === "ivory" ? 0xdcd5c3 : 0xbeb9aa);
     material.roughness = .77;
     material.metalness = .025;
     material.envMapIntensity = .32;
   } else if (profile === "paving") {
-    material.color.lerp(new THREE.Color(0xd5d0c3), .34);
+    material.color.set(0xbdb6a5);
     material.roughness = .84;
     material.metalness = 0;
     material.envMapIntensity = .24;
   } else if (profile === "grass") {
-    material.color.set(0x788d68);
+    material.color.set(0x65794c);
     material.roughness = .96;
     material.metalness = 0;
     material.envMapIntensity = .2;
   } else if (profile === "aluminum") {
-    material.color.lerp(new THREE.Color(0xc4cbd0), .18);
-    material.metalness = .55;
-    material.roughness = .42;
+    material.color.set(0xc3beae);
+    material.metalness = .68;
+    material.roughness = .31;
     material.envMapIntensity = .6;
+  } else if (profile === "water") {
+    material.color.set(0x427e83);material.roughness=.22;material.metalness=.58;material.envMapIntensity=1.3;
+    material.transparent=false;material.opacity=1;material.depthWrite=true;
+    material.polygonOffset=true;material.polygonOffsetFactor=-1;material.polygonOffsetUnits=-1;
+  } else if (profile === "site" || profile === "site-dark") {
+    material.color.set(profile==="site"?0xc4c6b7:0xb0b4a4);material.roughness=.95;material.metalness=0;
+    // The delivered canopy contains a second, nearly coplanar site layer under
+    // [Color A04]2. Keep the authored [Color A04] material in source view, but
+    // remove this duplicate from the event pass to stop distant z-fighting.
+    if (profile === "site-dark") material.visible = false;
+    if(profile==="site"){material.polygonOffset=true;material.polygonOffsetFactor=-2;material.polygonOffsetUnits=-2;}
+  } else if (profile === "road") {
+    material.color.set(0x777b77);material.roughness=.91;material.metalness=0;
   }
+  finishArchitecturalMaterial(material, profile, time);
   material.needsUpdate = true;
   return material;
 }
@@ -99,11 +119,16 @@ function skyHemisphereTexture(source, quality) {
   canvas.height = canvas.width / 2;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Sky canvas unavailable");
-  ctx.drawImage(source.image, 0, 0, canvas.width, canvas.height / 2);
+  ctx.drawImage(source.image, 0, 0, source.image.width, source.image.height*.50, 0, 0, canvas.width/2, canvas.height / 2);
+  ctx.save();ctx.translate(canvas.width,0);ctx.scale(-1,1);
+  ctx.drawImage(source.image, 0, 0, source.image.width, source.image.height*.50, 0, 0, canvas.width/2, canvas.height / 2);ctx.restore();
+  // Extend the exact horizon strip, preserving azimuth color; no hard grey seam.
+  const horizon=ctx.getImageData(0,canvas.height/2-1,canvas.width,1);
+  for(let row=canvas.height/2;row<canvas.height;row++)ctx.putImageData(horizon,0,row);
   const gradient = ctx.createLinearGradient(0, canvas.height / 2, 0, canvas.height);
-  gradient.addColorStop(0, "#bccbd0");
-  gradient.addColorStop(.25, "#c4c6b8");
-  gradient.addColorStop(1, "#aaa895");
+  gradient.addColorStop(0, "rgba(139,150,134,0)");
+  gradient.addColorStop(.15, "rgba(139,150,134,.2)");
+  gradient.addColorStop(1, "rgba(112,122,97,1)");
   ctx.fillStyle = gradient;
   ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height / 2);
   const texture = new THREE.CanvasTexture(canvas);
@@ -140,7 +165,7 @@ export async function createEventLook({
   },
 } = {}) {
   if (!scene?.isScene || !modelRoot?.isObject3D || !sun?.shadow?.camera) throw new Error("Event look needs scene, model and shadow light");
-  const frame = eventLightFrame(config), records = [], shadowRecords = [], clones = new Map(), warnings = [];
+  const frame = eventLightFrame(config), records = [], shadowRecords = [], clones = new Map(), warnings = [], time={value:0};
   const diagnostics = { enabled: false, sky: "unavailable", overrides: {}, materialClones: 0, hiddenBillboards: 0, shadowSpan: frame.span, warnings };
   modelRoot.traverse(object => {
     if (!object.isMesh || !object.material) return;
@@ -151,7 +176,7 @@ export async function createEventLook({
       const profile = eventMaterialProfile(material);
       if (!profile) return material;
       if (!clones.has(material)) {
-        clones.set(material, cloneEventMaterial(material, profile));
+        clones.set(material, cloneEventMaterial(material, profile, time));
         diagnostics.overrides[profile] = (diagnostics.overrides[profile] || 0) + 1;
       }
       return clones.get(material);
@@ -196,27 +221,27 @@ export async function createEventLook({
     next = !!next;
     if (next === enabled) return enabled;
     if (next) {
-      source = captureSource();
+      source = captureSource();activeSpan=frame.span;
       for(const record of shadowRecords)record.object.castShadow=false;
       for (const record of records) { record.object.material = record.eventMaterials; if (record.hidden) record.object.visible = false; }
       scene.background = sky || new THREE.Color(0xc3d8e1);
       if (environment) scene.environment = environment.texture;
-      scene.environmentIntensity = .62;
-      scene.backgroundIntensity = .95;
+      scene.environmentIntensity = .85;
+      scene.backgroundIntensity = .82;
       scene.backgroundBlurriness = 0;
       // The bright area of the authored panorama is near u=.76. Rotate both
       // lighting and background together so reflections match the visible sky.
-      const skyRotation = config.eventLook?.skyRotation ?? -2.5;
+      const skyRotation = config.eventLook?.skyRotation ?? .7;
       scene.backgroundRotation.set(0, skyRotation, 0);
       scene.environmentRotation.set(0, skyRotation, 0);
-      scene.fog = new THREE.Fog(0xd9e0db, Math.max(110, source.fog?.near || 0), Math.max(420, source.fog?.far || 0));
-      if (renderer) renderer.toneMappingExposure = 1.01;
-      sun.color.set(0xffedce); sun.intensity = 2.85;
+      scene.fog = new THREE.Fog(0xcfdadb, 220, 660);
+      if (renderer) renderer.toneMappingExposure = 1.08;
+      sun.color.set(0xffe3b5); sun.intensity = 3.4;
       sun.position.copy(frame.sunPosition); sun.target.position.copy(frame.center); sun.target.updateMatrixWorld();
       Object.assign(sun.shadow.camera, { left: -frame.span, right: frame.span, top: frame.span, bottom: -frame.span, near: frame.near, far: frame.far, zoom: 1 });
-      sun.shadow.bias = -.00018; sun.shadow.normalBias = .045; sun.shadow.radius = 2; sun.shadow.intensity = .85;
-      if (hemi) { hemi.color.set(0xc8e2f5); hemi.groundColor.set(0xc4b393); hemi.intensity = .83; }
-      if (fill) { fill.color.set(0xdcecff); fill.intensity = .38; fill.position.copy(frame.center).add(new THREE.Vector3(34, 22, -28)); }
+      sun.shadow.bias = -.00006; sun.shadow.normalBias = .025; sun.shadow.radius = 3; sun.shadow.intensity = .95;
+      if (hemi) { hemi.color.set(0xc2daf0); hemi.groundColor.set(0xc2ab83); hemi.intensity = .42; }
+      if (fill) { fill.color.set(0xc1d7ed); fill.intensity = .2; fill.position.copy(frame.center).add(new THREE.Vector3(34, 22, -28)); }
     } else {
       for (const record of records) { record.object.material = record.material; record.object.visible = record.visible; }
       for(const record of shadowRecords)record.object.castShadow=record.castShadow;
@@ -241,5 +266,21 @@ export async function createEventLook({
     environment?.dispose(); sky?.dispose();
     records.length = 0; clones.clear();
   }
-  return { setEnabled, dispose, diagnostics };
+  let activeSpan=frame.span;
+  return { setEnabled, dispose, diagnostics, update(dt,camera,target){
+    time.value+=Math.min(dt,.05);
+    if(!enabled||!camera||!target)return;
+    const distance=camera.position.distanceTo(target),b=config.framingBounds;
+    if(!b)return;
+    const wide=distance>80;
+    const span=wide?Math.max(b.maxX-b.minX,b.maxZ-b.minZ)*.72:frame.span;
+    if(Math.abs(span-activeSpan)<.01)return;
+    activeSpan=span;
+    const center=wide?new THREE.Vector3((b.minX+b.maxX)/2,(b.minY+b.maxY)/2,(b.minZ+b.maxZ)/2):frame.center;
+    const offset=frame.sunPosition.clone().sub(frame.center).normalize().multiplyScalar(wide?span*3:frame.sunPosition.distanceTo(frame.center));
+    sun.position.copy(center).add(offset);sun.target.position.copy(center);sun.target.updateMatrixWorld();
+    Object.assign(sun.shadow.camera,{left:-span,right:span,top:span,bottom:-span,near:.5,far:offset.length()+span*3});
+    sun.shadow.normalBias=wide?.06:.025;sun.shadow.camera.updateProjectionMatrix();sun.shadow.needsUpdate=true;
+    diagnostics.shadowSpan=span;
+  } };
 }
