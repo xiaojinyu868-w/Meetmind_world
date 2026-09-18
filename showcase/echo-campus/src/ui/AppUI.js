@@ -33,6 +33,53 @@ const CATEGORY_LABELS = Object.fromEntries(CATEGORIES);
 const INITIAL = { name: "林予", role: "AI 产品创始人", offer: "AI 产品研发、快速原型", need: "品牌设计、用户访谈", category: "founder", avatarColor: COLORS[0] };
 const CAMERA_LABELS = { overview: "全景", arrival: "入口", courtyard: "庭院", aerial: "俯瞰" };
 
+// 真实 AB/C 压缩包的轻量策展索引。原始 .skp/.3dm 只在本地处理；
+// 这里展示的是候选外景的方向性预览，不把尚未转换的工程文件伪装成线上 3D 资产。
+const SITE_CANDIDATES = Object.freeze([
+  Object.freeze({
+    id: "a",
+    label: "A · HUB 中庭",
+    kicker: "AB 地块",
+    title: "高层塔楼 · UFO 屋顶 · 中央会客场",
+    source: "AB地块SU模型.zip",
+    files: "T1–3 塔楼 / UFO / 电扶梯",
+    status: "主舞台候选",
+    recommended: true,
+    art: "a",
+    palette: ["#e8eee6", "#a8bcae", "#506d61"],
+    summary: "适合做活动总入口、主舞台与大屏远景，先用建筑体量建立到场感。",
+    composition: "远景主建筑 + 中庭舞台 + 入口打卡层",
+  }),
+  Object.freeze({
+    id: "b",
+    label: "B · T6 雨棚",
+    kicker: "AB 地块",
+    title: "连廊雨棚 · 细节入口 · 轻量漫游",
+    source: "AB地块SU模型.zip",
+    files: "T6 雨棚 / 楼梯 / 中庭窗",
+    status: "近景候选",
+    recommended: false,
+    art: "b",
+    palette: ["#edf0e9", "#c3b79e", "#667365"],
+    summary: "适合承载 NFC 触碰、嘉宾资料与第一条相遇，近景识别度更强。",
+    composition: "入口近景 + NFC 触碰点 + 人物名片层",
+  }),
+  Object.freeze({
+    id: "c",
+    label: "C · 商业裙房",
+    kicker: "C 地块",
+    title: "商业裙房 · 水平街区 · 活动动线",
+    source: "C地块SU模型.zip",
+    files: "商业裙房 .skp / Podium .3dm",
+    status: "备选待转换",
+    recommended: false,
+    art: "c",
+    palette: ["#e8efee", "#8cb5b0", "#345b5c"],
+    summary: "适合做论坛、企业展位与连续打卡路线；需先确定最终授权版本。",
+    composition: "水平街区 + 企业点位 + 论坛动线",
+  }),
+]);
+
 export class AppUI {
   constructor({ client, onCamera = () => {}, onScene = () => {}, onImport = () => {}, onTour = () => {}, onSelectPerson = () => {}, onActivityCheckpoint = () => {}, onSound = () => {}, onShowcase = () => {} }) {
     this.client = client;
@@ -47,6 +94,7 @@ export class AppUI {
       const saved = localStorage.getItem("echo-campus-scene-manifest");
       if (saved) this.sceneManifest = validateManifest(JSON.parse(saved));
     } catch {}
+    try { this.selectedSiteCandidate = localStorage.getItem("echo-campus-site-candidate") || null; } catch { this.selectedSiteCandidate = null; }
     this.root.innerHTML = this.shell();
     this.root.addEventListener("click", e => this.onClick(e));
     this.root.addEventListener("submit", e => this.onSubmit(e));
@@ -212,6 +260,9 @@ export class AppUI {
     }
     if (action === "edit-profile") return this.openOnboarding();
     if (action === "scenes") return this.openScenePanel();
+    if (action === "site-candidate") return this.openSiteCandidate(id);
+    if (action === "site-candidate-back") return this.openScenePanel();
+    if (action === "site-candidate-select") return this.selectSiteCandidate(id);
     if (action === "scene") {
       this.sceneId = id;
       this.closePanel();
@@ -442,11 +493,32 @@ export class AppUI {
     const canvas = this.root.querySelector("[data-demo-qr]");
     QRCode.toCanvas(canvas, first, { width: 156, margin: 1, color: { dark: "#29483cff", light: "#ffffffff" } }).catch(() => this.toast("二维码暂未生成，可使用下方入口链接"));
   }
+  selectSiteCandidate(id) {
+    const candidate = SITE_CANDIDATES.find(item => item.id === id);
+    if (!candidate) return;
+    this.selectedSiteCandidate = candidate.id;
+    try { localStorage.setItem("echo-campus-site-candidate", candidate.id); } catch {}
+    this.toast(`${candidate.label} 已记为本次交付方向；等待最终场地文件导入`);
+    this.openScenePanel();
+  }
+  openSiteCandidate(id) {
+    const candidate = SITE_CANDIDATES.find(item => item.id === id);
+    if (!candidate) return this.openScenePanel();
+    this.openPanel("scenes");
+    const swatches = candidate.palette.map(value => `<i style="--swatch:${value}" title="${value}"></i>`).join("");
+    this.render(this.panelHeader("SITE CANDIDATE " + candidate.id.toUpperCase(), candidate.label, "先确认空间方向，再把最终授权模型替换进同一套活动层。") +
+      `<div class="ec-site-detail-hero"><div class="ec-site-art ec-site-art--${candidate.art} ec-site-art-large"><span></span><i></i><i></i><i></i></div><div class="ec-site-detail-copy"><span class="ec-status-chip ${candidate.recommended ? "is-recommended" : ""}">${esc(candidate.status)}</span><h2>${esc(candidate.title)}</h2><p>${esc(candidate.summary)}</p><div class="ec-site-swatches" aria-label="建议色彩">${swatches}</div></div></div>
+      <div class="ec-site-detail-grid"><section><span>本地来源</span><strong>${esc(candidate.source)}</strong><small>${esc(candidate.files)}</small></section><section><span>推荐组合</span><strong>${esc(candidate.composition)}</strong><small>建筑视觉与人物、NFC、活动点位分层接入</small></section></div>
+      <div class="ec-site-truth"><span>当前状态</span><p>这是基于你提供的工程文件目录做的方向性预览。原始 ${candidate.id === "c" ? ".3dm / .skp" : ".skp"} 尚未上传服务器，也尚未转换为浏览器可加载的 GLB / Marble 资产。</p></div>
+      <div class="ec-site-detail-actions"><button class="ec-primary ec-full" type="button" data-action="site-candidate-select" data-id="${candidate.id}">${icon("check")}${this.selectedSiteCandidate === candidate.id ? "已选为交付方向" : "选为交付方向"}${icon("arrow")}</button><button class="ec-secondary ec-full" type="button" data-action="site-candidate-back">返回 A / B / C 候选</button></div>
+      <p class="ec-field-note">选定后仍需用最终文件做几何清理、单位校准、地面与镜头标定，再进入正式 3D 场景。</p>`, true);
+  }
   openScenePanel() {
     this.openPanel("scenes");
     const m = this.sceneManifest;
+    const selectedCandidate = SITE_CANDIDATES.find(item => item.id === this.selectedSiteCandidate);
     this.render(this.panelHeader("A WORLD WITHOUT A FIXED SHELL", "换一个世界，继续相遇", "人物、名片与已确认的关系保留，场景可以自由替换。") +
-      `<div class="ec-scene-cards">${listSceneDefinitions().map(definition => `<button class="ec-scene-card ${this.sceneId === definition.id ? "is-selected" : ""}" data-action="scene" data-id="${esc(definition.id)}"><div class="ec-scene-art ${esc(definition.previewClass)}"><i></i><i></i><i></i><b></b></div><span><strong>${esc(definition.displayName)}</strong><small>${esc(definition.helper)}</small></span>${icon("arrow")}</button>`).join("")}</div>
+      `<section class="ec-site-candidate-section" aria-label="真实场地候选外景"><div class="ec-section-heading"><h2>真实场地候选外景</h2><span>A / B / C · 方向预览</span></div><p class="ec-site-candidate-intro">先看现场大致的空间气质，再决定主建筑、入口近景与活动动线如何组合。</p><div class="ec-site-candidates">${SITE_CANDIDATES.map(candidate => `<article class="ec-site-candidate ${selectedCandidate?.id === candidate.id ? "is-selected" : ""}"><button type="button" class="ec-site-candidate-hit" data-action="site-candidate" data-id="${candidate.id}" aria-label="查看 ${esc(candidate.label)}"><div class="ec-site-art ec-site-art--${candidate.art}"><span></span><i></i><i></i><i></i></div><div class="ec-site-candidate-copy"><div><strong>${esc(candidate.label)}</strong>${candidate.recommended ? `<em>推荐</em>` : ""}</div><small>${esc(candidate.title)}</small><span>${esc(candidate.status)}</span></div>${icon("chevron")}</button></article>`).join("")}</div>${selectedCandidate ? `<div class="ec-site-selection">${icon("check")}当前方向：<strong>${esc(selectedCandidate.label)}</strong><span>${esc(selectedCandidate.composition)}</span></div>` : ""}<div class="ec-site-composition"><span>建议组合</span><strong>A 做远景主建筑，B 做 NFC 入口近景，C 作为商业动线备选</strong><p>人物、名片、积分和活动点位保持独立，换入最终模型后仍可复用。</p></div></section><div class="ec-scene-cards">${listSceneDefinitions().map(definition => `<button class="ec-scene-card ${this.sceneId === definition.id ? "is-selected" : ""}" data-action="scene" data-id="${esc(definition.id)}"><div class="ec-scene-art ${esc(definition.previewClass)}"><i></i><i></i><i></i><b></b></div><span><strong>${esc(definition.displayName)}</strong><small>${esc(definition.helper)}</small></span>${icon("arrow")}</button>`).join("")}</div>
       <div class="ec-section-heading"><h2>导入你的场景</h2><span>GLB / GLTF / SPZ / PLY / SPLAT</span></div>
       <label class="ec-upload-area"><input type="file" accept=".glb,.gltf,.spz,.ply,.splat" data-scene-file><span>${icon("upload")}</span><strong>${this.sceneFile ? esc(this.sceneFile.name) : "选择模型或 Marble 导出文件"}</strong><small>文件仅在本地读取，不会上传到活动服务</small></label>
       ${this.sceneFile ? '<button class="ec-text-button ec-clear-file" type="button" data-action="clear-scene-file">移除当前文件，改用模型链接</button>' : ""}
