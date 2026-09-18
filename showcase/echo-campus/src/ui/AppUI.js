@@ -43,6 +43,8 @@ export class AppUI {
     this.selectedPerson = null; this.soundEnabled = false; this.selectedCamera = "overview";
     this.sceneId = "campus"; this.sceneLabel = "白庭校园"; this.sceneFile = null;
     this.stage = new URL(location.href).searchParams.get("mode") === "stage";
+    const welcomeQuery = new URL(location.href).searchParams;
+    this.welcomeVisible = !this.stage && !welcomeQuery.has("capture") && welcomeQuery.get("entry") !== "nfc" && !welcomeQuery.has("badge") && welcomeQuery.get("welcome") !== "0";
     this.sceneManifest = defaultManifest("glb");
     try {
       const saved = localStorage.getItem("echo-campus-scene-manifest");
@@ -81,6 +83,20 @@ export class AppUI {
         </nav>
       </header>
       <div class="ec-scene-caption"><span class="ec-caption-line"></span><span data-scene-name>白庭校园</span><span class="ec-caption-coordinate" data-scene-coordinate>WHITE COURT</span></div>
+      <aside class="ec-welcome-card" data-welcome-card role="dialog" aria-labelledby="ec-welcome-title" aria-describedby="ec-welcome-copy"${this.welcomeVisible ? "" : " hidden"}>
+        <button type="button" class="ec-welcome-close" data-action="welcome-dismiss" aria-label="暂时关闭入场引导"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+        <div class="ec-welcome-kicker"><span></span>30 SECOND ARRIVAL</div>
+        <h1 id="ec-welcome-title">让一次活动，拥有自己的世界。</h1>
+        <p id="ec-welcome-copy">先看一眼空间，再留下你愿意公开的内容。每一次双方确认的相遇，都会在园区里留下连接。</p>
+        <div class="ec-welcome-beats">
+          <div><b>01</b><span><strong>轻触入场</strong><small>NFC、二维码或短链接均可</small></span></div>
+          <div><b>02</b><span><strong>留下一个分身</strong><small>只填写你愿意公开的资料</small></span></div>
+          <div><b>03</b><span><strong>找到值得认识的人</strong><small>供需推荐，双方确认后点亮</small></span></div>
+        </div>
+        <button type="button" class="ec-primary ec-welcome-primary" data-action="welcome-start">进入这场相遇<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+        <div class="ec-welcome-foot"><span>可以先探索空间，稍后再入场</span><button type="button" data-action="welcome-dismiss">先看看空间</button></div>
+      </aside>
+      <div class="ec-hover-card" data-hover-card hidden><span class="ec-hover-kicker">可互动</span><strong data-hover-name></strong><small data-hover-copy>点击查看这位来宾的相遇入口</small></div>
       <aside class="ec-venue-context" data-venue-context hidden><div class="ec-venue-source"><span>提供模型 · 真实转换</span><strong data-venue-source-name></strong><small data-venue-provenance></small></div><div class="ec-venue-view" role="group" aria-label="场地显示层"><button type="button" data-action="venue-view" data-id="source" aria-pressed="false">源模型</button><button type="button" data-action="venue-view" data-id="event" aria-pressed="false">活动布置</button></div><p data-venue-layer-note></p></aside>
       <div class="ec-hint" data-world-hint>拖动环看 <span>·</span> 滚轮缩放 <span>·</span> 点选人物</div>
       <footer class="ec-footer">
@@ -145,6 +161,7 @@ export class AppUI {
   setVenueState({ candidate = null, view = "event", eventReady = false } = {}) {
     this.activeVenueId = candidate?.id || null;
     this.venueView = view;
+    if (view === "source") this.hideWelcome(false);
     this.venueEventReady = !!eventReady;
     const context = this.root.querySelector("[data-venue-context]");
     context.hidden = !candidate;
@@ -187,6 +204,14 @@ export class AppUI {
     while (stack.children.length > 3) stack.firstElementChild.remove();
     setTimeout(() => { element.classList.add("is-leaving"); setTimeout(() => element.remove(), 240); }, 4600);
   }
+  setHoverTarget(person) {
+    const card = this.root.querySelector('[data-hover-card]');
+    if (!card) return;
+    if (!person) { card.hidden = true; return; }
+    card.hidden = false;
+    card.querySelector('[data-hover-name]').textContent = person.name || '活动点位';
+    card.querySelector('[data-hover-copy]').textContent = person.role ? `认识一下 · ${person.role}` : '点击查看这位来宾的相遇入口';
+  }
   setSelectedPerson(person) {
     if (!person) return;
     this.selectedPerson = person;
@@ -225,6 +250,8 @@ export class AppUI {
     if (!button || button.disabled) return;
     const action = button.dataset.action, id = button.dataset.id;
     if (action === "close") return this.closePanel();
+    if (action === "welcome-dismiss") return this.hideWelcome();
+    if (action === "welcome-start") { this.hideWelcome(); return this.me?.attendee ? this.setSelectedPerson(this.me.attendee) : this.openOnboarding(); }
     if (action === "camera") {
       this.selectedCamera = id;
       this.root.querySelectorAll(".ec-camera-dock button").forEach(b => {
@@ -294,6 +321,14 @@ export class AppUI {
       if (event.shiftKey && (document.activeElement === first || document.activeElement === this.root.querySelector(".ec-panel"))) { event.preventDefault(); last.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     }
+  }
+  hideWelcome() {
+    const card = this.root.querySelector("[data-welcome-card]");
+    this.welcomeVisible = false;
+    if (!card) return;
+    card.classList.add("is-dismissed");
+    card.setAttribute("aria-hidden", "true");
+    setTimeout(() => { if (card.isConnected) card.hidden = true; }, 320);
   }
   openOnboarding() {
     const params = new URL(location.href).searchParams;
