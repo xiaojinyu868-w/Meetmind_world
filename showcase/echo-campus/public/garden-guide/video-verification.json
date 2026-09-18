@@ -18,8 +18,8 @@
     },
     {
       "name": "join",
-      "source": "join-updated.webm",
-      "source_start": 20.507,
+      "source": "ui-recording.webm",
+      "source_start": 26.724,
       "start": 15.15,
       "duration": 2.75
     },
@@ -86,11 +86,11 @@
         "time_base": "1/15360",
         "start_pts": 0,
         "start_time": "0.000000",
-        "duration_ts": 524288,
-        "duration": "34.133333",
-        "bit_rate": "1365866",
+        "duration_ts": 525312,
+        "duration": "34.200000",
+        "bit_rate": "740066",
         "bits_per_raw_sample": "8",
-        "nb_frames": "1024",
+        "nb_frames": "1026",
         "disposition": {
           "default": 1,
           "dub": 0,
@@ -162,8 +162,8 @@
       "format_long_name": "QuickTime / MOV",
       "start_time": "0.000000",
       "duration": "34.222000",
-      "size": "6699079",
-      "bit_rate": "1566028",
+      "size": "4035295",
+      "bit_rate": "943321",
       "probe_score": 100,
       "tags": {
         "major_brand": "isom",
@@ -173,20 +173,10 @@
       }
     }
   },
-  "sha256": "159b0708ebb46e8f736f3d33582833b1a3289684f8baf174674db507935adc61",
-  "size_bytes": 6699079,
   "decode_check": {
     "status": "passed",
     "stderr": ""
   },
-  "media_qa": {
-    "black_intervals": [],
-    "mean_volume": [
-      "-17.7 dB"
-    ],
-    "max_volume": [
-      "-1.5 dB"
-    ],
-    "latest_change": "Only the 2.75 second join UI shot was replaced: optional empty fields and consent unchecked; other intermediate scenes retained."
-  }
+  "sha256": "40b07ad4bf205873ce6cfc8f6aa15bf85f85ad6fdf2f6e022deff90f2542e9c4",
+  "size_bytes": 4035295
 }
