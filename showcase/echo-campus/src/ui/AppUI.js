@@ -31,7 +31,7 @@ const color = value => /^#[0-9a-fA-F]{6}$/.test(value || "") ? value : "#778879"
 const COLORS = ["#778879", "#b98878", "#758e9d", "#b5a27d", "#9287a7", "#505e79"];
 const CATEGORIES = [["investor", "投资人"], ["founder", "创业者"], ["audience", "观众"], ["media", "媒体"], ["platform", "平台伙伴"], ["organizer", "主办方"], ["guest", "其他来宾"]];
 const CATEGORY_LABELS = Object.fromEntries(CATEGORIES);
-const INITIAL = { name: "林予", role: "AI 产品创始人", offer: "AI 产品研发、快速原型", need: "品牌设计、用户访谈", category: "founder", avatarColor: COLORS[0] };
+const INITIAL = { name: "", role: "", offer: "", need: "", category: "guest", avatarColor: COLORS[0] };
 const CAMERA_LABELS = { overview: "全景", arrival: "入口", courtyard: "庭院", aerial: "俯瞰" };
 
 export class AppUI {
@@ -298,7 +298,7 @@ export class AppUI {
   openOnboarding() {
     const params = new URL(location.href).searchParams;
     const secondIdentity = (params.get("persona") === "02" || params.get("badge") === "demo-visitor-02");
-    const values = this.me?.attendee || (secondIdentity ? { name: "周澈", role: "品牌设计师", offer: "品牌设计、用户访谈", need: "AI 产品研发、快速原型", category: "founder", avatarColor: COLORS[1] } : INITIAL);
+    const values = this.me?.attendee || { ...INITIAL, avatarColor: secondIdentity ? COLORS[1] : COLORS[0] };
     const badgeId = params.get("badge") || "";
     const code = params.get("code") || "";
     this.openPanel("join");
@@ -306,20 +306,21 @@ export class AppUI {
       `<form class="ec-form" data-form="join">
         <div class="ec-profile-preview"><div class="ec-avatar-figure" style="--avatar:${color(values.avatarColor)}"><i class="ec-avatar-head"></i><i class="ec-avatar-body"></i><i class="ec-avatar-leg l"></i><i class="ec-avatar-leg r"></i></div><div><span class="ec-tag">风格化演示分身</span><p>以你的意愿和兴趣<br>开启第一场对话</p></div></div>
         ${badgeId ? `<div class="ec-notice ec-notice-soft">${icon("nfc")}<span>已识别演示入场卡。领取仍需激活凭据，公开链接不用于证明真实身份。</span></div>` : ""}
-        <div class="ec-two-cols"><label>昵称<input name="name" required maxlength="24" autocomplete="off" value="${esc(values.name)}" placeholder="你的名字"></label><label>我的身份<input name="role" required maxlength="60" value="${esc(values.role)}" placeholder="例：产品创始人"></label></div>
-        <div class="ec-two-cols"><label>活动身份<select name="category">${Object.entries(CATEGORY_LABELS).map(([id,label]) => `<option value="${id}" ${values.category === id ? "selected" : ""}>${label}</option>`).join("")}</select><small>手环颜色由活动身份自动匹配</small></label><label>机构 / 单位（选填）<input name="organization" maxlength="80" value="${esc(values.organization || "")}" placeholder="可不填写"></label></div>
+        <div class="ec-two-cols"><label>昵称（选填）<input name="name" maxlength="24" autocomplete="off" value="${esc(values.name)}" placeholder="留空使用临时访客昵称"></label><label>我的身份（选填）<input name="role" maxlength="60" value="${esc(values.role)}" placeholder="留空显示为来宾"></label></div>
+        <div class="ec-two-cols"><label>活动身份（选填）<select name="category">${Object.entries(CATEGORY_LABELS).map(([id,label]) => `<option value="${id}" ${values.category === id ? "selected" : ""}>${label}</option>`).join("")}</select><small>手环颜色由活动身份自动匹配</small></label><label>机构 / 单位（选填）<input name="organization" maxlength="80" value="${esc(values.organization || "")}" placeholder="可不填写"></label></div>
         <label>一句话介绍（选填）<textarea name="bio" maxlength="160" rows="2" placeholder="让别人更快了解你">${esc(values.bio || "")}</textarea></label>
         <label>联系入口（选填）<input name="contact" maxlength="120" value="${esc(values.contact || "")}" placeholder="邮箱、主页或社交账号"></label>
         <label class="ec-consent ec-optional"><input type="checkbox" name="publicContact" ${values.publicContact ? "checked" : ""}><span>我愿意在公开名片中展示联系入口（可随时关闭）</span></label>
-        <label>我能提供<textarea name="offer" required maxlength="160" rows="2" placeholder="技能、资源，或你愿意分享的经验">${esc(values.offer)}</textarea></label>
-        <label>我想认识<textarea name="need" required maxlength="160" rows="2" placeholder="希望遇见的伙伴，或想一起解决的问题">${esc(values.need)}</textarea></label>
+        <label>我能提供（选填）<textarea name="offer" maxlength="160" rows="2" placeholder="技能、资源，或你愿意分享的经验">${esc(values.offer)}</textarea></label>
+        <label>我想认识（选填）<textarea name="need" maxlength="160" rows="2" placeholder="希望遇见的伙伴，或想一起解决的问题">${esc(values.need)}</textarea></label>
         <fieldset class="ec-colors"><legend>选择分身色彩</legend>${COLORS.map(c => `<label style="--swatch:${c}"><input type="radio" name="avatarColor" value="${c}" ${c === color(values.avatarColor) ? "checked" : ""}><span aria-label="${c}">${icon("check")}</span></label>`).join("")}</fieldset>
         <input type="hidden" name="badgeId" value="${esc(badgeId)}"><input type="hidden" name="activationCode" value="${esc(code)}">
-        <label class="ec-consent"><input type="checkbox" name="consent" required ${this.me?.attendee ? "checked" : ""}><span>我同意在本活动中公开展示以上资料，用于分身名片、供需推荐和相遇连接。</span></label>
-        <p class="ec-field-note">当前为演示活动，可使用虚构昵称。分身为风格化形象；不会采集照片、声音或私密资料。</p>
+        <label class="ec-consent"><input type="checkbox" name="consent" required><span>我同意在本活动中公开展示以上资料，用于分身名片、供需推荐和相遇连接。</span></label>
+        <p class="ec-field-note">资料全部选填，也可以先以访客身份进入。供需留空不会生成推荐；公开同意需主动勾选。分身为风格化形象，不采集照片或声音。</p>
         <div class="ec-form-error" role="alert" hidden></div>
         <button type="submit" class="ec-primary ec-full">${this.me?.attendee ? "保存我的分身" : "进入这场相遇"}${icon("arrow")}</button>
       </form>`);
+    this.root.querySelector('[data-form="join"]').elements.category.value = values.category || "guest";
   }
   async onSubmit(event) {
     const form = event.target;
@@ -359,7 +360,7 @@ export class AppUI {
       `<button class="ec-primary ec-full" data-action="encounter" data-id="${esc(person.id)}">${icon("link")}发起一次相遇${icon("arrow")}</button>`;
     this.render(this.panelHeader(own ? "MY DIGITAL PRESENCE" : "A NEW CONNECTION", own ? "这是你的名片" : "每个人，都是一个入口") +
       `<div class="ec-person-header"><div class="ec-person-avatar" style="--avatar:${color(person.avatarColor)}">${esc(person.name?.slice(0,1))}<span></span></div><div><h2>${esc(person.name)}</h2><p>${esc(person.role)}</p><span class="ec-tag" style="border-color:${color(person.wristbandColor)}55">${esc(CATEGORY_LABELS[person.category] || "其他来宾")} · ${person.source === "curated-demo" ? "虚构演示人物" : "演示活动分身"}</span></div></div>
-      <div class="ec-profile-fields"><section><span>我能提供</span><p>${esc(person.offer)}</p></section><section><span>我想认识</span><p>${esc(person.need)}</p></section>${person.organization ? `<section><span>机构 / 单位</span><p>${esc(person.organization)}</p></section>` : ""}${person.bio ? `<section><span>一句话介绍</span><p>${esc(person.bio)}</p></section>` : ""}${person.publicContact && person.contact ? `<section><span>联系入口</span><p>${esc(person.contact)}</p></section>` : ""}</div>
+      <div class="ec-profile-fields"><section><span>我能提供</span><p>${esc(person.offer || "暂未填写")}</p></section><section><span>我想认识</span><p>${esc(person.need || "暂未填写")}</p></section>${person.organization ? `<section><span>机构 / 单位</span><p>${esc(person.organization)}</p></section>` : ""}${person.bio ? `<section><span>一句话介绍</span><p>${esc(person.bio)}</p></section>` : ""}${person.publicContact && person.contact ? `<section><span>联系入口</span><p>${esc(person.contact)}</p></section>` : ""}</div>
       <div class="ec-panel-actions">${action}<button class="ec-text-button" data-action="locate">${icon("pin")}在园区中定位</button></div>
       ${person.source === "curated-demo" && !own ? '<p class="ec-field-note">此人物为虚构演示资料，无法代替本人确认相遇。可使用「双端体验」让另一台设备真实接收并确认。</p>' : '<p class="ec-field-note">只有双方确认后，关系才会点亮在共同的世界中。</p>'}
       <div class="ec-person-bottom"><button data-action="inbox">${icon("inbox")}我的相遇</button><button data-action="demo">${icon("nfc")}双端体验</button></div>`, false);

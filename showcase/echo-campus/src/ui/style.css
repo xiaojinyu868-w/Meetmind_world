@@ -1,7 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
 
 :root{--ec-ink:#20362e;--ec-muted:#78837a;--ec-green:#375b47;--ec-paper:#fbfcf8;--ec-border:rgba(51,76,58,.12);--ec-ease:cubic-bezier(.2,.8,.2,1)}
-#ui{position:fixed;inset:0;z-index:10;pointer-events:none;color:var(--ec-ink);font-family:"DM Sans","Noto Sans SC","Microsoft YaHei",sans-serif;font-size:13px;-webkit-font-smoothing:antialiased}
+#ui{position:fixed;inset:0;z-index:10;pointer-events:none;color:var(--ec-ink);font-family:"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;font-size:13px;-webkit-font-smoothing:antialiased}
 #ui *{box-sizing:border-box}
 #ui button,#ui input,#ui textarea,#ui select{font:inherit}
 #ui button{cursor:pointer;-webkit-tap-highlight-color:transparent}

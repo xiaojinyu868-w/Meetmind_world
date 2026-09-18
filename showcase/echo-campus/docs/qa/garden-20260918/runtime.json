@@ -1,0 +1,218 @@
+{
+  "revision": "final worktree: index-BEeXZTk-.js",
+  "date": "2026-09-18T14:30:25.578Z",
+  "errors": [],
+  "requests": [],
+  "responses": [],
+  "reports": [
+    {
+      "venue": "venue-ab-canopy",
+      "venueView": "event",
+      "eventReady": true,
+      "renderer": {
+        "calls": 373,
+        "triangles": 6785205,
+        "geometries": 204,
+        "textures": 41
+      },
+      "fps": 141,
+      "dpr": 1,
+      "scene": "venue-ab-canopy",
+      "people": 17,
+      "meshes": 286,
+      "materials": 253,
+      "geometries": 260,
+      "postPasses": 0,
+      "shadowMapSize": 2048,
+      "quality": "high",
+      "online": true,
+      "premiumCharacters": true,
+      "gardenItems": 19,
+      "eventLook": {
+        "enabled": true,
+        "sky": "generated-sky-and-reflections",
+        "overrides": {
+          "aluminum": 3,
+          "stone": 2,
+          "grass": 5,
+          "paving": 4,
+          "glass": 1,
+          "billboard": 1
+        },
+        "materialClones": 16,
+        "hiddenBillboards": 1,
+        "shadowSpan": 27.646304534492717,
+        "warnings": [],
+        "heavyShadowMeshesSkipped": 14
+      }
+    },
+    {
+      "venue": "venue-ab-towers",
+      "venueView": "event",
+      "eventReady": true,
+      "renderer": {
+        "calls": 233,
+        "triangles": 2635482,
+        "geometries": 115,
+        "textures": 40
+      },
+      "fps": 30,
+      "dpr": 1,
+      "scene": "venue-ab-towers",
+      "people": 17,
+      "meshes": 165,
+      "materials": 135,
+      "geometries": 141,
+      "postPasses": 0,
+      "shadowMapSize": 2048,
+      "quality": "high",
+      "online": true,
+      "premiumCharacters": true,
+      "gardenItems": 13,
+      "eventLook": {
+        "enabled": true,
+        "sky": "generated-sky-and-reflections",
+        "overrides": {
+          "stone": 3,
+          "aluminum": 2,
+          "glass": 1,
+          "paving": 1,
+          "grass": 2
+        },
+        "materialClones": 9,
+        "hiddenBillboards": 0,
+        "shadowSpan": 26.838665984174707,
+        "warnings": [],
+        "heavyShadowMeshesSkipped": 2
+      }
+    },
+    {
+      "venue": "venue-c",
+      "venueView": "event",
+      "eventReady": true,
+      "renderer": {
+        "calls": 152,
+        "triangles": 2277434,
+        "geometries": 75,
+        "textures": 41
+      },
+      "fps": 20,
+      "dpr": 1,
+      "scene": "venue-c",
+      "people": 17,
+      "meshes": 126,
+      "materials": 94,
+      "geometries": 100,
+      "postPasses": 0,
+      "shadowMapSize": 2048,
+      "quality": "high",
+      "online": true,
+      "premiumCharacters": true,
+      "gardenItems": 14,
+      "eventLook": {
+        "enabled": true,
+        "sky": "generated-sky-and-reflections",
+        "overrides": {
+          "glass": 1,
+          "stone": 1,
+          "ivory": 1
+        },
+        "materialClones": 3,
+        "hiddenBillboards": 0,
+        "shadowSpan": 30.520399670478458,
+        "warnings": [],
+        "heavyShadowMeshesSkipped": 4
+      }
+    }
+  ],
+  "mobileDiag": {
+    "venue": "venue-ab-canopy",
+    "venueView": "event",
+    "eventReady": true,
+    "renderer": {
+      "calls": 206,
+      "triangles": 4505626,
+      "geometries": 157,
+      "textures": 38
+    },
+    "fps": 141,
+    "dpr": 1,
+    "scene": "venue-ab-canopy",
+    "people": 17,
+    "meshes": 285,
+    "materials": 253,
+    "geometries": 260,
+    "postPasses": 0,
+    "shadowMapSize": 1024,
+    "quality": "low",
+    "online": true,
+    "premiumCharacters": true,
+    "gardenItems": 17,
+    "eventLook": {
+      "enabled": true,
+      "sky": "generated-sky-and-reflections",
+      "overrides": {
+        "aluminum": 3,
+        "stone": 2,
+        "grass": 5,
+        "paving": 4,
+        "glass": 1,
+        "billboard": 1
+      },
+      "materialClones": 16,
+      "hiddenBillboards": 1,
+      "shadowSpan": 27.646304534492717,
+      "warnings": [],
+      "heavyShadowMeshesSkipped": 0
+    }
+  },
+  "canvasPick": {
+    "requested": "seed-10",
+    "panel": "person"
+  },
+  "source": {
+    "diag": {
+      "venue": "venue-ab-canopy",
+      "venueView": "source",
+      "eventReady": true,
+      "renderer": {
+        "calls": 386,
+        "triangles": 10090298,
+        "geometries": 253,
+        "textures": 42
+      },
+      "fps": 161,
+      "dpr": 1,
+      "scene": "venue-ab-canopy",
+      "people": 17,
+      "meshes": 286,
+      "materials": 253,
+      "geometries": 260,
+      "postPasses": 0,
+      "shadowMapSize": 2048,
+      "quality": "high",
+      "online": true,
+      "premiumCharacters": true,
+      "gardenItems": 19,
+      "eventLook": {
+        "enabled": false,
+        "sky": "generated-sky-and-reflections",
+        "overrides": {
+          "aluminum": 3,
+          "stone": 2,
+          "grass": 5,
+          "paving": 4,
+          "glass": 1,
+          "billboard": 1
+        },
+        "materialClones": 16,
+        "hiddenBillboards": 1,
+        "shadowSpan": 27.646304534492717,
+        "warnings": [],
+        "heavyShadowMeshesSkipped": 14
+      }
+    },
+    "actors": false
+  },
+  "publicWrites": false
+}

@@ -10,3 +10,6 @@ artifacts/geometry/frames/
 artifacts/capture/
 artifacts/qa/
 artifacts/video/
+
+# Local recording intermediates; delivery assets are committed under public/.
+output/

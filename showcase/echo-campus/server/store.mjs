@@ -42,12 +42,12 @@ function profile(body) {
   if (typeof avatarColor !== "string" || !HEX.test(avatarColor)) fail(400, "INVALID_INPUT", "分身颜色格式不正确");
   const categoryId = body.category || "guest";
   if (typeof categoryId !== "string" || !CATEGORY_IDS.has(categoryId)) fail(400, "INVALID_INPUT", "参会类别不正确");
-  const optional = (value, field, max) => value === undefined || value === "" ? "" : cleanText(value, field, 1, max);
+  const optional = (value, field, max) => value === undefined || value === null ? "" : cleanText(value, field, 0, max);
   return {
-    name: cleanText(body.name, "昵称", 1, 24),
-    role: cleanText(body.role, "角色", 1, 60),
-    offer: cleanText(body.offer, "我能提供", 1, 160),
-    need: cleanText(body.need, "我在寻找", 1, 160),
+    name: optional(body.name, "昵称", 24),
+    role: optional(body.role, "角色", 60) || "来宾",
+    offer: optional(body.offer, "我能提供", 160),
+    need: optional(body.need, "我在寻找", 160),
     organization: optional(body.organization, "机构", 80),
     contact: optional(body.contact, "联系入口", 120),
     bio: optional(body.bio, "一句话介绍", 160),
@@ -197,6 +197,8 @@ export class EventStore {
   join(body, existingToken) {
     const fields = profile(body);
     const existing = this.authenticate(existingToken, false);
+    const attendeeId = existing?.id || "guest-" + randomUUID();
+    fields.name ||= "访客" + attendeeId.slice(-6).toUpperCase();
     const badgeId = body.badgeId === undefined || body.badgeId === "" ? null : cleanText(body.badgeId, "入场卡", 1, 64);
     let badge = null;
     if (badgeId) {
@@ -224,7 +226,7 @@ export class EventStore {
     const token = randomBytes(32).toString("base64url");
     const count = this.state.attendees.length;
     const attendee = {
-      id: "guest-" + randomUUID(), ...fields,
+      id: attendeeId, ...fields,
       position: { x: -3.5 + (count % 5) * 1.8, z: 10 + Math.floor((count - 15) / 5) % 3 * 1.8 },
       synthetic: true, source: badgeId ? "demo-badge" : "demo-join",
       joinedAt: new Date(this.now()).toISOString(),

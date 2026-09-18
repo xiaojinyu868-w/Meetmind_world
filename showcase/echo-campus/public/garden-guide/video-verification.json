@@ -1,0 +1,192 @@
+{
+  "kind": "real-public-application-capture-with-subtitles-and-generated-voice",
+  "source_url": "https://capture.meetmind.online/echo-campus/",
+  "timeline": [
+    {
+      "name": "garden",
+      "source": "01-garden.webm",
+      "source_start": 0,
+      "start": 0,
+      "duration": 11.15
+    },
+    {
+      "name": "profile",
+      "source": "ui-recording.webm",
+      "source_start": 20.055,
+      "start": 11.15,
+      "duration": 4
+    },
+    {
+      "name": "join",
+      "source": "join-updated.webm",
+      "source_start": 20.507,
+      "start": 15.15,
+      "duration": 2.75
+    },
+    {
+      "name": "activity",
+      "source": "ui-recording.webm",
+      "source_start": 32.399,
+      "start": 17.9,
+      "duration": 3.45
+    },
+    {
+      "name": "towers",
+      "source": "04-towers.webm",
+      "source_start": 0,
+      "start": 21.35,
+      "duration": 3.2
+    },
+    {
+      "name": "courtyard",
+      "source": "05-courtyard.webm",
+      "source_start": 0,
+      "start": 24.55,
+      "duration": 4.95
+    },
+    {
+      "name": "social",
+      "source": "03-social.webm",
+      "source_start": 0,
+      "start": 29.5,
+      "duration": 4.7
+    }
+  ],
+  "voice": {
+    "model": "qwen3-tts-instruct-flash-2026-01-26",
+    "voice": "Ethan",
+    "offset_s": 0.8
+  },
+  "probe": {
+    "streams": [
+      {
+        "index": 0,
+        "codec_name": "h264",
+        "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+        "profile": "High",
+        "codec_type": "video",
+        "codec_time_base": "1/60",
+        "codec_tag_string": "avc1",
+        "codec_tag": "0x31637661",
+        "width": 1280,
+        "height": 720,
+        "coded_width": 1280,
+        "coded_height": 720,
+        "has_b_frames": 2,
+        "sample_aspect_ratio": "1:1",
+        "display_aspect_ratio": "16:9",
+        "pix_fmt": "yuv420p",
+        "level": 31,
+        "chroma_location": "left",
+        "refs": 1,
+        "is_avc": "true",
+        "nal_length_size": "4",
+        "r_frame_rate": "30/1",
+        "avg_frame_rate": "30/1",
+        "time_base": "1/15360",
+        "start_pts": 0,
+        "start_time": "0.000000",
+        "duration_ts": 524288,
+        "duration": "34.133333",
+        "bit_rate": "1365866",
+        "bits_per_raw_sample": "8",
+        "nb_frames": "1024",
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "VideoHandler"
+        }
+      },
+      {
+        "index": 1,
+        "codec_name": "aac",
+        "codec_long_name": "AAC (Advanced Audio Coding)",
+        "profile": "LC",
+        "codec_type": "audio",
+        "codec_time_base": "1/48000",
+        "codec_tag_string": "mp4a",
+        "codec_tag": "0x6134706d",
+        "sample_fmt": "fltp",
+        "sample_rate": "48000",
+        "channels": 1,
+        "channel_layout": "mono",
+        "bits_per_sample": 0,
+        "r_frame_rate": "0/0",
+        "avg_frame_rate": "0/0",
+        "time_base": "1/48000",
+        "start_pts": 0,
+        "start_time": "0.000000",
+        "duration_ts": 1641600,
+        "duration": "34.200000",
+        "bit_rate": "194617",
+        "max_bit_rate": "194617",
+        "nb_frames": "1605",
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "SoundHandler"
+        }
+      }
+    ],
+    "format": {
+      "filename": "/root/meetmind_wt_main/showcase/echo-campus/output/garden-video-final/Echo-Campus-Garden-Showcase.mp4",
+      "nb_streams": 2,
+      "nb_programs": 0,
+      "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+      "format_long_name": "QuickTime / MOV",
+      "start_time": "0.000000",
+      "duration": "34.222000",
+      "size": "6699079",
+      "bit_rate": "1566028",
+      "probe_score": 100,
+      "tags": {
+        "major_brand": "isom",
+        "minor_version": "512",
+        "compatible_brands": "isomiso2avc1mp41",
+        "encoder": "Lavf58.29.100"
+      }
+    }
+  },
+  "sha256": "159b0708ebb46e8f736f3d33582833b1a3289684f8baf174674db507935adc61",
+  "size_bytes": 6699079,
+  "decode_check": {
+    "status": "passed",
+    "stderr": ""
+  },
+  "media_qa": {
+    "black_intervals": [],
+    "mean_volume": [
+      "-17.7 dB"
+    ],
+    "max_volume": [
+      "-1.5 dB"
+    ],
+    "latest_change": "Only the 2.75 second join UI shot was replaced: optional empty fields and consent unchecked; other intermediate scenes retained."
+  }
+}

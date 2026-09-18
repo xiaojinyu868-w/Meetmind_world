@@ -20,7 +20,8 @@
 - GET /api/health → {ok, service, mode, version}
 - GET /api/event → {event, version, attendees, connections}
 - POST /api/join → {token, attendee, snapshot, resumed}
-  - body: {name, role, offer, need, avatarColor, consent:true, badgeId?, activationCode?}
+  - body: {consent:true, name?, role?, offer?, need?, category?, avatarColor?, organization?, contact?, bio?, publicContact?, badgeId?, activationCode?}
+  - 全部资料选填；缺省/null/空白文本清空。昵称为空使用与身份 ID 绑定的临时“访客XXXXXX”，角色为空使用“来宾”，类别默认 guest。提供的非空值仍受类型、长度和安全字符校验；公开同意必须显式为 true，更新也不能省略。
   - 不带卡只允许 demoMode 演示身份；真实活动上线前必须增加身份核验与凭据下发。
   - 已登录再调用会更新当前分身，不能通过重复领取抢占他人卡。
   - 页面刷新使用已保存的本设备 token 请求 /api/me，不必再次领取。
@@ -32,7 +33,7 @@
   - 只有请求接收者可确认，确认后才出现在公共 connections。
 - GET /api/matches → {algorithm, explanation, version, matches}
   - matches 是最多 3 条 {attendee, score, reasons, evidence}。
-  - 明确标记固定词表 authorized-tags-v1，根据双方主动公开的 offer/need 匹配，未调用 LLM。
+  - 明确标记固定词表 authorized-tags-v1，根据双方主动公开的 offer/need 匹配，未调用 LLM。供需均空时返回空列表；仅有一侧时只基于该侧真实文本，不虚构供需。
 - WebSocket /api/live
   - 首次连接立即发送完整 `{type:"snapshot",event,version,attendees,connections}`。
   - 每次成功变更广播递增 version；重连获得完整最新状态，不依赖内存增量重放。

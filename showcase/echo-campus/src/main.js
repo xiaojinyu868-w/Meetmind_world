@@ -7,6 +7,7 @@ import {createCharacter} from "./scenes/Characters.js";
 import {loadCharacterLibrary} from "./scenes/PremiumCharacters.js";
 import {createEventGarden} from "./scenes/EventGarden.js";
 import {socialPeopleLayout} from "./runtime/SocialPeopleLayout.js";
+import {profileCameraPreset} from "./runtime/ProfileFraming.js";
 import {createEventLook} from "./runtime/EventLook.js";
 import {prepareVenueEntourage} from "./runtime/VenueEntourage.js";
 import {EventClient} from "./runtime/EventClient.js";
@@ -256,11 +257,9 @@ function focusPerson(id){
  const p=people.get(id);if(!p)return;selectedId=id;linkRoot.children.forEach(o=>o.visible=o.userData.attendees?.includes(id));UI.setSelectedPerson(p.person);
  for(const o of [...markerRoot.children]){o.geometry.dispose();o.material.dispose();markerRoot.remove(o);}
  const ring=new THREE.Mesh(new THREE.RingGeometry(.46,.51,64),new THREE.MeshBasicMaterial({color:0xc68d42,side:THREE.DoubleSide,transparent:true,opacity:.9}));ring.rotation.x=-Math.PI/2;ring.position.copy(p.root.position).y+=.055;markerRoot.add(ring);
- const face=p.root.position.clone().add(new THREE.Vector3(0,1.28,0));
- const facing=new THREE.Vector3(Math.sin(p.root.rotation.y),0,Math.cos(p.root.rotation.y));
- const position=face.clone().addScaledVector(facing,3.4).add(new THREE.Vector3(.55,.18,0));
- const target=face.clone();if(innerWidth>760)target.x+=.55;
- cameraTo(position.toArray(),target.toArray(),39,1200);
+ const panelWidth=innerWidth>760?(document.querySelector(".ec-panel")?.getBoundingClientRect().width||420)+44:0;
+ const preset=profileCameraPreset({position:p.root.position,yaw:p.root.rotation.y,aspect:camera.aspect,panelFraction:panelWidth/innerWidth,neighbors:[...people.values()].filter(other=>other!==p).map(other=>other.root.position)});
+ cameraTo(preset.position,preset.target,preset.fov,1200);
 }
 function toggleTour(){
  UI.closePanel();cameraMove=null;if(tour){tour=null;UI.toast("已暂停园区导览");return;}

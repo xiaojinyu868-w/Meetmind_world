@@ -1,0 +1,51 @@
+{
+  "reports": [
+    {
+      "width": 1440,
+      "height": 1000,
+      "video": {
+        "duration": 34.2,
+        "width": 1280,
+        "height": 720,
+        "currentTime": 1.021249,
+        "readyState": 4,
+        "error": null
+      },
+      "overflow": false,
+      "broken": []
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "video": {
+        "duration": 34.2,
+        "width": 1280,
+        "height": 720,
+        "currentTime": 1.025463,
+        "readyState": 4,
+        "error": null
+      },
+      "overflow": false,
+      "broken": []
+    }
+  ],
+  "errors": [],
+  "failed": [
+    {
+      "url": "https://capture.meetmind.online/echo-campus/garden-guide/Echo-Campus-Garden-Showcase.mp4",
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://capture.meetmind.online/echo-campus/garden-guide/Echo-Campus-Garden-Showcase.mp4",
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://capture.meetmind.online/echo-campus/garden-guide/Echo-Campus-Garden-Showcase.mp4",
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://capture.meetmind.online/echo-campus/garden-guide/Echo-Campus-Garden-Showcase.mp4",
+      "error": "net::ERR_ABORTED"
+    }
+  ]
+}

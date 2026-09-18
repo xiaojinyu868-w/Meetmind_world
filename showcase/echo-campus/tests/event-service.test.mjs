@@ -255,3 +255,73 @@ test("HTTP enforces origin, JSON/body limits, rate limiting and static data isol
     assert.equal(await asset.text(),"delivery fixture");
   }
 });
+
+
+test("optional profile supports guest entry and blank fields without fabricated recommendations", () => {
+  const store = new EventStore();
+  const a = store.join({ consent: true });
+  const b = store.join({ consent: true, name: "  ", role: "\t", offer: "\n", need: "　", organization: " ", contact: " ", bio: " " });
+  assert.match(a.attendee.name, /^访客[0-9A-F]{6}$/);
+  assert.match(b.attendee.name, /^访客[0-9A-F]{6}$/);
+  assert.notEqual(a.attendee.id, b.attendee.id);
+  for (const claim of [a, b]) {
+    assert.equal(claim.attendee.role, "来宾");
+    assert.equal(claim.attendee.category, "guest");
+    for (const field of ["offer", "need", "organization", "bio"]) assert.equal(claim.attendee[field], "");
+    assert.equal(claim.attendee.publicContact, false);
+    assert.equal(Object.hasOwn(claim.attendee, "contact"), false);
+    assert.deepEqual(store.matches(claim.token).matches, []);
+  }
+  const named = store.join({ ...ALICE, name: "自选昵称" }, a.token);
+  const cleared = store.join({ consent: true }, a.token);
+  assert.equal(named.attendee.id, a.attendee.id);
+  assert.equal(cleared.attendee.name, a.attendee.name, "temporary guest name is stable for this identity");
+  assert.equal(cleared.attendee.role, "来宾");
+  assert.deepEqual(store.matches(a.token).matches, []);
+});
+
+test("optional fields retain explicit consent, type, length and unsafe-text validation", () => {
+  const store = new EventStore();
+  const count = store.snapshot().attendees.length;
+  for (const consent of [undefined, false, "true", 1]) {
+    assert.throws(() => store.join({ consent }), isError(400, "CONSENT_REQUIRED"));
+  }
+  for (const [field, max] of [["name", 24], ["role", 60], ["offer", 160], ["need", 160], ["organization", 80], ["contact", 120], ["bio", 160]]) {
+    for (const value of [42, {}, [], "<script>", "x".repeat(max + 1)]) {
+      assert.throws(() => store.join({ consent: true, [field]: value }), isError(400, "INVALID_INPUT"));
+    }
+  }
+  assert.equal(store.snapshot().attendees.length, count, "invalid requests do not create attendees");
+});
+
+test("partial public supply or demand only matches evidence that was actually provided", () => {
+  const store = new EventStore();
+  const peer = store.join(BOB);
+  const needs = store.join({ consent: true, need: "品牌设计" });
+  const needsMatch = store.matches(needs.token).matches.find(match => match.attendee.id === peer.attendee.id);
+  assert.ok(needsMatch);
+  assert.ok(needsMatch.evidence.every(item => item.direction === "they-help-you" && item.yourText === "品牌设计"));
+  assert.equal(needs.attendee.offer, "");
+  const offers = store.join({ consent: true, offer: "AI 产品" });
+  const offersMatch = store.matches(offers.token).matches.find(match => match.attendee.id === peer.attendee.id);
+  assert.ok(offersMatch);
+  assert.ok(offersMatch.evidence.every(item => item.direction === "you-help-them" && item.yourText === "AI 产品"));
+  assert.equal(offers.attendee.need, "");
+});
+
+test("HTTP guest entry needs consent but no personal profile and remains usable", async t => {
+  const { request } = await fixture(t);
+  assert.equal((await request("/api/join", { body: {} })).status, 400);
+  const claim = await request("/api/join", { body: { consent: true } });
+  assert.equal(claim.status, 201);
+  assert.match(claim.data.attendee.name, /^访客[0-9A-F]{6}$/);
+  const me = await request("/api/me", { token: claim.data.token });
+  assert.equal(me.data.attendee.id, claim.data.attendee.id);
+  assert.deepEqual((await request("/api/matches", { token: claim.data.token })).data.matches, []);
+  const peer = await request("/api/join", { body: { consent: true } });
+  const invitation = await request("/api/encounters", { token: claim.data.token, body: { peerId: peer.data.attendee.id } });
+  assert.equal(invitation.status, 201);
+  const confirmed = await request("/api/encounters/" + invitation.data.encounter.id + "/confirm", { token: peer.data.token, body: {} });
+  assert.equal(confirmed.status, 200);
+  assert.equal(confirmed.data.encounter.status, "confirmed");
+});

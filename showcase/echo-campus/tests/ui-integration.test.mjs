@@ -134,7 +134,7 @@ test("DOM validation requires explicit consent, recovers submit button after err
 test("fresh persona links stay reusable and preserve private badge path compatibility",async t=>{
   const {session}=await fixture(t);const a=await session("?entry=nfc&persona=02");
   activate(a.win);a.ui.openOnboarding();
-  assert.equal(a.ui.root.querySelector('[name="name"]').value,"周澈");
+  assert.equal(a.ui.root.querySelector('[name="name"]').value,"");
   assert.equal(a.ui.root.querySelector('[name="badgeId"]').value,"");
   const first=new URL(a.ui.demoUrl("01")),second=new URL(a.ui.demoUrl("02"));
   assert.equal(first.searchParams.get("entry"),"nfc");
@@ -320,4 +320,38 @@ test("source/event control follows runtime visibility and direct NFC URLs retain
  assert.equal(a.ui.root.classList.contains("ec-source-view"),false);
  const share=new URL(a.ui.demoUrl());assert.equal(share.searchParams.get("venue"),"venue-c");assert.equal(share.searchParams.get("camera"),"aerial");assert.equal(share.searchParams.has("code"),false);
  a.ui.setVenueState({candidate:{id:"venue-c",source:"0831 Podium.3dm"},view:"source",eventReady:false});assert.equal(event.disabled,true);
+});
+
+
+test("blank onboarding enters as guest only after consent and edits require fresh consent", async t => {
+  const { session } = await fixture(t);
+  const a = await session("?entry=nfc&persona=02");
+  activate(a.win); a.ui.openOnboarding();
+  const form = a.ui.root.querySelector('[data-form="join"]');
+  for (const key of ["name", "role", "offer", "need", "organization", "contact", "bio"]) {
+    assert.equal(form.elements[key].value, "", key + " starts empty");
+    assert.equal(form.elements[key].required, false, key + " is optional");
+  }
+  assert.equal(form.elements.category.value, "guest");
+  assert.equal(form.elements.publicContact.checked, false);
+  assert.equal(form.elements.consent.checked, false);
+  assert.equal(form.elements.consent.required, true);
+  await a.ui.onSubmit({ target: form, preventDefault() {} });
+  assert.equal(a.client.me, null);
+  form.elements.consent.checked = true;
+  await a.ui.onSubmit({ target: form, preventDefault() {} });
+  assert.match(a.client.me.attendee.name, /^访客[0-9A-F]{6}$/);
+  assert.equal(a.client.me.attendee.role, "来宾");
+  await a.ui.openMatches();
+  assert.ok(a.ui.root.querySelector(".ec-empty-state"));
+  assert.equal(a.ui.root.querySelectorAll(".ec-match-card").length, 0);
+  a.ui.openOnboarding();
+  const update = a.ui.root.querySelector('[data-form="join"]');
+  assert.equal(update.elements.consent.checked, false);
+  update.elements.name.value = "自愿补充";
+  await a.ui.onSubmit({ target: update, preventDefault() {} });
+  assert.notEqual(a.client.me.attendee.name, "自愿补充");
+  update.elements.consent.checked = true;
+  await a.ui.onSubmit({ target: update, preventDefault() {} });
+  assert.equal(a.client.me.attendee.name, "自愿补充");
 });
