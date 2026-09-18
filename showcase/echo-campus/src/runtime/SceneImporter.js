@@ -1,6 +1,25 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { validateManifest } from "./SceneManifest.js";
+
+// Decoder files belong to the app, not the imported model. A separate manager
+// lets compressed local GLBs work without loosening external-resource checks.
+export async function loadGLTFWithDraco(url, manager, {
+  GLTFLoaderImpl = GLTFLoader, DRACOLoaderImpl = DRACOLoader,
+  baseUrl = import.meta.env?.BASE_URL || "./",
+} = {}) {
+  const draco = new DRACOLoaderImpl(new THREE.LoadingManager());
+  try {
+    draco.setDecoderPath(baseUrl.replace(/\/?$/, "/") + "draco/");
+    draco.setWorkerLimit(2);
+    const loader = new GLTFLoaderImpl(manager);
+    loader.setDRACOLoader(draco);
+    return await loader.loadAsync(url);
+  } finally {
+    draco.dispose();
+  }
+}
 
 export function disposeObjectResources(root) {
   const roots = Array.isArray(root) ? root : [root];
@@ -84,7 +103,7 @@ export async function importScene(input, {
         if (requested === objectUrl || /^(blob:|data:)/.test(requested)) return requested;
         throw new Error("本地模型包含外部资源，请导出为自包含 GLB");
       });
-      const gltf = await (loadGLTF ? loadGLTF(url, manager) : new GLTFLoader(manager).loadAsync(url));
+      const gltf = await (loadGLTF ? loadGLTF(url, manager) : loadGLTFWithDraco(url, manager));
       gltfScenes = [...new Set([...(gltf.scenes || []), ...(gltf.scene ? [gltf.scene] : [])])];
       resource = gltf.scene || gltfScenes[0];
       if (!resource?.isObject3D) throw new Error("GLB 未包含可显示的场景");

@@ -1,6 +1,7 @@
 import QRCode from "qrcode";
 import { defaultManifest, validateManifest } from "../runtime/SceneManifest.js";
 import { listSceneDefinitions } from "../runtime/SceneRegistry.js";
+import { VENUE_CANDIDATES, venueById, venueUrl } from "../runtime/VenueCatalog.js";
 import "./style.css";
 
 const ICONS = {
@@ -33,57 +34,10 @@ const CATEGORY_LABELS = Object.fromEntries(CATEGORIES);
 const INITIAL = { name: "林予", role: "AI 产品创始人", offer: "AI 产品研发、快速原型", need: "品牌设计、用户访谈", category: "founder", avatarColor: COLORS[0] };
 const CAMERA_LABELS = { overview: "全景", arrival: "入口", courtyard: "庭院", aerial: "俯瞰" };
 
-// 真实 AB/C 压缩包的轻量策展索引。原始 .skp/.3dm 只在本地处理；
-// 这里展示的是候选外景的方向性预览，不把尚未转换的工程文件伪装成线上 3D 资产。
-const SITE_CANDIDATES = Object.freeze([
-  Object.freeze({
-    id: "a",
-    label: "A · HUB 中庭",
-    kicker: "AB 地块",
-    title: "高层塔楼 · UFO 屋顶 · 中央会客场",
-    source: "AB地块SU模型.zip",
-    files: "T1–3 塔楼 / UFO / 电扶梯",
-    status: "主舞台候选",
-    recommended: true,
-    art: "a",
-    palette: ["#e8eee6", "#a8bcae", "#506d61"],
-    summary: "适合做活动总入口、主舞台与大屏远景，先用建筑体量建立到场感。",
-    composition: "远景主建筑 + 中庭舞台 + 入口打卡层",
-  }),
-  Object.freeze({
-    id: "b",
-    label: "B · T6 雨棚",
-    kicker: "AB 地块",
-    title: "连廊雨棚 · 细节入口 · 轻量漫游",
-    source: "AB地块SU模型.zip",
-    files: "T6 雨棚 / 楼梯 / 中庭窗",
-    status: "近景候选",
-    recommended: false,
-    art: "b",
-    palette: ["#edf0e9", "#c3b79e", "#667365"],
-    summary: "适合承载 NFC 触碰、嘉宾资料与第一条相遇，近景识别度更强。",
-    composition: "入口近景 + NFC 触碰点 + 人物名片层",
-  }),
-  Object.freeze({
-    id: "c",
-    label: "C · 商业裙房",
-    kicker: "C 地块",
-    title: "商业裙房 · 水平街区 · 活动动线",
-    source: "C地块SU模型.zip",
-    files: "商业裙房 .skp / Podium .3dm",
-    status: "备选待转换",
-    recommended: false,
-    art: "c",
-    palette: ["#e8efee", "#8cb5b0", "#345b5c"],
-    summary: "适合做论坛、企业展位与连续打卡路线；需先确定最终授权版本。",
-    composition: "水平街区 + 企业点位 + 论坛动线",
-  }),
-]);
-
 export class AppUI {
-  constructor({ client, onCamera = () => {}, onScene = () => {}, onImport = () => {}, onTour = () => {}, onSelectPerson = () => {}, onActivityCheckpoint = () => {}, onSound = () => {}, onShowcase = () => {} }) {
+  constructor({ client, onCamera = () => {}, onScene = () => {}, onImport = () => {}, onTour = () => {}, onSelectPerson = () => {}, onActivityCheckpoint = () => {}, onSound = () => {}, onShowcase = () => {}, onVenue = () => {}, onView = () => {} }) {
     this.client = client;
-    this.callbacks = { onCamera, onScene, onImport, onTour, onSelectPerson, onActivityCheckpoint, onSound, onShowcase };
+    this.callbacks = { onCamera, onScene, onImport, onTour, onSelectPerson, onActivityCheckpoint, onSound, onShowcase, onVenue, onView };
     this.root = document.getElementById("ui");
     this.snapshot = null; this.me = null; this.activity = null; this.online = false; this.panel = null;
     this.selectedPerson = null; this.soundEnabled = false; this.selectedCamera = "overview";
@@ -94,9 +48,12 @@ export class AppUI {
       const saved = localStorage.getItem("echo-campus-scene-manifest");
       if (saved) this.sceneManifest = validateManifest(JSON.parse(saved));
     } catch {}
-    try { this.selectedSiteCandidate = localStorage.getItem("echo-campus-site-candidate") || null; } catch { this.selectedSiteCandidate = null; }
+    this.activeVenueId = null; this.venueView = "event"; this.venueEventReady = false;
     this.root.innerHTML = this.shell();
     this.root.addEventListener("click", e => this.onClick(e));
+    this.root.addEventListener("error", e => {
+      if (e.target.matches?.("[data-venue-thumbnail]")) { e.target.hidden = true; e.target.parentElement.classList.add("is-unavailable"); }
+    }, true);
     this.root.addEventListener("submit", e => this.onSubmit(e));
     this.root.addEventListener("change", e => this.onChange(e));
     this.root.addEventListener("input", e => {
@@ -119,11 +76,12 @@ export class AppUI {
         <nav class="ec-tools" aria-label="展示工具">
           <button class="ec-tool ec-presentation" data-action="showcase" aria-label="播放合作展示流程">${icon("spark")}<span>演示</span></button>
           <button class="ec-tool" data-action="tour" aria-label="自动导览">${icon("tour")}<span>导览</span></button>
-          <button class="ec-tool" data-action="scenes" aria-label="切换或导入场景">${icon("scene")}<span>场景</span></button>
+          <button class="ec-tool" data-action="scenes" aria-label="切换或导入场景">${icon("scene")}<span>场地</span></button>
           <button class="ec-tool ec-sound" data-action="sound" aria-label="开启环境声音" aria-pressed="false">${icon("mute")}<span>声音</span></button>
         </nav>
       </header>
       <div class="ec-scene-caption"><span class="ec-caption-line"></span><span data-scene-name>白庭校园</span><span class="ec-caption-coordinate" data-scene-coordinate>WHITE COURT</span></div>
+      <aside class="ec-venue-context" data-venue-context hidden><div class="ec-venue-source"><span>提供模型 · 真实转换</span><strong data-venue-source-name></strong><small data-venue-provenance></small></div><div class="ec-venue-view" role="group" aria-label="场地显示层"><button type="button" data-action="venue-view" data-id="source" aria-pressed="false">源模型</button><button type="button" data-action="venue-view" data-id="event" aria-pressed="false">活动布置</button></div><p data-venue-layer-note></p></aside>
       <div class="ec-hint" data-world-hint>拖动环看 <span>·</span> 滚轮缩放 <span>·</span> 点选人物</div>
       <footer class="ec-footer">
         <div class="ec-world-meta">
@@ -176,13 +134,41 @@ export class AppUI {
     if (this.panel === "person" && this.selectedPerson) this.renderPerson(this.selectedPerson);
   }
   setOnline(value) { this.online = !!value; this.syncChrome(); }
-  setSceneLabel(name) {
+  setSceneLabel(name, id = null) {
     this.sceneLabel = String(name || "我的场景");
-    this.sceneId = listSceneDefinitions().find(d => d.displayName === this.sceneLabel)?.id || "imported";
-    const coordinate = { campus: "WHITE COURT", gallery: "WATER GALLERY", imported: "IMPORTED SCENE" }[this.sceneId] || "IMPORTED SCENE";
+    this.sceneId = id || listSceneDefinitions().find(d => d.displayName === this.sceneLabel)?.id || "imported";
+    const coordinate = venueById(this.sceneId) ? "SOURCE MODEL" : { campus: "WHITE COURT", gallery: "WATER GALLERY", imported: "IMPORTED SCENE" }[this.sceneId] || "IMPORTED SCENE";
     const label = this.root.querySelector("[data-scene-coordinate]");
     if (label) label.textContent = coordinate;
     this.syncChrome();
+  }
+  setVenueState({ candidate = null, view = "event", eventReady = false } = {}) {
+    this.activeVenueId = candidate?.id || null;
+    this.venueView = view;
+    this.venueEventReady = !!eventReady;
+    const context = this.root.querySelector("[data-venue-context]");
+    context.hidden = !candidate;
+    this.root.classList.toggle("ec-source-view", !!candidate && view === "source");
+    if (candidate) {
+      this.root.querySelector("[data-venue-source-name]").textContent = candidate.source;
+      this.root.querySelector("[data-venue-provenance]").textContent = candidate.id.startsWith("venue-ab-") ? "AB 两份源文件版本 · A / B 边界尚未确认" : "C 地块文件包 · 转换模型预览";
+      this.root.querySelector("[data-venue-layer-note]").textContent = view === "source" ? "仅查看转换后的原始建筑，拖动环看、滚轮缩放。" : "人物与打卡点为演示叠加，位置供场地讨论。";
+      context.querySelectorAll("[data-action=venue-view]").forEach(button => {
+        const active = button.dataset.id === view;
+        button.setAttribute("aria-pressed", String(active));
+        button.classList.toggle("is-active", active);
+        button.disabled = button.dataset.id === "event" && !eventReady;
+        if (button.dataset.id === "event") button.title = eventReady ? "查看人物和活动点位叠加" : "活动坐标校准完成后可用";
+      });
+    }
+    const labels = candidate ? { overview:"外景", arrival:"入口", courtyard:"侧景", aerial:"俯瞰" } : CAMERA_LABELS;
+    this.root.querySelectorAll(".ec-camera-dock button").forEach((button,index) => { button.innerHTML = `<span class="ec-camera-number">0${index+1}</span>${labels[button.dataset.id]}`; });
+    const hint = this.root.querySelector("[data-world-hint]");
+    if (hint) hint.textContent = candidate && view === "source" ? "拖动环看 · 滚轮缩放" : "拖动环看 · 滚轮缩放 · 点选人物";
+  }
+  setCameraSelection(id) {
+    this.selectedCamera = ({hero:"overview",garden:"courtyard"})[id] || id;
+    this.root.querySelectorAll(".ec-camera-dock button").forEach(button => { const active = button.dataset.id === this.selectedCamera; button.classList.toggle("is-active", active); button.setAttribute("aria-pressed", String(active)); });
   }
   setBusy(text) {
     const busy = this.root.querySelector(".ec-busy");
@@ -260,9 +246,8 @@ export class AppUI {
     }
     if (action === "edit-profile") return this.openOnboarding();
     if (action === "scenes") return this.openScenePanel();
-    if (action === "site-candidate") return this.openSiteCandidate(id);
-    if (action === "site-candidate-back") return this.openScenePanel();
-    if (action === "site-candidate-select") return this.selectSiteCandidate(id);
+    if (action === "venue") return this.loadVenue(id, button);
+    if (action === "venue-view") return this.run("onView", id);
     if (action === "scene") {
       this.sceneId = id;
       this.closePanel();
@@ -466,7 +451,7 @@ export class AppUI {
     const url = new URL(document.baseURI);
     const current = new URL(this.root.ownerDocument.location.href);
     url.search = ""; url.hash = "";
-    for (const key of ["sceneManifest", "scene"]) if (current.searchParams.has(key)) url.searchParams.set(key, current.searchParams.get(key));
+    for (const key of ["sceneManifest", "scene", "venue", "view", "camera"]) if (current.searchParams.has(key)) url.searchParams.set(key, current.searchParams.get(key));
     if (stage) url.searchParams.set("mode", "stage");
     else { url.searchParams.set("entry", "nfc"); if (serial) url.searchParams.set("persona", serial); }
     return url.href;
@@ -493,32 +478,30 @@ export class AppUI {
     const canvas = this.root.querySelector("[data-demo-qr]");
     QRCode.toCanvas(canvas, first, { width: 156, margin: 1, color: { dark: "#29483cff", light: "#ffffffff" } }).catch(() => this.toast("二维码暂未生成，可使用下方入口链接"));
   }
-  selectSiteCandidate(id) {
-    const candidate = SITE_CANDIDATES.find(item => item.id === id);
-    if (!candidate) return;
-    this.selectedSiteCandidate = candidate.id;
-    try { localStorage.setItem("echo-campus-site-candidate", candidate.id); } catch {}
-    this.toast(`${candidate.label} 已记为本次交付方向；等待最终场地文件导入`);
-    this.openScenePanel();
+  async loadVenue(id, button) {
+    if (this.venuePending || !venueById(id)) return;
+    this.venuePending = true;
+    const revision = this.panelRevision;
+    button.disabled = true;
+    const errorBox = this.root.querySelector("[data-venue-error]");
+    if (errorBox) errorBox.hidden = true;
+    try {
+      await this.callbacks.onVenue(id);
+      if (this.panel === "scenes" && revision === this.panelRevision) this.closePanel();
+    } catch (error) {
+      if (errorBox?.isConnected) { errorBox.textContent = "未能载入源模型：" + error.message + "。当前场景保留，可重试或选择另一份源文件。"; errorBox.hidden = false; }
+      else this.toast("源模型加载未完成：" + error.message);
+    } finally { this.venuePending = false; button.disabled = false; }
   }
-  openSiteCandidate(id) {
-    const candidate = SITE_CANDIDATES.find(item => item.id === id);
-    if (!candidate) return this.openScenePanel();
-    this.openPanel("scenes");
-    const swatches = candidate.palette.map(value => `<i style="--swatch:${value}" title="${value}"></i>`).join("");
-    this.render(this.panelHeader("SITE CANDIDATE " + candidate.id.toUpperCase(), candidate.label, "先确认空间方向，再把最终授权模型替换进同一套活动层。") +
-      `<div class="ec-site-detail-hero"><div class="ec-site-art ec-site-art--${candidate.art} ec-site-art-large"><span></span><i></i><i></i><i></i></div><div class="ec-site-detail-copy"><span class="ec-status-chip ${candidate.recommended ? "is-recommended" : ""}">${esc(candidate.status)}</span><h2>${esc(candidate.title)}</h2><p>${esc(candidate.summary)}</p><div class="ec-site-swatches" aria-label="建议色彩">${swatches}</div></div></div>
-      <div class="ec-site-detail-grid"><section><span>本地来源</span><strong>${esc(candidate.source)}</strong><small>${esc(candidate.files)}</small></section><section><span>推荐组合</span><strong>${esc(candidate.composition)}</strong><small>建筑视觉与人物、NFC、活动点位分层接入</small></section></div>
-      <div class="ec-site-truth"><span>当前状态</span><p>这是基于你提供的工程文件目录做的方向性预览。原始 ${candidate.id === "c" ? ".3dm / .skp" : ".skp"} 尚未上传服务器，也尚未转换为浏览器可加载的 GLB / Marble 资产。</p></div>
-      <div class="ec-site-detail-actions"><button class="ec-primary ec-full" type="button" data-action="site-candidate-select" data-id="${candidate.id}">${icon("check")}${this.selectedSiteCandidate === candidate.id ? "已选为交付方向" : "选为交付方向"}${icon("arrow")}</button><button class="ec-secondary ec-full" type="button" data-action="site-candidate-back">返回 A / B / C 候选</button></div>
-      <p class="ec-field-note">选定后仍需用最终文件做几何清理、单位校准、地面与镜头标定，再进入正式 3D 场景。</p>`, true);
+  venueCardsMarkup() {
+    return `<section class="ec-venue-picker" aria-label="提供的真实场地模型"><div class="ec-section-heading"><h2>你提供的场地模型</h2><span>真实文件 · 可旋转查看</span></div><p class="ec-venue-picker-intro">先看建筑本身，再切换活动布置。AB 下两项为源文件版本，不能据此划分 A / B 地块。</p><div class="ec-venue-cards">${VENUE_CANDIDATES.map(candidate => `<article class="ec-venue-card ${this.activeVenueId === candidate.id ? "is-selected" : ""}"><button type="button" data-action="venue" data-id="${candidate.id}" aria-label="加载 ${esc(candidate.name)}"><span class="ec-venue-thumbnail"><img data-venue-thumbnail src="${esc(candidate.thumbnail)}" alt="${esc(candidate.name)}的真实转换模型截图" loading="lazy"><span class="ec-venue-thumbnail-unavailable">缩略图暂不可用</span></span><span class="ec-venue-card-copy"><strong>${esc(candidate.name)}</strong><small>${esc(candidate.source)}</small><span>${this.activeVenueId === candidate.id ? "当前模型" : "打开 3D 外景"} ${icon("arrow")}</span></span></button><a class="ec-venue-direct" href="${esc(venueUrl(candidate.id,{baseUrl:document.baseURI}))}" target="_blank" rel="noopener">单独打开 ${icon("external")}</a></article>`).join("")}</div><div class="ec-form-error" data-venue-error role="alert" hidden></div><p class="ec-venue-boundary-note">缩略图来自转换模型截图。活动点位、人物及关系线可独立开关；它们不属于原始建筑文件。</p></section>`;
   }
   openScenePanel() {
     this.openPanel("scenes");
+    this.root.querySelector(".ec-panel").scrollTop = 0;
     const m = this.sceneManifest;
-    const selectedCandidate = SITE_CANDIDATES.find(item => item.id === this.selectedSiteCandidate);
     this.render(this.panelHeader("A WORLD WITHOUT A FIXED SHELL", "换一个世界，继续相遇", "人物、名片与已确认的关系保留，场景可以自由替换。") +
-      `<section class="ec-site-candidate-section" aria-label="真实场地候选外景"><div class="ec-section-heading"><h2>真实场地候选外景</h2><span>A / B / C · 方向预览</span></div><p class="ec-site-candidate-intro">先看现场大致的空间气质，再决定主建筑、入口近景与活动动线如何组合。</p><div class="ec-site-candidates">${SITE_CANDIDATES.map(candidate => `<article class="ec-site-candidate ${selectedCandidate?.id === candidate.id ? "is-selected" : ""}"><button type="button" class="ec-site-candidate-hit" data-action="site-candidate" data-id="${candidate.id}" aria-label="查看 ${esc(candidate.label)}"><div class="ec-site-art ec-site-art--${candidate.art}"><span></span><i></i><i></i><i></i></div><div class="ec-site-candidate-copy"><div><strong>${esc(candidate.label)}</strong>${candidate.recommended ? `<em>推荐</em>` : ""}</div><small>${esc(candidate.title)}</small><span>${esc(candidate.status)}</span></div>${icon("chevron")}</button></article>`).join("")}</div>${selectedCandidate ? `<div class="ec-site-selection">${icon("check")}当前方向：<strong>${esc(selectedCandidate.label)}</strong><span>${esc(selectedCandidate.composition)}</span></div>` : ""}<div class="ec-site-composition"><span>建议组合</span><strong>A 做远景主建筑，B 做 NFC 入口近景，C 作为商业动线备选</strong><p>人物、名片、积分和活动点位保持独立，换入最终模型后仍可复用。</p></div></section><div class="ec-scene-cards">${listSceneDefinitions().map(definition => `<button class="ec-scene-card ${this.sceneId === definition.id ? "is-selected" : ""}" data-action="scene" data-id="${esc(definition.id)}"><div class="ec-scene-art ${esc(definition.previewClass)}"><i></i><i></i><i></i><b></b></div><span><strong>${esc(definition.displayName)}</strong><small>${esc(definition.helper)}</small></span>${icon("arrow")}</button>`).join("")}</div>
+      `${this.venueCardsMarkup()}<div class="ec-section-heading"><h2>概念演示场景</h2><span>与提供的场地模型分开</span></div><div class="ec-scene-cards">${listSceneDefinitions().map(definition => `<button class="ec-scene-card ${this.sceneId === definition.id ? "is-selected" : ""}" data-action="scene" data-id="${esc(definition.id)}"><div class="ec-scene-art ${esc(definition.previewClass)}"><i></i><i></i><i></i><b></b></div><span><strong>${esc(definition.displayName)}</strong><small>${esc(definition.helper)}</small></span>${icon("arrow")}</button>`).join("")}</div>
       <div class="ec-section-heading"><h2>导入你的场景</h2><span>GLB / GLTF / SPZ / PLY / SPLAT</span></div>
       <label class="ec-upload-area"><input type="file" accept=".glb,.gltf,.spz,.ply,.splat" data-scene-file><span>${icon("upload")}</span><strong>${this.sceneFile ? esc(this.sceneFile.name) : "选择模型或 Marble 导出文件"}</strong><small>文件仅在本地读取，不会上传到活动服务</small></label>
       ${this.sceneFile ? '<button class="ec-text-button ec-clear-file" type="button" data-action="clear-scene-file">移除当前文件，改用模型链接</button>' : ""}

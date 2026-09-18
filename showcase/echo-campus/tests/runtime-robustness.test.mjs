@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import * as THREE from "three";
 import { EventClient } from "../src/runtime/EventClient.js";
 import { defaultManifest, validateManifest } from "../src/runtime/SceneManifest.js";
-import { importScene } from "../src/runtime/SceneImporter.js";
+import { importScene, loadGLTFWithDraco } from "../src/runtime/SceneImporter.js";
 
 function storageWith(token = "") {
   const values = new Map(token ? [["echo-campus-token", token]] : []);
@@ -218,4 +218,34 @@ test("local GLTF refuses external dependencies before loader/network access", as
   }), /单个 GLB/);
   assert.equal(loaded,false);
   assert.equal(revoked.length,1);
+});
+
+test("Draco decoder stays app-local and disposes workers on success and failure", async () => {
+  for (const shouldFail of [false, true]) {
+    const modelManager = new THREE.LoadingManager();
+    modelManager.setURLModifier(url => { if (!url.startsWith("blob:")) throw new Error("external model resource blocked"); return url; });
+    let decoder, loader, disposed = 0;
+    class FakeDraco {
+      constructor(manager) { this.manager = manager; decoder = this; }
+      setDecoderPath(path) { this.path = path; return this; }
+      setWorkerLimit(limit) { this.limit = limit; return this; }
+      dispose() { disposed++; }
+    }
+    class FakeGLTF {
+      constructor(manager) { this.manager = manager; loader = this; }
+      setDRACOLoader(value) { this.draco = value; return this; }
+      async loadAsync(url) {
+        assert.equal(this.manager.resolveURL(url), "blob:test/model");
+        assert.equal(this.draco.manager.resolveURL(this.draco.path + "draco_decoder.wasm"), "/echo-campus/draco/draco_decoder.wasm");
+        if (shouldFail) throw new Error("decode failed");
+        return { scene: "decoded" };
+      }
+    }
+    const load = loadGLTFWithDraco("blob:test/model", modelManager, { GLTFLoaderImpl: FakeGLTF, DRACOLoaderImpl: FakeDraco, baseUrl: "/echo-campus/" });
+    if (shouldFail) await assert.rejects(load, /decode failed/);
+    else assert.deepEqual(await load, { scene: "decoded" });
+    assert.equal(loader.draco, decoder);assert.notEqual(decoder.manager, modelManager);
+    assert.equal(decoder.limit, 2);assert.equal(disposed, 1);
+    assert.throws(() => modelManager.resolveURL("https://external.invalid/private.bin"), /blocked/);
+  }
 });

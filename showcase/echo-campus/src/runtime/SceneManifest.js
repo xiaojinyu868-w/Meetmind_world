@@ -37,6 +37,12 @@ export function validateManifest(input) {
   if (!isObject(originalBounds)) throw new Error("活动边界需要对象");
   const bounds = Object.fromEntries(["minX","maxX","minZ","maxZ"].map(k => [k, finite(originalBounds[k], "活动边界")]));
   if (bounds.minX >= bounds.maxX || bounds.minZ >= bounds.maxZ) throw new Error("活动边界不正确");
+  let framingBounds;
+  if (input.framingBounds !== undefined) {
+    if (!isObject(input.framingBounds)) throw new Error("主体展示边界需要对象");
+    framingBounds = Object.fromEntries(["minX","maxX","minY","maxY","minZ","maxZ"].map(k => [k, finite(input.framingBounds[k], "主体展示边界")]));
+    if (["X","Y","Z"].some(axis => framingBounds["min"+axis] >= framingBounds["max"+axis])) throw new Error("主体展示边界不正确");
+  }
   const spawn = point(input.spawn ?? { x: 0, y: groundY, z: 8 }, "出生点");
   const inside = p => p.x >= bounds.minX && p.x <= bounds.maxX && p.z >= bounds.minZ && p.z <= bounds.maxZ;
   if (!inside(spawn)) throw new Error("出生点必须位于活动边界内");
@@ -78,6 +84,7 @@ export function validateManifest(input) {
     schema: SCENE_SCHEMA, name: String(input.name || "我的场景").slice(0,60),
     type: input.type, url: modelUrl(input.url), scale, position, rotation,
     bounds, spawn, groundY, anchors, cameras, colliders,
+    ...(framingBounds ? { framingBounds } : {}),
   };
 }
 export function defaultManifest(type = "glb") {

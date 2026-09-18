@@ -294,3 +294,30 @@ test("successful import tolerates blocked browser preference storage",async t=>{
  assert.equal(a.ui.panel,null);assert.ok(a.ui.root.textContent.includes("场景已替换，相遇继续"));
  assert.equal(a.ui.root.querySelector(".ec-busy").hidden,true);
 });
+
+
+test("source venue picker invokes real load and failure preserves prior scene label and controls",async t=>{
+ const {session}=await fixture(t);const calls=[];
+ const a=await session("",{onVenue:async id=>{calls.push(id);throw new Error("GLB 404");}});activate(a.win);
+ a.ui.setSceneLabel("白庭校园");a.ui.openScenePanel();
+ a.ui.root.querySelector(".ec-panel").scrollTop=240;a.ui.closePanel();a.ui.openScenePanel();assert.equal(a.ui.root.querySelector(".ec-panel").scrollTop,0);
+ const button=a.ui.root.querySelector('[data-action="venue"][data-id="venue-c"]');
+ assert.ok(button);assert.equal(a.ui.root.querySelectorAll('[data-action="venue"]').length,3);
+ assert.equal(a.ui.root.querySelectorAll('.ec-site-art').length,0,"no invented CSS buildings");
+ await a.ui.onClick({target:button});
+ assert.deepEqual(calls,["venue-c"]);assert.equal(a.ui.sceneLabel,"白庭校园");assert.equal(a.ui.panel,"scenes");assert.equal(button.disabled,false);
+ assert.match(a.ui.root.querySelector('[data-venue-error]').textContent,/当前场景保留/);
+ assert.ok(a.ui.root.querySelector('[data-venue-thumbnail]').getAttribute("src").includes("scenes/venue/"));
+});
+test("source/event control follows runtime visibility and direct NFC URLs retain venue",async t=>{
+ const {session}=await fixture(t);const views=[];
+ const a=await session("?venue=venue-c&view=source&camera=aerial&code=private",{onView:view=>views.push(view)});activate(a.win);
+ a.ui.setVenueState({candidate:{id:"venue-c",source:"0831 Podium.3dm"},view:"source",eventReady:true});
+ assert.ok(a.ui.root.classList.contains("ec-source-view"));
+ const event=a.ui.root.querySelector('[data-action="venue-view"][data-id="event"]');
+ assert.equal(event.disabled,false);await a.ui.onClick({target:event});assert.deepEqual(views,["event"]);
+ a.ui.setVenueState({candidate:{id:"venue-c",source:"0831 Podium.3dm"},view:"event",eventReady:true});
+ assert.equal(a.ui.root.classList.contains("ec-source-view"),false);
+ const share=new URL(a.ui.demoUrl());assert.equal(share.searchParams.get("venue"),"venue-c");assert.equal(share.searchParams.get("camera"),"aerial");assert.equal(share.searchParams.has("code"),false);
+ a.ui.setVenueState({candidate:{id:"venue-c",source:"0831 Podium.3dm"},view:"source",eventReady:false});assert.equal(event.disabled,true);
+});
