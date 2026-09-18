@@ -29,7 +29,8 @@ const WARDROBE_COLORS = Object.freeze({
 export function premiumWardrobeForSeed(assetId, seed = 1) {
   const palette = WARDROBE_COLORS[assetId];
   if (!palette) return null;
-  const value = Math.abs(Math.trunc(Number(seed) || 1));
+  const numeric = Number(seed);
+  const value = Math.abs(Number.isFinite(numeric) ? Math.trunc(numeric) : 1);
   // Consecutive seeds alternate models; divide by two so each model cycles
   // through all five outfits, rather than correlating one outfit with sex.
   const index = Math.floor(value / 2) % palette.length;
@@ -403,7 +404,8 @@ export async function loadCharacterLibrary({ baseUrl, assets = PREMIUM_CHARACTER
       instances: 0, disposed: false, released: false, badgeGeometries: new Map(), wardrobeMaterials: new Map(),
       badgeMaterial: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.68, metalness: 0.08 }),
       createPremiumCharacter(options = {}) {
-        const seed = Math.abs(Math.trunc(Number(options.seed) || 1));
+        const numericSeed = Number(options.seed);
+        const seed = Math.abs(Number.isFinite(numericSeed) ? Math.trunc(numericSeed) : 1);
         const template = templates.find(item => item.definition.id === options.assetId) || templates[seed % templates.length];
         return makeCharacter(library, template, options);
       },
