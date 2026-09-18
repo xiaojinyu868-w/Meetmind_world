@@ -149,10 +149,12 @@ export class AppUI {
     const context = this.root.querySelector("[data-venue-context]");
     context.hidden = !candidate;
     this.root.classList.toggle("ec-source-view", !!candidate && view === "source");
+    this.root.classList.toggle("ec-event-view", !!candidate && view === "event");
+    const coordinate=this.root.querySelector("[data-scene-coordinate]");if(coordinate&&candidate)coordinate.textContent=view==="event"?"THE SOCIAL GARDEN":"SOURCE MODEL";
     if (candidate) {
       this.root.querySelector("[data-venue-source-name]").textContent = candidate.source;
       this.root.querySelector("[data-venue-provenance]").textContent = candidate.id.startsWith("venue-ab-") ? "AB 两份源文件版本 · A / B 边界尚未确认" : "C 地块文件包 · 转换模型预览";
-      this.root.querySelector("[data-venue-layer-note]").textContent = view === "source" ? "仅查看转换后的原始建筑，拖动环看、滚轮缩放。" : "人物与打卡点为演示叠加，位置供场地讨论。";
+      this.root.querySelector("[data-venue-layer-note]").textContent = view === "source" ? "仅查看转换后的原始建筑，拖动环看、滚轮缩放。" : "自由探索 · 点选人物，开始一次相遇";
       context.querySelectorAll("[data-action=venue-view]").forEach(button => {
         const active = button.dataset.id === view;
         button.setAttribute("aria-pressed", String(active));
@@ -161,7 +163,7 @@ export class AppUI {
         if (button.dataset.id === "event") button.title = eventReady ? "查看人物和活动点位叠加" : "活动坐标校准完成后可用";
       });
     }
-    const labels = candidate ? { overview:"外景", arrival:"入口", courtyard:"侧景", aerial:"俯瞰" } : CAMERA_LABELS;
+    const labels = candidate ? { overview:"外景", arrival:"入口", courtyard:view==="event"?"会客花园":"侧景", aerial:"俯瞰" } : CAMERA_LABELS;
     this.root.querySelectorAll(".ec-camera-dock button").forEach((button,index) => { button.innerHTML = `<span class="ec-camera-number">0${index+1}</span>${labels[button.dataset.id]}`; });
     const hint = this.root.querySelector("[data-world-hint]");
     if (hint) hint.textContent = candidate && view === "source" ? "拖动环看 · 滚轮缩放" : "拖动环看 · 滚轮缩放 · 点选人物";

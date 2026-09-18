@@ -1,0 +1,346 @@
+{
+  "schema": "echo-campus.generated-asset-provenance.v1",
+  "date": "2026-09-18",
+  "source": "Explicit current-turn local accepted task journals only. No account history or account balance used. No API credentials or signed asset URLs.",
+  "jobs": [
+    {
+      "name": "host-female-concept",
+      "taskId": "67bc2b2a-3ece-47fb-ad5d-fa4d218dabe7",
+      "endpoint": "/generation/text-to-image",
+      "inputTaskId": null,
+      "model": "seedream_v5",
+      "settings": {
+        "template": "t_pose",
+        "size": "2048x2048",
+        "output_format": "png",
+        "watermark": false
+      },
+      "status": "success",
+      "creditsConsumed": 5.0,
+      "completedAt": "2026-09-18T04:57:56.717771Z"
+    },
+    {
+      "name": "host-female-model",
+      "taskId": "0ecf9ec0-a9c3-4f35-9a29-267efcc3af0b",
+      "endpoint": "/generation/image-to-model",
+      "inputTaskId": "67bc2b2a-3ece-47fb-ad5d-fa4d218dabe7",
+      "model": "v3.1-20260211",
+      "settings": {
+        "texture": true,
+        "pbr": true,
+        "texture_quality": "detailed",
+        "texture_version": "v3.5-20260815",
+        "delight": true,
+        "face_limit": 24000,
+        "geometry_quality": "standard"
+      },
+      "status": "success",
+      "creditsConsumed": 40.0,
+      "completedAt": "2026-09-18T05:00:30.455151Z"
+    },
+    {
+      "name": "host-female-rigcheck",
+      "taskId": "281fdef6-e771-4cd6-99b0-37ac56202da3",
+      "endpoint": "/animations/rig-check",
+      "inputTaskId": "0ecf9ec0-a9c3-4f35-9a29-267efcc3af0b",
+      "model": null,
+      "settings": {},
+      "status": "success",
+      "creditsConsumed": 0.0,
+      "completedAt": "2026-09-18T05:07:21.615064Z"
+    },
+    {
+      "name": "host-female-rig",
+      "taskId": "b5d1fc54-77e3-48fe-b15d-bc06209ffa8e",
+      "endpoint": "/animations/rig",
+      "inputTaskId": "0ecf9ec0-a9c3-4f35-9a29-267efcc3af0b",
+      "model": "v1.0-20240301",
+      "settings": {
+        "rig_type": "biped",
+        "spec": "tripo",
+        "out_format": "glb"
+      },
+      "status": "success",
+      "creditsConsumed": 25.0,
+      "completedAt": "2026-09-18T05:07:36.097666Z"
+    },
+    {
+      "name": "host-female-idle",
+      "taskId": "d5976599-97e2-47a5-9da3-4e79623b10fb",
+      "endpoint": "/animations/retarget",
+      "inputTaskId": "b5d1fc54-77e3-48fe-b15d-bc06209ffa8e",
+      "model": null,
+      "settings": {
+        "animation": "preset:biped:idle",
+        "out_format": "fbx",
+        "export_with_geometry": true
+      },
+      "status": "success",
+      "creditsConsumed": 10.0,
+      "completedAt": "2026-09-18T05:08:53.573961Z"
+    },
+    {
+      "name": "host-female-walk",
+      "taskId": "62bdfb7b-9616-4352-9304-b6201a65576c",
+      "endpoint": "/animations/retarget",
+      "inputTaskId": "b5d1fc54-77e3-48fe-b15d-bc06209ffa8e",
+      "model": null,
+      "settings": {
+        "animation": "preset:biped:walk",
+        "out_format": "fbx",
+        "export_with_geometry": true
+      },
+      "status": "success",
+      "creditsConsumed": 10.0,
+      "completedAt": "2026-09-18T05:08:46.622582Z"
+    },
+    {
+      "name": "host-female-wave",
+      "taskId": "01abd120-5cdd-401c-9e69-1e6da6ba61e0",
+      "endpoint": "/animations/retarget",
+      "inputTaskId": "b5d1fc54-77e3-48fe-b15d-bc06209ffa8e",
+      "model": null,
+      "settings": {
+        "animation": "preset:biped:greet_01",
+        "out_format": "fbx",
+        "export_with_geometry": true
+      },
+      "status": "success",
+      "creditsConsumed": 10.0,
+      "completedAt": "2026-09-18T05:08:48.511975Z"
+    },
+    {
+      "name": "host-male-concept",
+      "taskId": "4fdb4262-812f-4766-a956-0a6172dd446c",
+      "endpoint": "/generation/text-to-image",
+      "inputTaskId": null,
+      "model": "seedream_v5",
+      "settings": {
+        "template": "t_pose",
+        "size": "2048x2048",
+        "output_format": "png",
+        "watermark": false
+      },
+      "status": "success",
+      "creditsConsumed": 5.0,
+      "completedAt": "2026-09-18T04:55:18.308440Z"
+    },
+    {
+      "name": "host-male-model",
+      "taskId": "6b9245c6-88a9-4bda-8347-5f93ba58a214",
+      "endpoint": "/generation/image-to-model",
+      "inputTaskId": "4fdb4262-812f-4766-a956-0a6172dd446c",
+      "model": "v3.1-20260211",
+      "settings": {
+        "texture": true,
+        "pbr": true,
+        "texture_quality": "detailed",
+        "texture_version": "v3.5-20260815",
+        "delight": true,
+        "face_limit": 24000,
+        "geometry_quality": "standard"
+      },
+      "status": "success",
+      "creditsConsumed": 40.0,
+      "completedAt": "2026-09-18T04:59:19.201913Z"
+    },
+    {
+      "name": "host-male-rigcheck",
+      "taskId": "092e51d9-6fcf-4d9d-b909-e1a014ac69d8",
+      "endpoint": "/animations/rig-check",
+      "inputTaskId": "6b9245c6-88a9-4bda-8347-5f93ba58a214",
+      "model": null,
+      "settings": {},
+      "status": "success",
+      "creditsConsumed": 0.0,
+      "completedAt": "2026-09-18T05:00:43.910191Z"
+    },
+    {
+      "name": "host-male-rig",
+      "taskId": "22c6ea59-e45a-4322-8ef1-74c58d595710",
+      "endpoint": "/animations/rig",
+      "inputTaskId": "6b9245c6-88a9-4bda-8347-5f93ba58a214",
+      "model": "v1.0-20240301",
+      "settings": {
+        "rig_type": "biped",
+        "spec": "tripo",
+        "out_format": "glb"
+      },
+      "status": "success",
+      "creditsConsumed": 25.0,
+      "completedAt": "2026-09-18T05:07:36.116622Z"
+    },
+    {
+      "name": "host-male-idle",
+      "taskId": "32903652-4fc9-421b-84c3-bc684160b55c",
+      "endpoint": "/animations/retarget",
+      "inputTaskId": "22c6ea59-e45a-4322-8ef1-74c58d595710",
+      "model": null,
+      "settings": {
+        "animation": "preset:biped:idle",
+        "out_format": "fbx",
+        "export_with_geometry": true
+      },
+      "status": "success",
+      "creditsConsumed": 10.0,
+      "completedAt": "2026-09-18T05:08:55.219678Z"
+    },
+    {
+      "name": "host-male-walk",
+      "taskId": "8fbb6b0b-b436-4ff5-994d-2fb40a841ae4",
+      "endpoint": "/animations/retarget",
+      "inputTaskId": "22c6ea59-e45a-4322-8ef1-74c58d595710",
+      "model": null,
+      "settings": {
+        "animation": "preset:biped:walk",
+        "out_format": "fbx",
+        "export_with_geometry": true
+      },
+      "status": "success",
+      "creditsConsumed": 10.0,
+      "completedAt": "2026-09-18T05:08:50.408009Z"
+    },
+    {
+      "name": "host-male-wave",
+      "taskId": "d5d6d881-c5f1-455b-b929-e1987b99a2ac",
+      "endpoint": "/animations/retarget",
+      "inputTaskId": "22c6ea59-e45a-4322-8ef1-74c58d595710",
+      "model": null,
+      "settings": {
+        "animation": "preset:biped:greet_01",
+        "out_format": "fbx",
+        "export_with_geometry": true
+      },
+      "status": "success",
+      "creditsConsumed": 10.0,
+      "completedAt": "2026-09-18T05:08:53.238081Z"
+    },
+    {
+      "name": "garden-tree-concept",
+      "taskId": "62023edf-99b4-41a1-85bf-8496cbc719d1",
+      "endpoint": "/generation/text-to-image",
+      "inputTaskId": null,
+      "model": "seedream_v5",
+      "settings": {
+        "size": "2048x2048",
+        "output_format": "png",
+        "watermark": false
+      },
+      "status": "success",
+      "creditsConsumed": 5.0,
+      "completedAt": "2026-09-18T05:00:50.091997Z"
+    },
+    {
+      "name": "garden-tree-model",
+      "taskId": "aa78615b-2039-4cbe-a47d-d8d6f12b25ac",
+      "endpoint": "/generation/image-to-model",
+      "inputTaskId": "62023edf-99b4-41a1-85bf-8496cbc719d1",
+      "model": "v3.1-20260211",
+      "settings": {
+        "texture": true,
+        "pbr": true,
+        "texture_quality": "detailed",
+        "texture_version": "v3.5-20260815",
+        "delight": true,
+        "face_limit": 12000,
+        "geometry_quality": "standard"
+      },
+      "status": "success",
+      "creditsConsumed": 40.0,
+      "completedAt": "2026-09-18T05:08:28.625642Z"
+    },
+    {
+      "name": "garden-seat-concept",
+      "taskId": "21aed35e-ef85-4c53-a906-95c0a0c58505",
+      "endpoint": "/generation/text-to-image",
+      "inputTaskId": null,
+      "model": "seedream_v5",
+      "settings": {
+        "size": "2048x2048",
+        "output_format": "png",
+        "watermark": false
+      },
+      "status": "success",
+      "creditsConsumed": 5.0,
+      "completedAt": "2026-09-18T05:01:30.092753Z"
+    },
+    {
+      "name": "garden-seat-model",
+      "taskId": "a8754d95-7786-42d9-a01a-7ba12abf7f19",
+      "endpoint": "/generation/image-to-model",
+      "inputTaskId": "21aed35e-ef85-4c53-a906-95c0a0c58505",
+      "model": "v3.1-20260211",
+      "settings": {
+        "texture": true,
+        "pbr": true,
+        "texture_quality": "detailed",
+        "texture_version": "v3.5-20260815",
+        "delight": true,
+        "face_limit": 8000,
+        "geometry_quality": "standard"
+      },
+      "status": "success",
+      "creditsConsumed": 40.0,
+      "completedAt": "2026-09-18T05:07:43.132996Z"
+    },
+    {
+      "name": "garden-sky-concept",
+      "taskId": "9275cf75-b8f3-4ef7-a8b7-7a4a9865251a",
+      "endpoint": "/generation/text-to-image",
+      "inputTaskId": null,
+      "model": "seedream_v5",
+      "settings": {
+        "size": "4096x2048",
+        "output_format": "png",
+        "watermark": false
+      },
+      "status": "success",
+      "creditsConsumed": 5.0,
+      "completedAt": "2026-09-18T05:02:23.709572Z"
+    }
+  ],
+  "credits": {
+    "unit": "Tripo credits",
+    "verifiedConsumed": 295.0,
+    "byAssetGroup": {
+      "characters": 200.0,
+      "tree": 45.0,
+      "seat": 45.0,
+      "sky": 5.0
+    },
+    "acceptedTasks": 19,
+    "pendingOrUnknownCreditTasks": [],
+    "excludedRejectedAttempts": [
+      "garden-tree-concept.rejected.json",
+      "garden-seat-concept.rejected.json"
+    ],
+    "exclusionNote": "Rejected attempts contain no accepted task ID and no per-task consumption evidence, so they are excluded rather than assigned an invented zero charge. Sum above covers accepted task consumption only."
+  },
+  "finalCharacters": [
+    {
+      "name": "host-female.glb",
+      "publicPath": "assets/premium/host-female.glb",
+      "bytes": 1379068,
+      "sha256": "208ab4718a3e17d128832c0131871f5e0e269f0381a19759e7d841b6b83abdec",
+      "animations": [
+        "Idle",
+        "Walk",
+        "Wave"
+      ],
+      "postprocess": "Blender5.2: single FBX per clip, identical rest skeleton validated, shallowest action, merged NLA clips; color 2048px and normal1024px; only rest-equivalent scale noise channels removed; runtime meter/forward/Hip motion calibration."
+    },
+    {
+      "name": "host-male.glb",
+      "publicPath": "assets/premium/host-male.glb",
+      "bytes": 1385516,
+      "sha256": "b1c4eac7fbe566d48643522eb0eb9e829896ccf2e1229cb6d1978bff0174d9f9",
+      "animations": [
+        "Idle",
+        "Walk",
+        "Wave"
+      ],
+      "postprocess": "Blender5.2: single FBX per clip, identical rest skeleton validated, shallowest action, merged NLA clips; color 2048px and normal1024px; only rest-equivalent scale noise channels removed; runtime meter/forward/Hip motion calibration."
+    }
+  ],
+  "unpricedWork": "Offline processing, programmatic scene dressing, frontend engineering, hosting and taxes are not Tripo credits; no currency conversion is asserted."
+}

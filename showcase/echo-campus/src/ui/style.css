@@ -274,3 +274,10 @@
 .ec-has-panel .ec-venue-context{opacity:0;pointer-events:none}
 @media(max-width:1100px){.ec-venue-context{left:27px;top:140px;width:255px}}
 @media(max-width:600px){.ec-venue-context{left:20px;right:20px;width:auto;top:126px;padding:12px}.ec-venue-source>span,.ec-venue-context>p{display:none}.ec-venue-source strong{font-size:11px}.ec-venue-source small{font-size:8px}.ec-venue-view{margin-top:10px}.ec-venue-view button{min-height:42px}.ec-source-view .ec-hint{bottom:100px}.ec-venue-card>button{grid-template-columns:116px minmax(0,1fr)}.ec-venue-card-copy{padding:12px}.ec-venue-card-copy strong{font-size:12px}.ec-venue-direct{min-height:44px}.ec-venue-picker-intro{font-size:11px}}
+
+/* Event mode keeps the scene open; source provenance remains in source mode and venue picker. */
+.ec-event-view .ec-venue-source{display:none}
+.ec-event-view .ec-venue-context{width:248px;padding:8px 10px;background:rgba(248,247,239,.82)}
+.ec-event-view .ec-venue-view{margin-top:0}
+.ec-event-view .ec-venue-context>p{margin:7px 4px 2px;font-size:9px}
+@media(max-width:600px){.ec-event-view .ec-venue-context{top:124px;right:auto;width:214px;padding:5px}.ec-event-view .ec-venue-context>p{display:none}.ec-event-view .ec-venue-view{margin:0}}
