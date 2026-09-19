@@ -98,14 +98,12 @@ function personPosition(index,isSelf=false){
  const points=currentScene.eventPeople||currentScene.anchors.people;return {...points[index%points.length]};
 }
 function addPerson(person,index,animate=false){
- const character=(premiumLibrary?.createPremiumCharacter||createCharacter)({color:person.avatarColor||"#a59074",seed:index+23,name:person.name});
+ const character=(premiumLibrary?.createPremiumCharacter||createCharacter)({color:person.avatarColor||"#a59074",seed:index+23,name:person.name,presentation:"social"});
  character.root.userData.personId=person.id;
  character.root.traverse(o=>{o.userData.personId=person.id;});
  const pos=personPosition(index,person.id===client.me?.attendee?.id);character.root.position.set(pos.x,pos.y||0,pos.z);character.root.rotation.y=pos.yaw||0;
  actors.add(character.root);
- const phase=((index+1)*1.618)%Math.PI*2;
- const behavior={home:new THREE.Vector3(pos.x,pos.y||0,pos.z),phase,radius:1.1+(index%3)*.55,speed:.18+(index%4)*.035,mode:index%5===0?"conversation":index%3===0?"wander":"social"};
- people.set(person.id,{...character,person,index,pos,arrival:animate?time:null,behavior,reactionUntil:0});
+ people.set(person.id,{...character,person,index,pos,arrival:animate?time:null,reactionUntil:0});
  if(animate){character.root.scale.setScalar(.02);chime();}
  return character;
 }
@@ -143,7 +141,7 @@ function setVenueView(view,{updateUrl=true,moveCamera=true}={}){
  venueView=activeVenue?next:"event";
  if(activeVenue&&next==="source"){showcaseTimers.forEach(clearTimeout);showcaseTimers=[];showcaseStarted=false;tour=null;cameraMove=null;}
  keys.clear();clearSelection();
- setEventLayersVisible([actors,linkRoot,markerRoot,activityMarkerRoot,...(currentScene?.eventGarden?[currentScene.eventGarden.root]:[]),...(currentScene?.landscapeSite?[currentScene.landscapeSite.root]:[]),...(currentScene?.contextLandscape?[currentScene.contextLandscape.root]:[])],venueView==="event");
+ setEventLayersVisible([actors,linkRoot,markerRoot,hoverRoot,activityMarkerRoot,...(currentScene?.eventGarden?[currentScene.eventGarden.root]:[]),...(currentScene?.landscapeSite?[currentScene.landscapeSite.root]:[]),...(currentScene?.contextLandscape?[currentScene.contextLandscape.root]:[])],venueView==="event");
  currentScene?.eventLook?.setEnabled(venueView==="event");
  renderFinish.setEnabled(venueView==="event");
  currentScene?.eventEntourage?.setEvent(venueView==="event");
@@ -272,9 +270,8 @@ function focusActivityCheckpoint(id){
 }
 function focusPerson(id){
  if(activeVenue&&venueView!=="event")return;
- const p=people.get(id);if(!p)return;selectedId=id;p.reactionUntil=time+2.4;
- const toward=new THREE.Vector3(camera.position.x-p.root.position.x,0,camera.position.z-p.root.position.z);if(toward.lengthSq()>0.01)p.root.rotation.y=Math.atan2(toward.x,toward.z);
- linkRoot.children.forEach(o=>o.visible=o.userData.attendees?.includes(id));UI.setSelectedPerson(p.person);UI.toast(`${p.person.name}注意到了你，正在打开他的相遇入口`);
+ const p=people.get(id);if(!p)return;selectedId=id;p.reactionUntil=time+(p.greetingDuration||3.6);
+ linkRoot.children.forEach(o=>o.visible=o.userData.attendees?.includes(id));UI.setSelectedPerson(p.person);UI.toast(`${p.person.name} · 名片已打开`);
  for(const o of [...markerRoot.children]){o.geometry.dispose();o.material.dispose();markerRoot.remove(o);}
  const ring=new THREE.Mesh(new THREE.RingGeometry(.46,.51,64),new THREE.MeshBasicMaterial({color:0xc68d42,side:THREE.DoubleSide,transparent:true,opacity:.9}));ring.rotation.x=-Math.PI/2;ring.position.copy(p.root.position).y+=.055;ring.userData.selectionRing=true;markerRoot.add(ring);
  const panelWidth=innerWidth>760?(document.querySelector(".ec-panel")?.getBoundingClientRect().width||420)+44:0;
@@ -297,6 +294,7 @@ canvas.addEventListener("pointermove",e=>{
   if(nextPerson){const p=people.get(nextPerson);if(p){const ring=new THREE.Mesh(new THREE.RingGeometry(.58,.64,48),new THREE.MeshBasicMaterial({color:0xf3d39a,transparent:true,opacity:.72,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.copy(p.root.position).y+=.06;ring.userData.hoverRing=true;hoverRoot.add(ring);}}
  }
 });
+canvas.addEventListener("pointerleave",()=>{hoveredId=null;hoveredMarker=null;hoverRoot.traverse(o=>{o.geometry?.dispose?.();o.material?.dispose?.();});hoverRoot.clear();UI.setHoverTarget?.(null);});
 canvas.addEventListener("pointerup",e=>{
  if(activeVenue&&venueView!=="event"){downPoint=null;return;}
  if(!downPoint||Math.hypot(e.clientX-downPoint.x,e.clientY-downPoint.y)>6)return;downPoint=null;
@@ -306,17 +304,21 @@ canvas.addEventListener("pointerup",e=>{
 window.addEventListener("keydown",e=>{if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;if(["w","a","s","d","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)){keys.add(e.key.toLowerCase());e.preventDefault();}if(e.key==="Escape"){UI.closePanel();cameraMove=null;tour=null;}});
 window.addEventListener("keyup",e=>keys.delete(e.key.toLowerCase()));window.addEventListener("blur",()=>keys.clear());
 document.addEventListener("visibilitychange",()=>{keys.clear();last=performance.now();});
-function moveSelf(dt){
- if(activeVenue&&venueView!=="event")return;
- const id=client.me?.attendee?.id,p=people.get(id);if(!p||!keys.size)return;
- const forward=new THREE.Vector3();camera.getWorldDirection(forward);forward.y=0;forward.normalize();const right=new THREE.Vector3().crossVectors(forward,new THREE.Vector3(0,1,0));
- const movement=new THREE.Vector3();if(keys.has("w")||keys.has("arrowup"))movement.add(forward);if(keys.has("s")||keys.has("arrowdown"))movement.sub(forward);if(keys.has("d")||keys.has("arrowright"))movement.add(right);if(keys.has("a")||keys.has("arrowleft"))movement.sub(right);
- if(!movement.lengthSq())return;movement.normalize().multiplyScalar(dt*2.2);const next=p.root.position.clone().add(movement),b=currentScene.bounds;
- next.x=THREE.MathUtils.clamp(next.x,b.minX,b.maxX);next.z=THREE.MathUtils.clamp(next.z,b.minZ,b.maxZ);
- let blocked=[...(currentScene.colliders||[]),...(currentScene.eventGarden?.colliders||[])].some(c=>Math.hypot(next.x-c.x,next.z-c.z)<c.r+.28);
- // Built-in water is navigable only on the central bridge; imported scenes use author-supplied colliders.
- if(currentScene.isWalkable&&!currentScene.isWalkable(next.x,next.z))blocked=true;
- if(!blocked){p.root.position.copy(next);p.root.rotation.y=Math.atan2(movement.x,movement.z);p.walking=true;if(selectedId===id&&markerRoot.children[0])markerRoot.children[0].position.set(next.x,next.y+.055,next.z);if(Math.floor(time*5)!==Math.floor((time-dt)*5))syncLinks(client.snapshot);} 
+// Social exhibit: keys explore the space with the camera. Avatars remain
+// grounded at their calibrated conversation spots on desktop and phone alike.
+function moveView(dt){
+ if(!keys.size||UI.panel||(activeVenue&&venueView!=="event"))return;
+ const forward=new THREE.Vector3();camera.getWorldDirection(forward);forward.y=0;forward.normalize();
+ const right=new THREE.Vector3().crossVectors(forward,new THREE.Vector3(0,1,0));
+ const movement=new THREE.Vector3();
+ if(keys.has("w")||keys.has("arrowup"))movement.add(forward);
+ if(keys.has("s")||keys.has("arrowdown"))movement.sub(forward);
+ if(keys.has("d")||keys.has("arrowright"))movement.add(right);
+ if(keys.has("a")||keys.has("arrowleft"))movement.sub(right);
+ if(!movement.lengthSq())return;
+ cameraMove=null;tour=null;
+ movement.normalize().multiplyScalar(dt*THREE.MathUtils.clamp(camera.position.distanceTo(controls.target)*.3,2,12));
+ controls.target.add(movement);camera.position.add(movement);
 }
 client.addEventListener("snapshot",e=>{hasConnected=true;UI.setSnapshot(e.detail);syncPeople(e.detail);});
 client.addEventListener("me",e=>{UI.setMe(e.detail);const me=e.detail?.attendee;if(me&&currentScene){const p=people.get(me.id);if(p&&!p.selfPlaced){p.root.position.set(currentScene.spawn.x,currentScene.spawn.y,currentScene.spawn.z);p.selfPlaced=true;syncLinks(client.snapshot);}}});
@@ -330,7 +332,7 @@ function runShowcase(){
  showcaseStarted=true;UI.closePanel();goCamera("hero",0);UI.toast("90 秒展示导览开始，可随时拖动画面");
  const action=(seconds,fn)=>showcaseTimers.push(setTimeout(()=>{if(showcaseStarted)fn();},seconds*1000));
  action(8,()=>goCamera("arrival",6000));
- action(21,()=>goCamera("courtyard",4500));
+ action(21,()=>goCamera("garden",4500));
  action(30,()=>{UI.openDemoPanel();goCamera("arrival",2500);});
  action(44,()=>{UI.closePanel();const first=client.snapshot?.attendees?.[0];if(first)focusPerson(first.id);});
  action(57,()=>{UI.closePanel();goCamera("garden",4500);});
@@ -345,18 +347,29 @@ function tick(now){
  if(tour&&!paused){const t=(now-tour.started)/1000,angle=t*.035;const offset=tour.base.clone().sub(tour.target).applyAxisAngle(new THREE.Vector3(0,1,0),angle);camera.position.copy(tour.target).add(offset);controls.target.copy(tour.target);}
  controls.update();
  if(activeVenue){const near=nearPlaneForDistance(camera.position.distanceTo(controls.target));if(Math.abs(camera.near-near)>.0001){camera.near=near;camera.updateProjectionMatrix();}}
- if(!paused){currentScene?.update(dt,time);currentScene?.eventLook?.update?.(dt,camera,controls.target);
-  for(const value of people.values()){
-   if(value.behavior&&value.person.id!==client.me?.attendee?.id&&value.reactionUntil<=time){const b=value.behavior,phase=time*b.speed+b.phase,sway=Math.sin(phase)*b.radius,drift=Math.cos(phase*.73)*b.radius*.42;value.root.position.set(b.home.x+sway,b.home.y||0,b.home.z+drift);const dx=Math.cos(phase)*b.radius*b.speed,dz=-Math.sin(phase)*b.radius*b.speed*.73;if(Math.hypot(dx,dz)>.01)value.root.rotation.y=Math.atan2(dx,dz);}
+ if(!paused){
+  moveView(dt);
+  currentScene?.update(dt,time);currentScene?.eventLook?.update?.(dt,camera,controls.target);
+  currentScene?.eventGarden?.update?.(dt,time);currentScene?.landscapeSite?.update?.(dt,time);currentScene?.architectureShadows?.update();
+  for(const ring of hoverRoot.children){
+   ring.scale.setScalar(reduced?1:1+Math.sin(time*4.2)*.04);
   }
-  hoverRoot.children.forEach(ring=>{const pulse=1+Math.sin(time*4.2)*.08;ring.scale.setScalar(pulse);ring.material.opacity=.54+Math.sin(time*4.2)*.16;});
-  markerRoot.children.forEach(ring=>{if(ring.userData.selectionRing){const pulse=1+Math.sin(time*3.5)*.12;ring.scale.setScalar(pulse);ring.material.opacity=.72+Math.sin(time*3.5)*.18;}});currentScene?.eventGarden?.update?.(dt,time);currentScene?.landscapeSite?.update?.(dt,time);currentScene?.architectureShadows?.update();for(const value of people.values()){value.walking=false;}moveSelf(dt);for(const value of people.values()){if(value.arrival!==null){const progress=Math.min(1,(time-value.arrival)/.75);value.root.scale.setScalar(Math.max(.02,1-Math.pow(1-progress,3)));if(progress===1)value.arrival=null;}value.update(dt,time,value.walking?"walking":value.reactionUntil>time?"wave":value.behavior?.mode==="conversation"?"talking":(value.behavior?.mode==="wander"?"walking":"idle"));}}
+  for(const ring of markerRoot.children){
+   if(ring.userData.selectionRing)ring.scale.setScalar(reduced?1:1+Math.sin(time*3.5)*.05);
+  }
+  for(const value of people.values()){
+   if(value.arrival!==null){const progress=Math.min(1,(time-value.arrival)/.75);value.root.scale.setScalar(Math.max(.02,1-Math.pow(1-progress,3)));if(progress===1)value.arrival=null;}
+   // No cosmetic translation, yaw snapping, or Walk on a stationary avatar.
+   const speaking=(time+(value.index*3.7))%22<5;
+   value.update(dt,time,value.reactionUntil>time?"wave":speaking?"talking":"idle");
+  }
+ }
  renderFinish.render();fpsFrames++;if(now-fpsStart>1000){fps=Math.round(fpsFrames*1000/(now-fpsStart));fpsFrames=0;fpsStart=now;}
 }
 requestAnimationFrame(tick);
 function diagnostics(){
  let meshes=0,materials=new Set(),geometries=new Set();scene.traverse(o=>{if(o.isMesh){meshes++;geometries.add(o.geometry);(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>materials.add(m));}});
- return {venue:activeVenue?.id||null,venueView,eventReady:venueEventReady,renderer:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures},fps,dpr:renderer.getPixelRatio(),scene:sceneId,people:people.size,meshes,materials:materials.size,geometries:geometries.size,postPasses:renderFinish.passes,shadowMapSize:sun.shadow.mapSize.x,quality,online:UI.online,premiumCharacters:!!premiumLibrary,gardenItems:currentScene?.eventGarden?.layout?.items?.length||0,landscapeSite:currentScene?.landscapeSite?.diagnostics,contextLandscape:currentScene?.contextLandscape?.diagnostics,architectureShadows:currentScene?.architectureShadows?.diagnostics,eventLook:currentScene?.eventLook?.diagnostics};
+ return {venue:activeVenue?.id||null,venueView,eventReady:venueEventReady,renderer:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures},fps,dpr:renderer.getPixelRatio(),scene:sceneId,people:people.size,characterPresentation:"grounded-social",meshes,materials:materials.size,geometries:geometries.size,postPasses:renderFinish.passes,shadowMapSize:sun.shadow.mapSize.x,quality,online:UI.online,premiumCharacters:!!premiumLibrary,gardenItems:currentScene?.eventGarden?.layout?.items?.length||0,landscapeSite:currentScene?.landscapeSite?.diagnostics,contextLandscape:currentScene?.contextLandscape?.diagnostics,architectureShadows:currentScene?.architectureShadows?.diagnostics,eventLook:currentScene?.eventLook?.diagnostics};
 }
 window.__THREE_GAME_DIAGNOSTICS__=diagnostics;
 installCanvasRecorder(canvas, diagnostics);

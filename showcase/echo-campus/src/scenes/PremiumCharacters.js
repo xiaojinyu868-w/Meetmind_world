@@ -207,13 +207,54 @@ function findBone(model, matcher) {
   return selected;
 }
 
-function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "Guest" } = {}) {
+// Keep a complete standing pose in every clip so crossfades cannot restore
+// the exporter's A-pose. Generated greetings contain steps and hip travel;
+// the social presentation deliberately uses only their upper-body gesture.
+function standingSocialClips(template) {
+  const idle = template.clipByState.get("idle");
+  if (!idle) return new Map();
+  const idleTracks = new Map(idle.tracks.map(track => [track.name, track]));
+  const upper = new Set(), gesture = new Set();
+  template.scene.traverse(node => {
+    if (!node.isBone) return;
+    if (/^waist$|^spine$|^spine0?1$/i.test(node.name)) node.traverse(child => { if (child.isBone) upper.add(child.name); });
+    if (/^[LR]_Clavicle$|^NeckTwist01$|^Head$/i.test(node.name)) node.traverse(child => { if (child.isBone) gesture.add(child.name); });
+  });
+  const result = new Map();
+  for (const state of ["idle", "wave"]) {
+    const source = template.clipByState.get(state) || idle;
+    const allowed = state === "wave" ? gesture : upper;
+    const sourceTracks = new Map(source.tracks.map(track => [track.name, track]));
+    const tracks = [];
+    for (const name of new Set([...idleTracks.keys(), ...sourceTracks.keys()])) {
+      const original = sourceTracks.get(name) || idleTracks.get(name);
+      const target = parseTrackTarget(name);
+      const nodeName = target?.objectName === "bones" ? target.objectIndex : target?.nodeName;
+      if (allowed.has(nodeName) && sourceTracks.has(name)) { tracks.push(original.clone()); continue; }
+      const reference = idleTracks.get(name);
+      if (!reference) continue;
+      const constant = reference.clone(), size = reference.getValueSize();
+      constant.times = new Float32Array([0, source.duration]);
+      constant.values = new reference.values.constructor(size * 2);
+      constant.values.set(reference.values.subarray(0, size), 0);
+      constant.values.set(reference.values.subarray(0, size), size);
+      tracks.push(constant);
+    }
+    result.set(state, new THREE.AnimationClip("Social" + (state === "idle" ? "Idle" : "Wave"), source.duration, tracks));
+  }
+  return result;
+}
+
+function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "Guest", presentation = "animated" } = {}) {
   if (library.disposed) throw new Error("角色库已释放");
   const root = new THREE.Group();
   root.name = `guest-${name}`;
   root.userData.isCharacter = true;
   root.userData.personName = name;
   root.userData.characterAsset = template.definition.id;
+  const social = presentation === "social";
+  root.userData.characterPresentation = social ? "grounded-social" : "animated";
+  let socialFloorOffset = 0;
   const motion = new THREE.Group(), visual = new THREE.Group(), model = cloneSkeleton(template.scene);
   // Fixtures and future custom libraries may have an unrelated id; only the
   // two authored host assets receive the cloth-mask variants.
@@ -290,9 +331,10 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
   motion.add(badge); root.updateMatrixWorld(true);
   if (chest) chest.attach(badge);
 
+  const clipByState = social ? (template.socialClips ||= standingSocialClips(template)) : template.clipByState;
   const mixer = template.clips.length ? new THREE.AnimationMixer(model) : null;
   const actions = new Map();
-  for (const [state, clip] of template.clipByState) {
+  for (const [state, clip] of clipByState) {
     const action = mixer.clipAction(clip);
     if (state === "wave") { action.setLoop(THREE.LoopOnce, 1); action.clampWhenFinished = true; }
     actions.set(state, action);
@@ -328,12 +370,14 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
   }
   library.instances++;
   const character = {
-    root, model, mixer, height, assetInfo: wardrobe ? Object.freeze({ ...template.info, height, wardrobe }) : template.info,
+    root, model, mixer, height, greetingDuration: (clipByState.get("wave")?.duration || 1) + 0.3, assetInfo: wardrobe ? Object.freeze({ ...template.info, height, wardrobe }) : template.info,
     update(dt, time, state = "idle") {
       if (disposed) return;
       for (const { bone, before } of modified) bone.quaternion.copy(before);
       modified.length = 0;
-      const nextState = stateName(state);
+      const requestedState = stateName(state);
+      const nextState = social && requestedState === "walk" ? "idle" : requestedState;
+      root.userData.animationState = nextState;
       if (nextState !== previousState) { greetingFinished = false; previousState = nextState; transition(nextState); }
       mixer?.update(THREE.MathUtils.clamp(Number(dt) || 0, 0, 0.1));
       const seconds = Number(time) || 0;
@@ -357,7 +401,10 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
       root.updateMatrixWorld(true);
       // Small shoe/ground correction from actual deformed sole vertices.
       // The motion remains fully skinned; only stance penetration is removed.
-      if (soleSamples.length) {
+      if (social) {
+        motion.position.y = socialFloorOffset;
+        root.updateMatrixWorld(true);
+      } else if (soleSamples.length) {
         inverseRoot.copy(root.matrixWorld).invert();
         let lowest = Infinity;
         for (const sample of soleSamples) {
@@ -382,6 +429,13 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
     },
   };
   character.update(0, 0, "idle");
+  if (social) {
+    // One precise full-mesh measurement in the evaluated standing pose.
+    // Unlike per-frame min-foot compensation, this never bobs the whole body.
+    socialFloorOffset = -new THREE.Box3().setFromObject(root, true).min.y;
+    motion.position.y = socialFloorOffset;
+    root.updateMatrixWorld(true);
+  }
   return character;
 }
 

@@ -55,3 +55,16 @@ API：`const library = await loadCharacterLibrary({baseUrl:document.baseURI})`�
 - 静态美术与独立motion QA已经通过。主线交互、整场景性能和生产发布验收由主代理完成。
 
 本地资产与处理脚本：`C:/Users/Li Hao/Documents/meetmind_world 2/output/visual-upgrade/characters-runtime/`；最终GLB：`../assets/characters-final/`；任务日志：`../jobs/host-*.json`。不在公共目录发布密钥、任务下载临时URL或原始私有日志。
+
+
+## 2026-09-19 驻足社交修复
+
+上一版主线将所有非本人角色沿正弦轨迹平移，却只有一部分播放 Walk，导致站姿滑行。生成的 Wave 也包含迈步；仅锁住 Hip 不能锁住双脚，Idle 的重心位移被抵消后同样会产生足部漂移。
+
+- presentation: social：所有下半身 position / quaternion 轨道取真实 Idle 第一帧的常量，保留完整轨道参与 crossfade，避免恢复 A-pose。
+- Idle 保留 Waist 上半身；Wave 仅保留 Clavicle 手臂子树和颈头子树，去掉迈步及大幅躯干动作。
+- 鞋底在已评估的站姿进行一次完整几何落地，不再逐帧移动整个身体追逐最低脚点。
+- 主线不再自动平移角色、强制转整个根节点，也不再向驻足角色发送 Walk。点击触发一次上半身招呼，持续选中不会循环挥手。
+- WASD / 方向键现在浏览镜头。旧的原始动画管线和源 GLB 保留，但不作为当前展示的自然行走能力。
+
+tests/social-presentation.test.mjs 使用两份真实 GLB 的几何/权重/骨架/动画，只去除 Node 不支持加载的图片。覆盖完整 Idle 16 秒、Wave 4.5 秒、Talk、误传 Walk、重复 Wave，包含根平移、旋转与 0.3 缩放。鞋底采样合成波动均低于 0.1mm，首帧实际鞋底落地误差低于 0.1mm。该测试与浏览器连续录制一起验收，不以单张截图证明动作质量。
