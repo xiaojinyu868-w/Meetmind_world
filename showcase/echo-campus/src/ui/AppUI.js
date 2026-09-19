@@ -178,7 +178,7 @@ export class AppUI {
         if (button.dataset.id === "event") button.title = eventReady ? "查看人物和活动点位叠加" : "活动坐标校准完成后可用";
       });
     }
-    const labels = candidate ? { overview:"外景", arrival:"入口", courtyard:view==="event"?"会客花园":"侧景", aerial:"俯瞰" } : CAMERA_LABELS;
+    const labels = candidate ? { overview:"外景", arrival:"入口", courtyard:view==="event"?"近看交流":"侧景", aerial:"俯瞰" } : CAMERA_LABELS;
     this.root.querySelectorAll(".ec-camera-dock button").forEach((button,index) => { button.innerHTML = `<span class="ec-camera-number">0${index+1}</span>${labels[button.dataset.id]}`; });
     const hint = this.root.querySelector("[data-world-hint]");
     if (hint) hint.textContent = candidate && view === "source" ? "拖动环看 · 滚轮缩放" : "拖动环看 · 滚轮缩放 · 点选人物";

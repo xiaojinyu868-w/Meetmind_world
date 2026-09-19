@@ -7,8 +7,8 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 // Keep source textures and geometry shared; only skeletons, mixers and name badges
 // belong to an individual attendee. Coordinates exposed to the world are meters.
 export const PREMIUM_CHARACTER_ASSETS = Object.freeze([
-  Object.freeze({ id: "host-female", path: "assets/premium/host-female.glb", height: 1.68, forwardYaw: -Math.PI / 2 }),
-  Object.freeze({ id: "host-male", path: "assets/premium/host-male.glb", height: 1.78, forwardYaw: -Math.PI / 2 }),
+  Object.freeze({ id: "host-female", path: "assets/premium/host-female.glb?v=social-20260919", height: 1.68, forwardYaw: -Math.PI / 2 }),
+  Object.freeze({ id: "host-male", path: "assets/premium/host-male.glb?v=social-20260919", height: 1.78, forwardYaw: -Math.PI / 2 }),
 ]);
 
 const LIBRARIES = new Map();
@@ -207,40 +207,42 @@ function findBone(model, matcher) {
   return selected;
 }
 
-// Keep a complete standing pose in every clip so crossfades cannot restore
-// the exporter's A-pose. Generated greetings contain steps and hip travel;
-// the social presentation deliberately uses only their upper-body gesture.
+// These are full-body, individually retargeted performances, not held frames.
+// Rebase only each take's constant stage origin. Hip weight shifts, both legs,
+// torso, shoulders, wrists and recovery remain authored animation throughout.
 function standingSocialClips(template) {
-  const idle = template.clipByState.get("idle");
-  if (!idle) return new Map();
-  const idleTracks = new Map(idle.tracks.map(track => [track.name, track]));
-  const upper = new Set(), gesture = new Set();
-  template.scene.traverse(node => {
-    if (!node.isBone) return;
-    if (/^waist$|^spine$|^spine0?1$/i.test(node.name)) node.traverse(child => { if (child.isBone) upper.add(child.name); });
-    if (/^[LR]_Clavicle$|^NeckTwist01$|^Head$/i.test(node.name)) node.traverse(child => { if (child.isBone) gesture.add(child.name); });
-  });
+  const names = { idle: "Social-Standing_Relax", talk: "Social-Agree", wave: "Social-Greet_02" };
   const result = new Map();
-  for (const state of ["idle", "wave"]) {
-    const source = template.clipByState.get(state) || idle;
-    const allowed = state === "wave" ? gesture : upper;
-    const sourceTracks = new Map(source.tracks.map(track => [track.name, track]));
-    const tracks = [];
-    for (const name of new Set([...idleTracks.keys(), ...sourceTracks.keys()])) {
-      const original = sourceTracks.get(name) || idleTracks.get(name);
-      const target = parseTrackTarget(name);
-      const nodeName = target?.objectName === "bones" ? target.objectIndex : target?.nodeName;
-      if (allowed.has(nodeName) && sourceTracks.has(name)) { tracks.push(original.clone()); continue; }
-      const reference = idleTracks.get(name);
-      if (!reference) continue;
-      const constant = reference.clone(), size = reference.getValueSize();
-      constant.times = new Float32Array([0, source.duration]);
-      constant.values = new reference.values.constructor(size * 2);
-      constant.values.set(reference.values.subarray(0, size), 0);
-      constant.values.set(reference.values.subarray(0, size), size);
-      tracks.push(constant);
+  let reference = null;
+  for (const [state, name] of Object.entries(names)) {
+    const source = template.clips.find(clip => clip.name === name) || template.clipByState.get(state) || template.clipByState.get("idle");
+    if (!source) continue;
+    const clip = source.clone();
+    clip.name = "Social" + state[0].toUpperCase() + state.slice(1);
+    const start = Math.min(...clip.tracks.map(track => track.times[0]));
+    for (const track of clip.tracks) for (let i = 0; i < track.times.length; i++) track.times[i] -= start;
+    clip.duration -= start;
+    const probe = cloneSkeleton(template.scene), mixer = new THREE.AnimationMixer(probe);
+    mixer.clipAction(clip).play(); mixer.update(0); probe.updateMatrixWorld(true);
+    const feet = [findBone(probe, /^L_Foot$/), findBone(probe, /^R_Foot$/)].filter(Boolean);
+    const center = new THREE.Vector3();
+    feet.forEach(foot => center.add(foot.getWorldPosition(new THREE.Vector3())));
+    if (feet.length) center.divideScalar(feet.length);
+    if (!reference) reference = center.clone();
+    const hip = findBone(probe, /^Hip$/i);
+    if (hip && feet.length) {
+      const shift = reference.clone().sub(center); shift.y = 0;
+      const origin = hip.parent.getWorldPosition(new THREE.Vector3());
+      const local = hip.parent.worldToLocal(origin.clone().add(shift)).sub(hip.parent.worldToLocal(origin));
+      const track = clip.tracks.find(track => track.name === hip.name + ".position");
+      if (track) for (let i = 0; i < track.values.length; i += 3) {
+        track.values[i] += local.x; track.values[i + 1] += local.y; track.values[i + 2] += local.z;
+      }
     }
-    result.set(state, new THREE.AnimationClip("Social" + (state === "idle" ? "Idle" : "Wave"), source.duration, tracks));
+    mixer.stopAllAction(); mixer.uncacheRoot(probe);
+    const skeletons = new Set(); probe.traverse(o => { if (o.isSkinnedMesh) skeletons.add(o.skeleton); });
+    skeletons.forEach(skeleton => skeleton.dispose());
+    result.set(state, clip);
   }
   return result;
 }
@@ -253,8 +255,7 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
   root.userData.personName = name;
   root.userData.characterAsset = template.definition.id;
   const social = presentation === "social";
-  root.userData.characterPresentation = social ? "grounded-social" : "animated";
-  let socialFloorOffset = 0;
+  root.userData.characterPresentation = social ? "continuous-social" : "animated";
   const motion = new THREE.Group(), visual = new THREE.Group(), model = cloneSkeleton(template.scene);
   // Fixtures and future custom libraries may have an unrelated id; only the
   // two authored host assets receive the cloth-mask variants.
@@ -336,16 +337,18 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
   const actions = new Map();
   for (const [state, clip] of clipByState) {
     const action = mixer.clipAction(clip);
-    if (state === "wave") { action.setLoop(THREE.LoopOnce, 1); action.clampWhenFinished = true; }
+    if (state === "wave" || (social && state === "talk")) { action.setLoop(THREE.LoopOnce, 1); action.clampWhenFinished = true; }
     actions.set(state, action);
   }
   const phase = ((Number(seed) || 1) * 0.61803398875 % 1) * Math.PI * 2;
   let previousState = null, activeAction = null, disposed = false, greetingFinished = false;
+  let socialRequest = null, performanceState = "idle", performanceReturning = false;
   const modified = [], turn = new THREE.Quaternion();
   function chooseAction(state) {
     return actions.get(state) || actions.get("idle") || null;
   }
   function transition(state) {
+    if (social) { performanceState = state; performanceReturning = false; }
     let action = chooseAction(state);
     if (state === "wave" && greetingFinished) action = actions.get("idle") || action;
     if (action === activeAction) return;
@@ -353,13 +356,14 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
     activeAction = action;
     if (action) {
       action.reset().setEffectiveWeight(1).setEffectiveTimeScale(1).play();
-      if (!previous && action !== actions.get("wave")) action.time = phase / (Math.PI * 2) * action.getClip().duration;
-      if (previous) action.crossFadeFrom(previous, 0.26, false);
+      if (!previous && action !== actions.get("wave")) action.time = social ? phase / (Math.PI * 2) * 1.8 : phase / (Math.PI * 2) * action.getClip().duration;
+      if (previous) action.crossFadeFrom(previous, social ? 0.65 : 0.26, false);
       // First creation must evaluate the fully weighted Idle immediately.
       // Fading from weight zero blends against the exported T/A bind pose.
     } else previous?.fadeOut(0.2);
   }
   const onFinished = event => {
+    if (social) return;
     if (event.action === actions.get("wave")) { greetingFinished = true; transition(previousState || "idle"); }
   };
   mixer?.addEventListener("finished", onFinished);
@@ -370,16 +374,33 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
   }
   library.instances++;
   const character = {
-    root, model, mixer, height, greetingDuration: (clipByState.get("wave")?.duration || 1) + 0.3, assetInfo: wardrobe ? Object.freeze({ ...template.info, height, wardrobe }) : template.info,
+    root, model, mixer, height, conversationDuration: clipByState.get("talk")?.duration || 4, greetingDuration: (clipByState.get("wave")?.duration || 1) + 0.3, assetInfo: wardrobe ? Object.freeze({ ...template.info, height, wardrobe }) : template.info,
     update(dt, time, state = "idle") {
       if (disposed) return;
       for (const { bone, before } of modified) bone.quaternion.copy(before);
       modified.length = 0;
       const requestedState = stateName(state);
       const nextState = social && requestedState === "walk" ? "idle" : requestedState;
-      root.userData.animationState = nextState;
-      if (nextState !== previousState) { greetingFinished = false; previousState = nextState; transition(nextState); }
-      mixer?.update(THREE.MathUtils.clamp(Number(dt) || 0, 0, 0.1));
+      if (social) {
+        if (!activeAction) transition("idle");
+        // Intents trigger a complete phrase once; idle intent cannot cut a
+        // gesture short, and a held intent cannot repeat it indefinitely.
+        if (nextState !== socialRequest) {
+          socialRequest = nextState;
+          if (nextState === "wave" || (nextState === "talk" && performanceState === "idle")) transition(nextState);
+        }
+        if (performanceState !== "idle" && !performanceReturning && activeAction.time >= activeAction.getClip().duration - 0.65) {
+          performanceReturning = true;
+          transition("idle");
+        }
+        root.userData.animationState = performanceState;
+      } else {
+        root.userData.animationState = nextState;
+        if (nextState !== previousState) { greetingFinished = false; previousState = nextState; transition(nextState); }
+      }
+      mixer?.update(THREE.MathUtils.clamp(Number(dt) || 0, 0, social ? 0.25 : 0.1));
+      root.userData.animationClip = activeAction?.getClip().name || null;
+      root.userData.animationTime = activeAction?.time || 0;
       const seconds = Number(time) || 0;
       // Real local bone motion only. Missing locomotion stays honestly static;
       // no root hopping or whole-model rocking pretends to be a walk cycle.
@@ -391,7 +412,7 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
         subtleBone(chest, AXIS_X, Math.sin(seconds * 1.6 + phase) * 0.006);
       }
       motion.position.y = 0;
-      if (hipReference) {
+      if (hipReference && !social) {
         motion.position.set(0, 0, 0);
         root.updateMatrixWorld(true);
         root.worldToLocal(hip.getWorldPosition(hipPosition));
@@ -401,17 +422,14 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
       root.updateMatrixWorld(true);
       // Small shoe/ground correction from actual deformed sole vertices.
       // The motion remains fully skinned; only stance penetration is removed.
-      if (social) {
-        motion.position.y = socialFloorOffset;
-        root.updateMatrixWorld(true);
-      } else if (soleSamples.length) {
+      if (soleSamples.length) {
         inverseRoot.copy(root.matrixWorld).invert();
         let lowest = Infinity;
         for (const sample of soleSamples) {
           sample.mesh.getVertexPosition(sample.index, probeVertex).applyMatrix4(sample.mesh.matrixWorld).applyMatrix4(inverseRoot);
           lowest = Math.min(lowest, probeVertex.y);
         }
-        motion.position.y = THREE.MathUtils.clamp(-lowest, -0.08, 0.10);
+        motion.position.y = THREE.MathUtils.clamp(-lowest, -0.12, 0.12);
         root.updateMatrixWorld(true);
       }
     },
@@ -429,13 +447,6 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
     },
   };
   character.update(0, 0, "idle");
-  if (social) {
-    // One precise full-mesh measurement in the evaluated standing pose.
-    // Unlike per-frame min-foot compensation, this never bobs the whole body.
-    socialFloorOffset = -new THREE.Box3().setFromObject(root, true).min.y;
-    motion.position.y = socialFloorOffset;
-    root.updateMatrixWorld(true);
-  }
   return character;
 }
 

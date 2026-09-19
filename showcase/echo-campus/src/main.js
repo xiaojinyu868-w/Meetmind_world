@@ -5,6 +5,7 @@ import {RoomEnvironment} from "three/addons/environments/RoomEnvironment.js";
 import {getSceneDefinition} from "./runtime/SceneRegistry.js";
 import {createCharacter} from "./scenes/Characters.js";
 import {loadCharacterLibrary} from "./scenes/PremiumCharacters.js";
+import {visibleSocialAttendees,demoSocialPose,stablePersonSeed,conversationIntent} from "./scenes/SocialEnsemble.js";
 import {createEventGarden} from "./scenes/EventGarden.js";
 import {socialPeopleLayout} from "./runtime/SocialPeopleLayout.js";
 import {createLandscapeSite} from "./runtime/LandscapeSite.js";
@@ -93,15 +94,20 @@ function fitPreset(preset,id){
  return activeVenue&&venuePresentationBounds&&innerWidth<720&&!["arrival","garden"].includes(id)?fitBuildingPreset(result,venuePresentationBounds,camera.aspect):result;
 }
 function goCamera(id,duration=1700){if(!currentScene)return;const presets=venueView==="event"?{...currentScene.cameras,...currentScene.eventCameras}:currentScene.cameras,actual=presets[id]?id:"hero",preset=fitPreset(presets[actual],actual);if(activeVenue&&venuePresentationBounds){const distance=new THREE.Vector3(...preset.position).distanceTo(new THREE.Vector3(...preset.target)),reach=distance+venuePresentationBounds.radius;controls.maxDistance=Math.max(controls.maxDistance,distance*1.1);camera.far=Math.max(camera.far,reach*2);if(venueView!=="event"){scene.fog.near=Math.max(scene.fog.near,reach*1.05);scene.fog.far=Math.max(scene.fog.far,reach*1.7);}}cameraTo(preset.position,preset.target,preset.fov||43,duration);UI.setCameraSelection(actual);if(activeVenue){const url=new URL(location.href);url.searchParams.set("camera",actual);history.replaceState(null,"",url);}}
-function personPosition(index,isSelf=false){
+function personPosition(index,isSelf=false,person=null){
  if(isSelf)return {...currentScene.spawn};
- const points=currentScene.eventPeople||currentScene.anchors.people;return {...points[index%points.length]};
+ const demo=person?.source==="curated-demo"&&demoSocialPose(person.id,activeVenue?.id,currentScene.spawn.y||0);if(demo)return demo;
+ const points=currentScene.eventPeople||currentScene.anchors.people;
+ const occupied=[...people.values()].filter(value=>value.person.id!==person?.id).map(value=>value.root.position);
+ const reserved=["seed-01","seed-02","seed-03","seed-04","seed-10","seed-12"].map(id=>demoSocialPose(id,activeVenue?.id,currentScene.spawn.y||0)).filter(Boolean);
+ const available=points.filter(point=>[...occupied,...reserved].every(other=>Math.hypot(other.x-point.x,other.z-point.z)>1));
+ return {...(available[0]||points[index%points.length])};
 }
 function addPerson(person,index,animate=false){
- const character=(premiumLibrary?.createPremiumCharacter||createCharacter)({color:person.avatarColor||"#a59074",seed:index+23,name:person.name,presentation:"social"});
+ const character=(premiumLibrary?.createPremiumCharacter||createCharacter)({color:person.avatarColor||"#a59074",seed:stablePersonSeed(person.id),name:person.name,presentation:"social"});
  character.root.userData.personId=person.id;
  character.root.traverse(o=>{o.userData.personId=person.id;});
- const pos=personPosition(index,person.id===client.me?.attendee?.id);character.root.position.set(pos.x,pos.y||0,pos.z);character.root.rotation.y=pos.yaw||0;
+ const pos=personPosition(index,person.id===client.me?.attendee?.id,person);character.root.position.set(pos.x,pos.y||0,pos.z);character.root.rotation.y=pos.yaw||0;
  actors.add(character.root);
  people.set(person.id,{...character,person,index,pos,arrival:animate?time:null,reactionUntil:0});
  if(animate){character.root.scale.setScalar(.02);chime();}
@@ -109,8 +115,7 @@ function addPerson(person,index,animate=false){
 }
 function syncPeople(snapshot){
  if(!currentScene||!snapshot||(activeVenue&&!venueEventReady))return;
- const limit=premiumLibrary?Math.min(36,currentScene.anchors.people.length):80;
- const visibleAttendees = snapshot.attendees.length <= limit ? snapshot.attendees : [client.me?.attendee, ...snapshot.attendees.filter(p => p.id !== client.me?.attendee?.id).slice(-limit+(client.me?.attendee?1:0))].filter(Boolean);
+ const visibleAttendees=visibleSocialAttendees(snapshot.attendees,{selectedId,selfId:client.me?.attendee?.id,maxRendered:36});
  const ids=new Set(visibleAttendees.map(p=>p.id));
  for(const [id,value] of people)if(!ids.has(id)){if(selectedId===id)clearSelection();actors.remove(value.root);value.dispose?.();people.delete(id);}
 
@@ -183,8 +188,10 @@ async function switchScene(id,options={}){
    result.eventCameras=id==="venue-ab-canopy"?{
     hero:{position:[190,65,330],target:[87,37,164],fov:38},
     arrival:{position:[101,y+3.7,213],target:[85,y+1.7,204],fov:51},
-    garden:{position:[74,y+2.1,211.8],target:[67.2,y+1.35,204.7],fov:45}
+    garden:{position:[84.2,y+1.85,211.1],target:[83.5,y+1.0,205.1],fov:34}
    }:{arrival:{position:[a.x+5,y+3.1,a.z+5],target:[a.x-2,y+1.1,a.z-7],fov:49},garden:{position:[a.x-5,y+2.3,a.z-1],target:[a.x,y+1.1,a.z-10],fov:45}};
+   const pairA=demoSocialPose("seed-01",id,y),pairB=demoSocialPose("seed-02",id,y);
+   if(pairA&&pairB){const cx=(pairA.x+pairB.x)/2,cz=(pairA.z+pairB.z)/2;result.eventCameras.garden={position:[cx+.7,y+1.85,cz+6],target:[cx,y+1,cz],fov:34};}
    const originalDispose=result.dispose;
    result.dispose=()=>{result.eventLook?.dispose();result.eventEntourage?.dispose();result.eventGarden.dispose();result.architectureShadows?.dispose();result.landscapeSite?.dispose();result.contextLandscape?.dispose();originalDispose?.();};
   }
@@ -270,7 +277,9 @@ function focusActivityCheckpoint(id){
 }
 function focusPerson(id){
  if(activeVenue&&venueView!=="event")return;
- const p=people.get(id);if(!p)return;selectedId=id;p.reactionUntil=time+(p.greetingDuration||3.6);
+ let p=people.get(id);
+ if(!p){const person=client.snapshot?.attendees.find(person=>person.id===id);if(!person)return;selectedId=id;syncPeople(client.snapshot);p=people.get(id);}
+ if(!p)return;selectedId=id;p.reactionUntil=time+(p.greetingDuration||5.8);
  linkRoot.children.forEach(o=>o.visible=o.userData.attendees?.includes(id));UI.setSelectedPerson(p.person);UI.toast(`${p.person.name} · 名片已打开`);
  for(const o of [...markerRoot.children]){o.geometry.dispose();o.material.dispose();markerRoot.remove(o);}
  const ring=new THREE.Mesh(new THREE.RingGeometry(.46,.51,64),new THREE.MeshBasicMaterial({color:0xc68d42,side:THREE.DoubleSide,transparent:true,opacity:.9}));ring.rotation.x=-Math.PI/2;ring.position.copy(p.root.position).y+=.055;ring.userData.selectionRing=true;markerRoot.add(ring);
@@ -342,7 +351,7 @@ function runShowcase(){
 }
 function tick(now){
  requestAnimationFrame(tick);if(document.hidden){last=now;return;}
- const dt=Math.min(.05,(now-last)/1000);last=now;if(!paused)time+=dt;
+ const elapsed=Math.min(.25,Math.max(0,(now-last)/1000)),dt=Math.min(.05,elapsed);last=now;if(!paused)time+=elapsed;
  if(cameraMove){const p=Math.min(1,(now-cameraMove.start)/cameraMove.duration),e=p*p*(3-2*p);camera.position.lerpVectors(cameraMove.fromP,cameraMove.toP,e);controls.target.lerpVectors(cameraMove.fromT,cameraMove.toT,e);camera.fov=THREE.MathUtils.lerp(cameraMove.fromFov,cameraMove.toFov,e);camera.updateProjectionMatrix();if(p>=1)cameraMove=null;}
  if(tour&&!paused){const t=(now-tour.started)/1000,angle=t*.035;const offset=tour.base.clone().sub(tour.target).applyAxisAngle(new THREE.Vector3(0,1,0),angle);camera.position.copy(tour.target).add(offset);controls.target.copy(tour.target);}
  controls.update();
@@ -360,8 +369,7 @@ function tick(now){
   for(const value of people.values()){
    if(value.arrival!==null){const progress=Math.min(1,(time-value.arrival)/.75);value.root.scale.setScalar(Math.max(.02,1-Math.pow(1-progress,3)));if(progress===1)value.arrival=null;}
    // No cosmetic translation, yaw snapping, or Walk on a stationary avatar.
-   const speaking=(time+(value.index*3.7))%22<5;
-   value.update(dt,time,value.reactionUntil>time?"wave":speaking?"talking":"idle");
+   value.update(elapsed,time,value.reactionUntil>time?"wave":value.person.source==="curated-demo"?conversationIntent(value.person.id,time):"idle");
   }
  }
  renderFinish.render();fpsFrames++;if(now-fpsStart>1000){fps=Math.round(fpsFrames*1000/(now-fpsStart));fpsFrames=0;fpsStart=now;}
@@ -369,7 +377,7 @@ function tick(now){
 requestAnimationFrame(tick);
 function diagnostics(){
  let meshes=0,materials=new Set(),geometries=new Set();scene.traverse(o=>{if(o.isMesh){meshes++;geometries.add(o.geometry);(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>materials.add(m));}});
- return {venue:activeVenue?.id||null,venueView,eventReady:venueEventReady,renderer:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures},fps,dpr:renderer.getPixelRatio(),scene:sceneId,people:people.size,characterPresentation:"grounded-social",meshes,materials:materials.size,geometries:geometries.size,postPasses:renderFinish.passes,shadowMapSize:sun.shadow.mapSize.x,quality,online:UI.online,premiumCharacters:!!premiumLibrary,gardenItems:currentScene?.eventGarden?.layout?.items?.length||0,landscapeSite:currentScene?.landscapeSite?.diagnostics,contextLandscape:currentScene?.contextLandscape?.diagnostics,architectureShadows:currentScene?.architectureShadows?.diagnostics,eventLook:currentScene?.eventLook?.diagnostics};
+ return {venue:activeVenue?.id||null,venueView,eventReady:venueEventReady,renderer:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures},fps,dpr:renderer.getPixelRatio(),scene:sceneId,people:people.size,characterPresentation:"continuous-social",meshes,materials:materials.size,geometries:geometries.size,postPasses:renderFinish.passes,shadowMapSize:sun.shadow.mapSize.x,quality,online:UI.online,premiumCharacters:!!premiumLibrary,gardenItems:currentScene?.eventGarden?.layout?.items?.length||0,landscapeSite:currentScene?.landscapeSite?.diagnostics,contextLandscape:currentScene?.contextLandscape?.diagnostics,architectureShadows:currentScene?.architectureShadows?.diagnostics,eventLook:currentScene?.eventLook?.diagnostics};
 }
 window.__THREE_GAME_DIAGNOSTICS__=diagnostics;
 installCanvasRecorder(canvas, diagnostics);
