@@ -1,0 +1,92 @@
+{
+  "schema": "echo-campus.cleanup-package.v1",
+  "files": [
+    {
+      "file": ".gitignore",
+      "bytes": 48,
+      "sha256": "5bce4f83989c9828f2b95ecfdc5a906150c8c7fe795ff90cb3a8b0b3f29ca168"
+    },
+    {
+      "file": "README.md",
+      "bytes": 6848,
+      "sha256": "55af86678767c57389b41b8a1be3adf5b2124f457f4a73b724eafb1d7110d772"
+    },
+    {
+      "file": "VERIFICATION.json",
+      "bytes": 1472,
+      "sha256": "5d417dd79664975390071ddcd091dff6e4109dfa5073e2d149cd306e75e3c63f"
+    },
+    {
+      "file": "clean-surfaces.py",
+      "bytes": 17281,
+      "sha256": "dfa764fa64d74563fecfd776a5e0a37ff384ffab27562f3204f4fa1f39f55473"
+    },
+    {
+      "file": "compress-lossless.mjs",
+      "bytes": 5041,
+      "sha256": "2ef0882bebe8fac184b7d8e1ccd3967ebaa226385ab08589a4a03e9f867aafdd"
+    },
+    {
+      "file": "decode.mjs",
+      "bytes": 918,
+      "sha256": "5d37e8d42eddd1c57fa50a9134068627a5a10a1896d55751ea630a29fd408566"
+    },
+    {
+      "file": "merge-scans.py",
+      "bytes": 1560,
+      "sha256": "3dcd2e6dea9d5c2f369ea27652bcab21be9e6a171ea11ffd369dcef36e29912c"
+    },
+    {
+      "file": "package-lock.json",
+      "bytes": 25754,
+      "sha256": "38320089ca763cea915a4bb867156a2566dc17a842f09d3258cbe8a697c76719"
+    },
+    {
+      "file": "package.json",
+      "bytes": 451,
+      "sha256": "5d607b82554c9baebdfee337c54c0bd9f8096e02ef8d145ba9be1ce3ca8fff27"
+    },
+    {
+      "file": "requirements.txt",
+      "bytes": 46,
+      "sha256": "a1b8f198b6171f20c96958420fd4b5210bc20752018a8c361c82aaa8b98b719a"
+    },
+    {
+      "file": "run-pipeline.py",
+      "bytes": 6567,
+      "sha256": "88427da5c8dca532ffabdf3f8924cae5229e7638a5717abea89cce239f3c44f5"
+    },
+    {
+      "file": "sanitize-candidate.py",
+      "bytes": 3211,
+      "sha256": "ad6984f2b62aa7afd5647b8ece229778df4cca2435120c32816a49790d5c8cb9"
+    },
+    {
+      "file": "scan-spatial.py",
+      "bytes": 6505,
+      "sha256": "1cb75c4fce568f431e370a8512d59e50415a8e7c5b0e069b64e3951bde0d3467"
+    },
+    {
+      "file": "test-release.py",
+      "bytes": 5070,
+      "sha256": "b6fc95d128ec1dd90e0da1e96a3a32596b2acb1300f0667bc1aa316c2cd3040e"
+    },
+    {
+      "file": "validate-candidate.py",
+      "bytes": 2940,
+      "sha256": "eec58c9a0918e837fec1c25d62939956772006b94bb17464e616508f480517f7"
+    },
+    {
+      "file": "validate-input.py",
+      "bytes": 6738,
+      "sha256": "9781c0a198687e6278e99fa85cf5c0c005e7a204d85c588a4a41d7575e54c248"
+    }
+  ],
+  "excluded": [
+    "node_modules",
+    ".venv",
+    "verification",
+    "__pycache__"
+  ],
+  "runtimeDeploymentPerformed": false
+}

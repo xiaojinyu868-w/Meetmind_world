@@ -1,0 +1,17 @@
+{
+  "name": "echo-campus-surface-cleanup",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@gltf-transform/core": "^4.2.1",
+    "@gltf-transform/extensions": "^4.2.1",
+    "@gltf-transform/functions": "^4.2.1",
+    "meshoptimizer": "^0.25.0",
+    "draco3dgltf": "^1.5.7"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "description": "Offline audited cleanup for baked static untextured POSITION/NORMAL GLB only"
+}

@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import {FILTERED_GLASS_FUNCTIONS,FILTERED_GLASS_COLOR} from "./TemporalSurfaceFiltering.js";
 
 // World-space surface grain has a metre scale and survives the original CAD UVs.
 export function finishArchitecturalMaterial(material, profile, time) {
@@ -9,14 +10,9 @@ export function finishArchitecturalMaterial(material, profile, time) {
     shader.fragmentShader = `varying vec3 ecWorld; uniform float ecSurfaceTime;
       float ecHash(vec3 p){p=fract(p*.1031);p+=dot(p,p.yzx+33.33);return fract((p.x+p.y)*p.z);}
       float ecNoise(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(mix(ecHash(i),ecHash(i+vec3(1,0,0)),f.x),mix(ecHash(i+vec3(0,1,0)),ecHash(i+vec3(1,1,0)),f.x),f.y),mix(mix(ecHash(i+vec3(0,0,1)),ecHash(i+vec3(1,0,1)),f.x),mix(ecHash(i+vec3(0,1,1)),ecHash(i+vec3(1,1,1)),f.x),f.y),f.z);}
-    ` + shader.fragmentShader;
+    ` + FILTERED_GLASS_FUNCTIONS + shader.fragmentShader;
     let color = "";
-    if(profile === "glass") color=`
-      float pane=ecHash(floor(ecWorld/vec3(1.55,3.65,1.55)));
-      float floorBand=smoothstep(.035,.075,fract(ecWorld.y/3.65));
-      // The facade stays one calm blue-silver mass behind the visitors.
-      diffuseColor.rgb*=mix(.95,1.035,pane)*mix(.93,1.,floorBand);
-      diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.56,.61,.71),.035*pane);`;
+    if(profile === "glass") color=FILTERED_GLASS_COLOR;
     else if(profile === "grass") color=`
       float field=ecNoise(ecWorld*.09)*.7+ecNoise(ecWorld*.42)*.3;
       diffuseColor.rgb*=.92+field*.16;`;
@@ -40,6 +36,6 @@ export function finishArchitecturalMaterial(material, profile, time) {
       vec3 ripple=vec3(sin(ecWorld.x*.38+ecWorld.z*.21+ecSurfaceTime*.24),0.,cos(ecWorld.z*.49-ecWorld.x*.17+ecSurfaceTime*.19))*.013*attenuation;
       normal=normalize(normal+mat3(viewMatrix)*ripple);`);
   };
-  material.customProgramCacheKey=()=>"ec-architectural-surface-v2-"+profile;
+  material.customProgramCacheKey=()=>"ec-architectural-surface-v3-filtered-"+profile;
   material.needsUpdate=true;
 }

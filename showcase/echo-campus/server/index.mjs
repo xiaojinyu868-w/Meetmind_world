@@ -137,11 +137,23 @@ export function createEventServer({
       if (existsSync(file) && statSync(file).isDirectory()) file = resolve(file, "index.html");
       if (!existsSync(file) && !extname(pathname)) file = resolve(root, "index.html");
       if (!existsSync(file) || !statSync(file).isFile()) fail(404, "NOT_FOUND", "页面尚未构建或资源不存在");
+      const extension = extname(file).toLowerCase();
+      const type = MIME[extension] || "application/octet-stream";
+      // Serve an offline gzip sibling for lossless mesh geometry. Byte ranges
+      // remain relative to the original file; no runtime compression work.
+      const acceptsGzip = String(req.headers["accept-encoding"] || "").split(",").some(part => {
+        const [name, ...parameters] = part.trim().toLowerCase().split(";");
+        const q = parameters.find(p => p.trim().startsWith("q="));
+        return name === "gzip" && (!q || Number(q.trim().slice(2)) > 0);
+      });
+      const compressed = extension === ".glb" && !req.headers.range && acceptsGzip && existsSync(file + ".gz") && statSync(file + ".gz").isFile();
+      if (compressed) file += ".gz";
       const stat = statSync(file);
-      const type = MIME[extname(file).toLowerCase()] || "application/octet-stream";
       const headers = {
         "Content-Type": type, "X-Content-Type-Options": "nosniff",
-        "Cache-Control": extname(file) === ".html" ? "no-cache" : "public, max-age=3600",
+        "Cache-Control": extension === ".html" ? "no-cache" : "public, max-age=3600",
+        ...(extension === ".glb" ? {"Vary":"Accept-Encoding"} : {}),
+        ...(compressed ? {"Content-Encoding":"gzip"} : {}),
         "Accept-Ranges": "bytes", "Referrer-Policy": "same-origin",
       };
       let start = 0, end = stat.size - 1, status = 200;

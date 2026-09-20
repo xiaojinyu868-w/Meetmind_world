@@ -1,0 +1,12 @@
+import{NodeIO}from'@gltf-transform/core';
+import{ALL_EXTENSIONS}from'@gltf-transform/extensions';
+import draco3d from'draco3dgltf';
+import{MeshoptDecoder}from'meshoptimizer';
+import fs from'node:fs/promises';
+import{createHash}from'node:crypto';
+await MeshoptDecoder.ready;
+const[input,output]=process.argv.slice(2);if(!input||!output)throw Error('Usage: node decode.mjs ABS_INPUT ABS_OUTPUT');
+const io=new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({'draco3d.decoder':await draco3d.createDecoderModule(),'meshopt.decoder':MeshoptDecoder});
+const doc=await io.read(input);
+for(const ext of doc.getRoot().listExtensionsUsed())if(['KHR_draco_mesh_compression','EXT_meshopt_compression'].includes(ext.extensionName))ext.dispose();
+await io.write(output,doc);const b=await fs.readFile(output);console.log(JSON.stringify({output,bytes:b.length,sha256:createHash('sha256').update(b).digest('hex')}));

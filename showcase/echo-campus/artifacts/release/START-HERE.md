@@ -1,8 +1,8 @@
 # Echo Campus · 从这里开始
 
-## 最新版本：完整园区（2026-09-20）
+## 最新版本：整园表面稳定性修复（2026-09-20）
 
-先打开 [完整园区](https://capture.meetmind.online/echo-campus/?venue=venue-campus&view=event&camera=hero)，再阅读 [FULL-CAMPUS-20260920.md 最新发布报告](FULL-CAMPUS-20260920.md)。塔楼、T6 主楼、HUB 中庭、C 地块与连廊已按原始工程坐标组合，可从全景切换到各分区及活动入口。
+先打开 [完整园区](https://capture.meetmind.online/echo-campus/?venue=venue-campus&view=event&camera=hero)，再阅读 [GLOBAL-SURFACE-STABILITY-20260920.md 最新发布报告](GLOBAL-SURFACE-STABILITY-20260920.md)。塔楼、T6 主楼、HUB 中庭、C 地块与连廊已按原始工程坐标组合，可从全景切换到各分区及活动入口。
 
 下文保留 2026-09-18 三单体预览与当时交付记录，供来源追溯；不代表当前默认入口或最新验收状态。
 

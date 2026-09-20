@@ -33,3 +33,8 @@ ECHO_GLTF_TOOLS=/root/.npm/_npx/a6797f7ff67bb1f2/node_modules node scripts/build
 压缩只做有误差界的 meshoptimizer 简化与 Draco 编码，不按重要性删除建筑。审计包含每来源构建面数、组件排除与原因、逐来源压缩前后边界、材质集合、高于20米的真实三角面投影10米网格覆盖以及解码回读面数。
 
 文件：`venue-campus.assembly.audit.json`、`venue-campus.compression.audit.json`。独立源对照检查见本地 `output/full-campus-source-audit/assembly-review.json`。这些几何检查不能代替浏览器的全园与拼接处视觉检查。
+
+
+## 发布前的表面清理
+
+以上流程描述原始组合及历史 Draco 派生版本。当前网页采用在该版本上执行整园表面清理、全空间覆盖复查和无损 Meshopt 压缩后的派生资产。重新组合模型后不能跳过清理直接覆盖线上资产：使用 [surface-stability/README.md](surface-stability/README.md) 中的独立 CLI，要求其扫描与解码读回门禁通过，再做连续运镜验收。若留下数值边界残余，CLI 会失败；必须另存逐对人工复核与明确的例外决定，不能静默绕过或称零残留。该 CLI 仅接受米制、已展开坐标、POSITION/NORMAL 静态模型；UV、蒙皮等资产会明确拒绝，不能直接处理 Marble SPZ。

@@ -32,3 +32,13 @@ test("assembled campus uses the same prepared geometry for source and event with
  await assert.rejects(loadVenueAsset({id:"venue-campus",manifest:campus,baseUrl,view:"event",importer:async()=>{attempts++;throw Error("missing assembly");}}),/missing assembly/);
  assert.equal(attempts,1);
 });
+
+
+test("cleaned campus does not apply source-name depth bias or wrap asset disposal",async()=>{
+ const material={name:"石材幕墙",polygonOffset:false,polygonOffsetUnits:0};
+ const dispose=()=>{};const root={traverse(fn){fn({isMesh:true,material,userData:{sourceVenue:"venue-c-commercial-20230518"}})}};
+ for(const view of ["event","source"]){
+  const result=await loadVenueAsset({id:"venue-campus",manifest:{url:"campus.glb"},view,baseUrl,importer:async()=>({root,dispose})});
+  assert.equal(result.root,root);assert.equal(result.dispose,dispose);assert.equal(material.polygonOffset,false);assert.equal(material.polygonOffsetUnits,0);assert.equal(result.surfaceDepth,undefined);
+ }
+});

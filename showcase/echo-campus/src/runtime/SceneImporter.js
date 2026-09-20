@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
+import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { validateManifest } from "./SceneManifest.js";
 
 // Decoder files belong to the app, not the imported model. A separate manager
@@ -15,6 +16,7 @@ export async function loadGLTFWithDraco(url, manager, {
     draco.setWorkerLimit(2);
     const loader = new GLTFLoaderImpl(manager);
     loader.setDRACOLoader(draco);
+    loader.setMeshoptDecoder(MeshoptDecoder);
     return await loader.loadAsync(url);
   } finally {
     draco.dispose();

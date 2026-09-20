@@ -234,6 +234,7 @@ test("Draco decoder stays app-local and disposes workers on success and failure"
     class FakeGLTF {
       constructor(manager) { this.manager = manager; loader = this; }
       setDRACOLoader(value) { this.draco = value; return this; }
+      setMeshoptDecoder(value) { assert.ok(value.decodeGltfBuffer); this.meshopt = value; return this; }
       async loadAsync(url) {
         assert.equal(this.manager.resolveURL(url), "blob:test/model");
         assert.equal(this.draco.manager.resolveURL(this.draco.path + "draco_decoder.wasm"), "/echo-campus/draco/draco_decoder.wasm");

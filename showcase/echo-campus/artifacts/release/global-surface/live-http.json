@@ -1,0 +1,24 @@
+{
+  "time": "2026-09-20T16:03:22.352Z",
+  "expectedSha256": "0d54868c8b7a8cc820fa88352d9fb89eb8a64a9f1692599b0f15472aff5d6ee5",
+  "checks": [
+    "Range remains original GLB bytes",
+    "gzip opt-out HEAD length",
+    "live precision bundle"
+  ],
+  "health": {
+    "ok": true,
+    "service": "echo-campus-event",
+    "mode": "demo",
+    "version": 12
+  },
+  "modelUrl": "https://capture.meetmind.online/echo-campus/scenes/venue/venue-campus.glb?v=0d54868c8b7a8cc8",
+  "download": {
+    "bytes": 60910544,
+    "wireBytes": 35429547,
+    "encoding": "gzip",
+    "sha256": "0d54868c8b7a8cc820fa88352d9fb89eb8a64a9f1692599b0f15472aff5d6ee5"
+  },
+  "bundle": "./assets/index-DH9dMyLy.js",
+  "passed": true
+}

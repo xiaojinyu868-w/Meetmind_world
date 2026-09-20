@@ -15,6 +15,10 @@ import {createLandscapeSite} from "./runtime/LandscapeSite.js";
 import {createContextLandscape} from "./runtime/ContextLandscape.js";
 import {createArchitectureShadows} from "./runtime/ArchitectureShadows.js";
 import {createRenderFinish} from "./runtime/RenderFinish.js";
+import {createPrecisionRenderFinish} from "./runtime/PrecisionRenderFinish.js";
+import {chooseDepthPrecision,probeDepthPrecisionContext,precisionCameraRange,cachePrecisionBounds,adaptPolygonOffsetMaterials} from "./runtime/RenderPrecision.js";
+import {stablePcfShadowChunk} from "./runtime/TemporalSurfaceFiltering.js";
+import {resumeDepthIfCurrent,consumeStandardDepthResume} from "./runtime/DepthModeResume.js";
 import {profileCameraPreset} from "./runtime/ProfileFraming.js";
 import {createEventLook} from "./runtime/EventLook.js";
 import {prepareVenueEntourage} from "./runtime/VenueEntourage.js";
@@ -24,7 +28,7 @@ import {readSceneStartup} from "./runtime/SceneStartup.js";
 import {AppUI} from "./ui/AppUI.js";
 import {installCanvasRecorder} from "./runtime/CanvasRecorder.js";
 import {venueById,loadVenueManifest,startupVenueFromSearch,resolveStartupVenue,venueViewLoadOptions} from "./runtime/VenueCatalog.js";
-import {inspectModelBounds,applyModelFraming,calibratedCheckpoints,setEventLayersVisible,CHECKPOINT_IDS,cameraForVenueView,nearPlaneForDistance,fitBuildingPreset,presentationBoundsForModel} from "./runtime/VenuePresentation.js";
+import {inspectModelBounds,applyModelFraming,calibratedCheckpoints,setEventLayersVisible,CHECKPOINT_IDS,cameraForVenueView,fitBuildingPreset,presentationBoundsForModel} from "./runtime/VenuePresentation.js";
 
 const canvas=document.getElementById("world");
 const params=new URLSearchParams(location.search);
@@ -32,7 +36,13 @@ const reduced=matchMedia("(prefers-reduced-motion:reduce)").matches;
 const mobile=matchMedia("(pointer:coarse)").matches||innerWidth<700;
 const requestedQuality=params.get("quality");
 const quality=["low","balanced","cinema"].includes(requestedQuality)?requestedQuality:requestedQuality==="high"?"cinema":mobile?"low":"balanced";
-const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,preserveDrawingBuffer:params.has("capture")});
+const contextOptions={antialias:true,alpha:false,preserveDrawingBuffer:params.has("capture")};
+const context=canvas.getContext("webgl2",contextOptions);
+const depthProbe=probeDepthPrecisionContext(context,{requestedSamples:quality==="low"?2:4});
+const depthPlan=chooseDepthPrecision({...depthProbe,clipControl:depthProbe.clipControl&&params.get("depth")!=="standard"&&!!startupVenueFromSearch(location.search)});
+const renderer=new THREE.WebGLRenderer({canvas,context,...contextOptions,...depthPlan.rendererOptions});
+const reversedDepth=!!renderer.capabilities.reversedDepthBuffer;
+THREE.ShaderChunk.shadowmap_pars_fragment=stablePcfShadowChunk(THREE.ShaderChunk.shadowmap_pars_fragment);
 renderer.setPixelRatio(Math.min(devicePixelRatio,quality==="cinema"?1.75:quality==="low"?1:1.25));
 renderer.outputColorSpace=THREE.SRGBColorSpace;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
@@ -43,7 +53,23 @@ const scene=new THREE.Scene();
 scene.background=new THREE.Color(0xe2e7df);
 scene.fog=new THREE.Fog(0xe2e7df,95,240);
 const camera=new THREE.PerspectiveCamera(43,innerWidth/innerHeight,.12,350);
-const renderFinish=createRenderFinish(renderer,scene,camera,quality);
+camera._reversedDepth=reversedDepth;camera.updateProjectionMatrix();
+const renderFinish=reversedDepth?createPrecisionRenderFinish(renderer,scene,camera,quality,{samples:depthProbe.samples}):createRenderFinish(renderer,scene,camera,quality);
+let precisionBounds=[];
+const precisionDirection=new THREE.Vector3();
+function refreshDepthMaterials(){adaptPolygonOffsetMaterials(scene,reversedDepth);}
+function updateDepthRange(){
+ if(!currentScene)return;
+ if(currentScene.config?.type==="splat"){if(camera.near!==.12){camera.near=.12;camera.updateProjectionMatrix();}return;}
+ const boxes=precisionBounds.slice();
+ if(actors.visible)for(const value of people.values()){
+  const p=value.root.position;
+  boxes.push({min:{x:p.x-1.5,y:p.y-.5,z:p.z-1.5},max:{x:p.x+1.5,y:p.y+3.5,z:p.z+1.5}});
+ }
+ camera.getWorldDirection(precisionDirection);
+ const range=precisionCameraRange({boxes,position:camera.position,forward:precisionDirection,reversed:reversedDepth,baselineFar:Math.max(350,camera.far)});
+ if(Math.abs(camera.near-range.near)>.00001||camera.far!==range.far){camera.near=range.near;camera.far=range.far;camera.updateProjectionMatrix();}
+}
 const controls=new OrbitControls(camera,canvas);
 controls.enableDamping=true;controls.dampingFactor=.06;controls.minDistance=6;controls.maxDistance=130;
 controls.minPolarAngle=.15;controls.maxPolarAngle=Math.PI*.485;
@@ -114,7 +140,7 @@ function addPerson(person,index,animate=false){
  character.root.userData.personId=person.id;
  character.root.traverse(o=>{o.userData.personId=person.id;});
  const pos=personPosition(index,person.id===client.me?.attendee?.id,person);character.root.position.set(pos.x,pos.y||0,pos.z);character.root.rotation.y=pos.yaw||0;
- actors.add(character.root);
+ actors.add(character.root);adaptPolygonOffsetMaterials(character.root,reversedDepth);
  people.set(person.id,{...character,person,index,pos,arrival:animate?time:null,reactionUntil:0});
  if(animate){character.root.scale.setScalar(.02);chime();}
  return character;
@@ -156,7 +182,7 @@ async function setVenueView(view,{updateUrl=true,moveCamera=true,reloadAsset=tru
  if(activeVenue&&next==="source"){showcaseTimers.forEach(clearTimeout);showcaseTimers=[];showcaseStarted=false;tour=null;cameraMove=null;}
  keys.clear();clearSelection();
  setEventLayersVisible([actors,linkRoot,markerRoot,hoverRoot,activityMarkerRoot,...(currentScene?.eventGarden?[currentScene.eventGarden.root]:[]),...(currentScene?.landscapeSite?[currentScene.landscapeSite.root]:[]),...(currentScene?.contextLandscape?[currentScene.contextLandscape.root]:[])],venueView==="event");
- currentScene?.eventLook?.setEnabled(venueView==="event");
+ currentScene?.eventLook?.setEnabled(venueView==="event");refreshDepthMaterials();
  renderFinish.setEnabled(venueView==="event");
  currentScene?.eventEntourage?.setEvent(venueView==="event");
  currentScene?.architectureShadows?.setEnabled(venueView==="event");
@@ -171,7 +197,15 @@ function restoreBuiltInFraming(){
  Object.assign(sun.shadow.camera,{left:-53,right:53,top:48,bottom:-48,near:1,far:145});sun.shadow.camera.updateProjectionMatrix();sun.shadow.needsUpdate=true;
 }
 async function switchScene(id,options={}){
- const serial=++switchSerial;UI.setBusy("正在准备场景");document.getElementById("loading-detail").textContent="正在读取建筑与景观";
+ const serial=++switchSerial;
+ // Reflector's oblique clipping and imported splats retain their verified
+ // conventional-depth path. Preserve the requested import through the reload.
+ if(reversedDepth&&(id==="campus"||id==="gallery"||options.manifest?.type==="splat")){
+  const redirecting=await resumeDepthIfCurrent({id,options},{isCurrent:()=>serial===switchSerial});
+  if(!redirecting)return;
+  return new Promise(()=>{});
+ }
+ UI.setBusy("正在准备场景");document.getElementById("loading-detail").textContent="正在读取建筑与景观";
  let result;
  try{
   const candidate=venueById(id);
@@ -198,9 +232,10 @@ async function switchScene(id,options={}){
    // A distant visual ground closes gaps beyond the supplied survey slab.
    // It sits below all source geometry and never changes walking or model bounds.
    const backdropMaterial=new THREE.MeshBasicMaterial({color:0xb9c4c0,fog:true,transparent:true,depthWrite:false});
-   if(manifest.siteMode==="campus"){backdropMaterial.transparent=false;backdropMaterial.depthWrite=true;}
-   else backdropMaterial.onBeforeCompile=shader=>{shader.vertexShader="varying vec3 backdropViewPosition;\n"+shader.vertexShader.replace("#include <project_vertex>","#include <project_vertex>\nbackdropViewPosition=mvPosition.xyz;");shader.fragmentShader="varying vec3 backdropViewPosition;\n"+shader.fragmentShader.replace("#include <opaque_fragment>","diffuseColor.a *= 1.0-smoothstep(350.0,1050.0,length(backdropViewPosition));\n#include <opaque_fragment>");};
-   backdropMaterial.customProgramCacheKey=()=>"distant-ground-fade-v1";
+   // Keep the surveyed park opaque underneath; fade only its distant surround before the far clip.
+   const backdropFade=manifest.siteMode==="campus"?[Math.max(350,modelBounds.radius*2.8),Math.max(1050,modelBounds.radius*4.8)]:[350,1050];
+   backdropMaterial.onBeforeCompile=shader=>{shader.uniforms.backdropFade={value:new THREE.Vector2(...backdropFade)};shader.vertexShader="varying vec3 backdropViewPosition;\n"+shader.vertexShader.replace("#include <project_vertex>","#include <project_vertex>\nbackdropViewPosition=mvPosition.xyz;");shader.fragmentShader="uniform vec2 backdropFade;\nvarying vec3 backdropViewPosition;\n"+shader.fragmentShader.replace("#include <opaque_fragment>","diffuseColor.a *= 1.0-smoothstep(backdropFade.x,backdropFade.y,length(backdropViewPosition));\n#include <opaque_fragment>");};
+   backdropMaterial.customProgramCacheKey=()=>"distant-ground-fade-v2";
    const backdrop=new THREE.Mesh(new THREE.PlaneGeometry(8000,8000),backdropMaterial);
    backdrop.name="Distant landscape horizon";backdrop.rotation.x=-Math.PI/2;
    backdrop.position.set(modelBounds.center.x,Math.min(-4,modelBounds.box.min.y-1),modelBounds.center.z);
@@ -231,7 +266,7 @@ async function switchScene(id,options={}){
   scene.environment=result.environment||env.texture;
   if(candidate)applyModelFraming({bounds:modelBounds,cameras:result.cameras,config:manifest,camera,controls,sun,scene});else restoreBuiltInFraming();
   previous?.dispose?.();renderer.renderLists.dispose();
-  syncPeople(client.snapshot);buildActivityMarkers();
+  syncPeople(client.snapshot);buildActivityMarkers();precisionBounds=cachePrecisionBounds(result.root,{exclude:result.backdrop});precisionBounds.push(...cachePrecisionBounds(activityMarkerRoot));refreshDepthMaterials();
   UI.setSceneLabel(candidate?.name||(id==="import"?manifest.name||"我的场景":getSceneDefinition(id).displayName),id);
   const url=new URL(location.href);url.searchParams.delete("scene");url.searchParams.delete("venue");url.searchParams.delete("camera");
   if(candidate){url.searchParams.delete("sceneManifest");url.searchParams.set("venue",id);if(options.scope==="building")url.searchParams.set("scope","building");else if(id==="venue-campus")url.searchParams.delete("scope");}
@@ -383,7 +418,7 @@ function tick(now){
  if(cameraMove){const p=Math.min(1,(now-cameraMove.start)/cameraMove.duration),e=p*p*(3-2*p);camera.position.lerpVectors(cameraMove.fromP,cameraMove.toP,e);controls.target.lerpVectors(cameraMove.fromT,cameraMove.toT,e);camera.fov=THREE.MathUtils.lerp(cameraMove.fromFov,cameraMove.toFov,e);camera.updateProjectionMatrix();if(p>=1)cameraMove=null;}
  if(tour&&!paused){const t=(now-tour.started)/1000,angle=t*.035;const offset=tour.base.clone().sub(tour.target).applyAxisAngle(new THREE.Vector3(0,1,0),angle);camera.position.copy(tour.target).add(offset);controls.target.copy(tour.target);}
  controls.update();
- if(activeVenue){const near=nearPlaneForDistance(camera.position.distanceTo(controls.target));if(Math.abs(camera.near-near)>.0001){camera.near=near;camera.updateProjectionMatrix();}}
+ updateDepthRange();
  if(!paused){
   moveView(dt);
   currentScene?.update(dt,time);currentScene?.eventLook?.update?.(dt,camera,controls.target);
@@ -405,7 +440,7 @@ function tick(now){
 requestAnimationFrame(tick);
 function diagnostics(){
  let meshes=0,materials=new Set(),geometries=new Set();scene.traverse(o=>{if(o.isMesh){meshes++;geometries.add(o.geometry);(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>materials.add(m));}});
- return {venue:activeVenue?.id||null,venueView,venueAsset:currentScene?.venueAsset,eventReady:venueEventReady,renderer:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures},fps,dpr:renderer.getPixelRatio(),scene:sceneId,people:people.size,characterPresentation:"continuous-social",meshes,materials:materials.size,geometries:geometries.size,postPasses:renderFinish.passes,shadowMapSize:sun.shadow.mapSize.x,quality,online:UI.online,premiumCharacters:!!premiumLibrary,gardenItems:currentScene?.eventGarden?.layout?.items?.length||0,landscapeSite:currentScene?.landscapeSite?.diagnostics,contextLandscape:currentScene?.contextLandscape?.diagnostics,architectureShadows:currentScene?.architectureShadows?.diagnostics,eventLook:currentScene?.eventLook?.diagnostics};
+ return {venue:activeVenue?.id||null,venueView,venueAsset:currentScene?.venueAsset,eventReady:venueEventReady,depthPrecision:{mode:depthPlan.mode,probe:depthProbe,target:renderFinish.diagnostics,near:camera.near,far:camera.far,bounds:precisionBounds.length},renderer:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures},fps,dpr:renderer.getPixelRatio(),scene:sceneId,people:people.size,characterPresentation:"continuous-social",meshes,materials:materials.size,geometries:geometries.size,postPasses:renderFinish.passes,shadowMapSize:sun.shadow.mapSize.x,quality,online:UI.online,premiumCharacters:!!premiumLibrary,gardenItems:currentScene?.eventGarden?.layout?.items?.length||0,landscapeSite:currentScene?.landscapeSite?.diagnostics,contextLandscape:currentScene?.contextLandscape?.diagnostics,architectureShadows:currentScene?.architectureShadows?.diagnostics,eventLook:currentScene?.eventLook?.diagnostics};
 }
 window.__THREE_GAME_DIAGNOSTICS__=diagnostics;
 installCanvasRecorder(canvas, diagnostics);
@@ -416,10 +451,12 @@ if(params.has("capture")||params.has("debug")){
 (async()=>{
  try{
   premiumLoadPromise=loadCharacterLibrary({baseUrl:document.baseURI}).then(library=>{premiumLibrary=library;}).catch(error=>console.warn("Premium characters unavailable",error.message));
+  const resume=await consumeStandardDepthResume();
   const requestedVenue=startupVenueFromSearch(location.search);
   // Existing partner links showed T6 alone. Keep their entrance framing while loading the complete campus.
   const startupVenue=resolveStartupVenue(location.search);
-  if(requestedVenue){
+  if(resume){await switchScene(resume.id,resume.options);const url=new URL(location.href);url.searchParams.delete("depthResume");history.replaceState(null,"",url);}
+  else if(requestedVenue){
    if(!venueById(requestedVenue))throw new Error("未找到此源模型，请从场地面板选择");
    await switchScene(startupVenue,{view:params.get("view")||(startupVenue==="venue-campus"?"event":"source"),camera:params.get("camera")||undefined});
   }else{

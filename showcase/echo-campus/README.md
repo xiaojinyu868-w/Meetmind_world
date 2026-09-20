@@ -8,15 +8,17 @@
 
 项目独立于 EchoWorld 线上业务。默认入口现为按原始工程坐标组合的完整园区，包含塔楼、T6 主楼、HUB 中庭、C 地块及连廊；三个历史单体预览和早期程序化「白庭校园」「水上艺廊」仍可单独查看。活动服务支持演示分身领取、公开供需名片、匹配理由、双方确认相遇与跨设备同步。
 
-## 屋面闪烁修复（2026-09-20）
+## 整园表面稳定性修复（2026-09-20）
 
-已定位 C 商业屋顶饰面与基底共面造成的镜头闪烁，并按来源/材质设置有限深度优先级；T6 混凝土基底同类面同步处理。远景阴影按覆盖范围修正，近景人物接触阴影不变，原 GLB 几何保持原哈希。167 项测试及真实浏览器轨道、缩放、建筑/活动层和移动视口复查通过。详见 [修复与证据](artifacts/release/ROOF-FLICKER-FIX-20260920.md)。
+完整园区采用全模型覆盖清理后的建筑资产，并移除上一版按材质名称设置的局部深度补丁。支持的设备使用 32 位浮点反向深度，阴影与玻璃细纹使用稳定采样；旧设备保留常规深度兼容路径。建筑独占区域、原工程坐标和人物骨骼动画保留。清理范围、资产哈希、连续镜头验收和设备边界见 [整园修复与证据](artifacts/release/GLOBAL-SURFACE-STABILITY-20260920.md)。
+
+此前 [局部屋面修复](artifacts/release/ROOF-FLICKER-FIX-20260920.md) 属于历史版本，已由本次模型与渲染联合修复取代。
 
 ## 完整园区（2026-09-20）
 
-[打开完整园区](https://capture.meetmind.online/echo-campus/?venue=venue-campus&view=event&camera=hero) · [最新发布报告](artifacts/release/FULL-CAMPUS-20260920.md)
+[打开完整园区](https://capture.meetmind.online/echo-campus/?venue=venue-campus&view=event&camera=hero) · [最新表面稳定性报告](artifacts/release/GLOBAL-SURFACE-STABILITY-20260920.md)
 
-园区来自五份已核验的原始工程来源：T1–3 塔楼、T6 雨棚/主楼、HUB 中庭、20230518 C 商业裙房与高塔、UFO+escalator 连廊。实例在原工程坐标展开后统一换至现有 T6 坐标，重叠道路与连廊按来源审计选择一个版本；未凭猜测摆放建筑。组合资产 `venue-campus.glb` 为 **17,231,728 字节、4,801,389 个三角面**，构建与压缩审计见 `public/scenes/venue/venue-campus.*.audit.json`。
+园区来自五份已核验的原始工程来源：T1–3 塔楼、T6 雨棚/主楼、HUB 中庭、20230518 C 商业裙房与高塔、UFO+escalator 连廊。实例在原工程坐标展开后统一换至现有 T6 坐标，重叠道路与连廊按来源审计选择一个版本；未凭猜测摆放建筑。当前清理后资产 `venue-campus.glb` 为 **60,910,544 字节、4,618,716 个三角面**，离线 gzip 传输约 35.4 MB。Meshopt 压缩按 float32 原字节无损读回验证；几何清理本身会裁剪重复覆盖，不称原模型逐面无损。初次组合与旧 Draco 压缩审计保留作为历史来源，本次审计见 `venue-campus.surface-stability.audit.json`。
 
 - 底部四机位为完整园区 `hero`、活动入口 `arrival`、近看交流 `garden`、总平面 `aerial`；分区按钮对应塔楼 `towers`、HUB 中庭 `hub`、C 地块 `commercial`。
 - 无参数链接默认进入完整园区。旧 `venue=venue-ab-canopy&view=event` 活动链接迁移至完整园区并保留指定镜头；`view=source` 原单体直链不迁移。显式 `scope=building` 保留单体，视图切换、刷新和分享均延续该选择。

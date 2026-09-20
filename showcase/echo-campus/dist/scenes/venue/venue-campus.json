@@ -2,7 +2,7 @@
   "schema": "echo-campus.scene.v1",
   "name": "完整园区 · AB 与 C 地块",
   "type": "glb",
-  "url": "./venue-campus.glb",
+  "url": "./venue-campus.glb?v=0d54868c8b7a8cc8",
   "scale": 1,
   "position": [
     0,

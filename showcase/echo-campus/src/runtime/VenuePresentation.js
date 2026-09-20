@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import {eventShadowTuning} from "./EventShadowTuning.js";
 
 export function inspectModelBounds(root) {
   root.updateMatrixWorld(true);
@@ -43,7 +44,8 @@ export function applyModelFraming({bounds,cameras,config={},camera,controls,sun,
   scene.fog=new THREE.Fog(scene.background,frame.fogNear,frame.fogFar);
   sun.position.copy(frame.sunPosition);sun.target.position.copy(frame.sunTarget);
   Object.assign(sun.shadow.camera,{left:-frame.shadowSpan,right:frame.shadowSpan,top:frame.shadowSpan,bottom:-frame.shadowSpan,near:frame.shadowNear,far:frame.shadowFar});
-  sun.shadow.bias=frame.shadowBias;sun.shadow.normalBias=frame.shadowNormalBias;
+  const tuning=eventShadowTuning({wide:frame.shadowSpan>80,span:frame.shadowSpan,mapSize:Math.min(sun.shadow.mapSize.x,sun.shadow.mapSize.y),near:frame.shadowNear,far:frame.shadowFar,sunDirection:frame.sunPosition.clone().sub(frame.sunTarget)});
+  Object.assign(sun.shadow,{bias:tuning.bias,normalBias:tuning.normalBias,radius:tuning.radius});
   sun.shadow.camera.updateProjectionMatrix();sun.shadow.needsUpdate=true;
   return frame;
 }

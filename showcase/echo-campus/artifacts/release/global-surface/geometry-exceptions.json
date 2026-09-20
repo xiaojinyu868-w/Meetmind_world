@@ -1,0 +1,316 @@
+{
+  "file": "candidate-pass5-clean.glb",
+  "pairs": 6,
+  "totalProjectedAreaSquareMetres": 0.002079850814487523,
+  "largestWidthMicrometres": 14.75629711624437,
+  "allSameMaterial": true,
+  "allExactlyCoplanar": true,
+  "residuals": [
+    {
+      "triangles": [
+        438237,
+        441970
+      ],
+      "a": {
+        "mesh": 17,
+        "primitive": 1,
+        "source": "venue-ab-towers",
+        "material": "[Color M03]11"
+      },
+      "b": {
+        "mesh": 17,
+        "primitive": 1,
+        "source": "venue-ab-towers",
+        "material": "[Color M03]11"
+      },
+      "projectedArea": 0.00045774053174141294,
+      "maxSymmetricPlaneGap": 0.0,
+      "bounds": [
+        [
+          124.83892822265625,
+          11.100166320800781,
+          -173.2457275390625
+        ],
+        [
+          124.83892822265625,
+          141.94952392578125,
+          -173.17124938964844
+        ]
+      ],
+      "overlapLengthMetres": 130.751089428461,
+      "overlapMaximumWidthMetres": 7.001706922873822e-06,
+      "widthMicrometres": 7.001706922873821,
+      "strictlyCoplanar": true,
+      "sameMaterialIndex": true,
+      "materialIndices": [
+        17,
+        17
+      ],
+      "materialBaseColor": [
+        0.7835377915261935,
+        0.7835377915261935,
+        0.7835377915261935,
+        1
+      ],
+      "geometricNormalDot": 1.0,
+      "maxSampledInterpolatedShadingNormalDifference": 0.0,
+      "shadingNormalSampling": "intersection polygon vertices and centroid",
+      "classification": "Float32 cut-boundary sliver; repeated exact difference and float32 reconstruction cannot represent a narrower boundary without moving exclusive geometry"
+    },
+    {
+      "triangles": [
+        438292,
+        441971
+      ],
+      "a": {
+        "mesh": 17,
+        "primitive": 1,
+        "source": "venue-ab-towers",
+        "material": "[Color M03]11"
+      },
+      "b": {
+        "mesh": 17,
+        "primitive": 1,
+        "source": "venue-ab-towers",
+        "material": "[Color M03]11"
+      },
+      "projectedArea": 0.00045774053174141294,
+      "maxSymmetricPlaneGap": 0.0,
+      "bounds": [
+        [
+          126.33880615234375,
+          11.100166320800781,
+          -173.2457275390625
+        ],
+        [
+          126.33880615234375,
+          141.94952392578125,
+          -173.17124938964844
+        ]
+      ],
+      "overlapLengthMetres": 130.751089428461,
+      "overlapMaximumWidthMetres": 7.001706922873822e-06,
+      "widthMicrometres": 7.001706922873821,
+      "strictlyCoplanar": true,
+      "sameMaterialIndex": true,
+      "materialIndices": [
+        17,
+        17
+      ],
+      "materialBaseColor": [
+        0.7835377915261935,
+        0.7835377915261935,
+        0.7835377915261935,
+        1
+      ],
+      "geometricNormalDot": 1.0,
+      "maxSampledInterpolatedShadingNormalDifference": 0.0,
+      "shadingNormalSampling": "intersection polygon vertices and centroid",
+      "classification": "Float32 cut-boundary sliver; repeated exact difference and float32 reconstruction cannot represent a narrower boundary without moving exclusive geometry"
+    },
+    {
+      "triangles": [
+        729413,
+        730793
+      ],
+      "a": {
+        "mesh": 82,
+        "primitive": 0,
+        "source": "venue-ab-towers",
+        "material": "[Color A04]"
+      },
+      "b": {
+        "mesh": 82,
+        "primitive": 0,
+        "source": "venue-ab-towers",
+        "material": "[Color A04]"
+      },
+      "projectedArea": 0.00044646612695942167,
+      "maxSymmetricPlaneGap": 0.0,
+      "bounds": [
+        [
+          149.6884765625,
+          -5.340576171875e-05,
+          -325.14837646484375
+        ],
+        [
+          222.86962890625,
+          -5.340576171875e-05,
+          -189.44972229003906
+        ]
+      ],
+      "overlapLengthMetres": 143.51223266636822,
+      "overlapMaximumWidthMetres": 6.2219878552881415e-06,
+      "widthMicrometres": 6.221987855288141,
+      "strictlyCoplanar": true,
+      "sameMaterialIndex": true,
+      "materialIndices": [
+        82,
+        82
+      ],
+      "materialBaseColor": [
+        0.0953074666309647,
+        0.0953074666309647,
+        0.09084171118340768,
+        1
+      ],
+      "geometricNormalDot": 1.0,
+      "maxSampledInterpolatedShadingNormalDifference": 0.0,
+      "shadingNormalSampling": "intersection polygon vertices and centroid",
+      "classification": "Float32 cut-boundary sliver; repeated exact difference and float32 reconstruction cannot represent a narrower boundary without moving exclusive geometry"
+    },
+    {
+      "triangles": [
+        3530613,
+        3532045
+      ],
+      "a": {
+        "mesh": 453,
+        "primitive": 0,
+        "source": "venue-c-commercial-20230518",
+        "material": "石膏"
+      },
+      "b": {
+        "mesh": 453,
+        "primitive": 0,
+        "source": "venue-c-commercial-20230518",
+        "material": "石膏"
+      },
+      "projectedArea": 0.00031941884042140274,
+      "maxSymmetricPlaneGap": 0.0,
+      "bounds": [
+        [
+          343.78350830078125,
+          23.700275421142578,
+          79.49606323242188
+        ],
+        [
+          353.0445556640625,
+          23.700275421142578,
+          177.51644897460938
+        ]
+      ],
+      "overlapLengthMetres": 87.91029296415248,
+      "overlapMaximumWidthMetres": 7.266928802927092e-06,
+      "widthMicrometres": 7.266928802927092,
+      "strictlyCoplanar": true,
+      "sameMaterialIndex": true,
+      "materialIndices": [
+        453,
+        453
+      ],
+      "materialBaseColor": [
+        0.1714411007328226,
+        0.1589608350608804,
+        0.14412847085805777,
+        1
+      ],
+      "geometricNormalDot": 1.0,
+      "maxSampledInterpolatedShadingNormalDifference": 0.0,
+      "shadingNormalSampling": "intersection polygon vertices and centroid",
+      "classification": "Float32 cut-boundary sliver; repeated exact difference and float32 reconstruction cannot represent a narrower boundary without moving exclusive geometry"
+    },
+    {
+      "triangles": [
+        3542546,
+        3543911
+      ],
+      "a": {
+        "mesh": 454,
+        "primitive": 0,
+        "source": "venue-c-commercial-20230518",
+        "material": "银白色金属板"
+      },
+      "b": {
+        "mesh": 454,
+        "primitive": 0,
+        "source": "venue-c-commercial-20230518",
+        "material": "银白色金属板"
+      },
+      "projectedArea": 0.00022172648342461913,
+      "maxSymmetricPlaneGap": 0.0,
+      "bounds": [
+        [
+          343.7845458984375,
+          40.99969482421875,
+          151.62112426757812
+        ],
+        [
+          359.29034423828125,
+          40.99969482421875,
+          177.51644897460938
+        ]
+      ],
+      "overlapLengthMetres": 30.05177640308602,
+      "overlapMaximumWidthMetres": 1.475629711624437e-05,
+      "widthMicrometres": 14.75629711624437,
+      "strictlyCoplanar": true,
+      "sameMaterialIndex": true,
+      "materialIndices": [
+        454,
+        454
+      ],
+      "materialBaseColor": [
+        0.6514056374198242,
+        0.6514056374198242,
+        0.6514056374198242,
+        1
+      ],
+      "geometricNormalDot": 1.0,
+      "maxSampledInterpolatedShadingNormalDifference": 0.0,
+      "shadingNormalSampling": "intersection polygon vertices and centroid",
+      "classification": "Float32 cut-boundary sliver; repeated exact difference and float32 reconstruction cannot represent a narrower boundary without moving exclusive geometry"
+    },
+    {
+      "triangles": [
+        755078,
+        755365
+      ],
+      "a": {
+        "mesh": 104,
+        "primitive": 0,
+        "source": "venue-ab-towers",
+        "material": "lamp"
+      },
+      "b": {
+        "mesh": 104,
+        "primitive": 0,
+        "source": "venue-ab-towers",
+        "material": "lamp"
+      },
+      "projectedArea": 0.00017675830019925343,
+      "maxSymmetricPlaneGap": 0.0,
+      "bounds": [
+        [
+          128.22039794921875,
+          -1.2496166229248047,
+          103.70428466796875
+        ],
+        [
+          133.37481689453125,
+          -1.2496166229248047,
+          184.28973388671875
+        ]
+      ],
+      "overlapLengthMetres": 70.34686330830688,
+      "overlapMaximumWidthMetres": 5.025334545606373e-06,
+      "widthMicrometres": 5.025334545606373,
+      "strictlyCoplanar": true,
+      "sameMaterialIndex": true,
+      "materialIndices": [
+        104,
+        104
+      ],
+      "materialBaseColor": [
+        0.9822505503331171,
+        0.9130986517934192,
+        0.7912979403326302,
+        1
+      ],
+      "geometricNormalDot": 1.0,
+      "maxSampledInterpolatedShadingNormalDifference": 0.0,
+      "shadingNormalSampling": "intersection polygon vertices and centroid",
+      "classification": "Float32 cut-boundary sliver; repeated exact difference and float32 reconstruction cannot represent a narrower boundary without moving exclusive geometry"
+    }
+  ]
+}
