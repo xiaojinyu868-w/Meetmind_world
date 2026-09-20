@@ -1,0 +1,36 @@
+{
+  "before": {
+    "worldPatch": {
+      "x": [
+        253,
+        254
+      ],
+      "y": 39.5,
+      "z": [
+        220,
+        221
+      ]
+    },
+    "frames": 12,
+    "meanSpatialStdRgb8": 6.256617991623699,
+    "meanTemporalStdRgb8": 47.34346248937512,
+    "meanFrameDeltaRgb8": 61.79876893939394
+  },
+  "after": {
+    "worldPatch": {
+      "x": [
+        253,
+        254
+      ],
+      "y": 39.5,
+      "z": [
+        220,
+        221
+      ]
+    },
+    "frames": 12,
+    "meanSpatialStdRgb8": 0.19365476720651575,
+    "meanTemporalStdRgb8": 0.1154119699891058,
+    "meanFrameDeltaRgb8": 0.1004971590909076
+  }
+}

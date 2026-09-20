@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { finishArchitecturalMaterial } from "./ArchitecturalMaterials.js";
+import { eventShadowTuning } from "./EventShadowTuning.js";
 
 // Overrides are keyed to material names inspected in the three delivered GLBs.
 // Never infer that arbitrary green/blue geometry is vegetation/glass.
@@ -311,7 +312,7 @@ export async function createEventLook({
       sun.color.set(0xffd8a8); sun.intensity = 3.35;
       sun.position.copy(frame.sunPosition); sun.target.position.copy(frame.center); sun.target.updateMatrixWorld();
       Object.assign(sun.shadow.camera, { left: -frame.span, right: frame.span, top: frame.span, bottom: -frame.span, near: frame.near, far: frame.far, zoom: 1 });
-      sun.shadow.bias = -.00006; sun.shadow.normalBias = .025; sun.shadow.radius = 3; sun.shadow.intensity = .84;
+      Object.assign(sun.shadow, eventShadowTuning()); sun.shadow.intensity = .84;
       if (hemi) { hemi.color.set(0xc7d8f5); hemi.groundColor.set(0xb8a5a3); hemi.intensity = 1.35; }
       if (fill) { fill.color.set(0xb9c9f1); fill.intensity = .46; fill.position.copy(frame.center).add(new THREE.Vector3(34, 22, -28)); }
     } else {
@@ -356,7 +357,10 @@ export async function createEventLook({
     const offset=frame.sunPosition.clone().sub(frame.center).normalize().multiplyScalar(wide?span*3:frame.sunPosition.distanceTo(frame.center));
     sun.position.copy(center).add(offset);sun.target.position.copy(center);sun.target.updateMatrixWorld();
     Object.assign(sun.shadow.camera,{left:-span,right:span,top:span,bottom:-span,near:.5,far:offset.length()+span*3});
-    sun.shadow.normalBias=wide?.06:.025;sun.shadow.camera.updateProjectionMatrix();sun.shadow.needsUpdate=true;
+    const tuning=eventShadowTuning({wide,span,mapSize:Math.min(sun.shadow.mapSize.x,sun.shadow.mapSize.y),near:sun.shadow.camera.near,far:sun.shadow.camera.far,sunDirection:offset});
+    for(const key of ["bias","normalBias","radius"])sun.shadow[key]=tuning[key];
+    diagnostics.shadowTuning={...tuning,wide};
+    sun.shadow.camera.updateProjectionMatrix();sun.shadow.needsUpdate=true;
     diagnostics.shadowSpan=span;
   } };
 }
