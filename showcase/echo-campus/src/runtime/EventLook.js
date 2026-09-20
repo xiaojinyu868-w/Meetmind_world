@@ -54,7 +54,7 @@ export function eventLightFrame(config = {}) {
   return { center, sunPosition: center.clone().add(offset), span, near: .5, far: offset.length() + span * 3, groundY };
 }
 
-function cloneEventMaterial(original, profile, time) {
+function cloneEventMaterial(original, profile, time, hideDuplicateSite = false) {
   const material = original.clone();
   material.name = original.name;
   material.userData = { ...original.userData, eventLook: true, sourceMaterialName: original.name };
@@ -105,7 +105,7 @@ function cloneEventMaterial(original, profile, time) {
     // The delivered canopy contains a second, nearly coplanar site layer under
     // [Color A04]2. Keep the authored [Color A04] material in source view, but
     // remove this duplicate from the event pass to stop distant z-fighting.
-    if (profile === "site-dark") material.visible = false;
+    if (profile === "site-dark" && hideDuplicateSite) material.visible = false;
     if(profile==="site"){material.polygonOffset=true;material.polygonOffsetFactor=-2;material.polygonOffsetUnits=-2;}
   } else if (profile === "road") {
     material.color.set(0x858c94);material.roughness=.95;material.metalness=0;
@@ -247,7 +247,8 @@ export async function createEventLook({
       const profile = eventMaterialProfile(material);
       if (!profile) return material;
       if (!clones.has(material)) {
-        clones.set(material, cloneEventMaterial(material, profile, time));
+        const hideDuplicateSite=config.siteMode!=="campus"&&config.name?.includes("雨棚");
+        clones.set(material, cloneEventMaterial(material, profile, time, hideDuplicateSite));
         diagnostics.overrides[profile] = (diagnostics.overrides[profile] || 0) + 1;
       }
       return clones.get(material);
@@ -343,6 +344,10 @@ export async function createEventLook({
     if(!enabled||!camera||!target)return;
     const distance=camera.position.distanceTo(target),b=config.framingBounds;
     if(!b)return;
+    if(config.siteMode==="campus"){
+      const radius=Math.hypot(b.maxX-b.minX,b.maxY-b.minY,b.maxZ-b.minZ)/2;
+      scene.fog.near=Math.max(480,distance+radius*1.05);scene.fog.far=scene.fog.near+radius*2.5;
+    }
     const wide=distance>80;
     const span=wide?Math.max(b.maxX-b.minX,b.maxZ-b.minZ)*.72:frame.span;
     if(Math.abs(span-activeSpan)<.01)return;

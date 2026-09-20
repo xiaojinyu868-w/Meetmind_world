@@ -6,9 +6,10 @@ const CANOPY = new Set(["*17", "[Translucent_Glass_Safety]", "Original default",
 const TOWERS = new Set(["[Color H01]1", "Original default", "[Color M04]", "[Color M01]2", "[Color M01]4", "[Color M03]11", "[Color M03]1", "[Color M02]3", "[Color M06]", " 3D-STEEL", "[Metal Corrugated Shiny]9"]);
 const PODIUM = new Set(["Source material 0", "Source material 1", "Source material 2", "Source material 3", "Source material 5", "Source material 6", "Source material 18", "Source material 21"]);
 
-function sourceProfile(root) {
+function sourceProfile(root, config = {}) {
   const names = new Set();
   root.traverse(object => { for (const material of Array.isArray(object.material) ? object.material : [object.material]) if (material) names.add(material.name); });
+  if (config.siteMode === "campus") return {name:"campus",materials:new Set([...CANOPY,...TOWERS,...PODIUM])};
   if (names.has("[Translucent_Glass_Safety]")) return { name: "canopy", materials: CANOPY };
   if (names.has("[Color H01]1")) return { name: "towers", materials: TOWERS };
   if (names.has("Source material 0") && names.has("Source material 21")) return { name: "podium", materials: PODIUM };
@@ -24,7 +25,7 @@ export function architectureShadowGeometry(modelRoot, config = {}, { minFaceArea
   const geometry = new THREE.BufferGeometry();
   if (!b || ![b.minX,b.maxX,b.minY,b.maxY,b.minZ,b.maxZ].every(Number.isFinite)) return { geometry, diagnostics };
   modelRoot.updateWorldMatrix(true, true);
-  const profile = sourceProfile(modelRoot); diagnostics.profile = profile.name;
+  const profile = sourceProfile(modelRoot, config); diagnostics.profile = profile.name;
   const modelInverse = modelRoot.matrixWorld.clone().invert();
   const worldBox = new THREE.Box3(new THREE.Vector3(b.minX, b.minY, b.minZ), new THREE.Vector3(b.maxX, b.maxY, b.maxZ));
   const worldPoint = new THREE.Vector3(), localPoint = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3(), cross = new THREE.Vector3();

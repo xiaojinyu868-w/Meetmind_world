@@ -95,7 +95,7 @@ export class AppUI {
         <div class="ec-welcome-foot"><span>可以先探索空间，稍后再入场</span><button type="button" data-action="welcome-dismiss">先看看空间</button></div>
       </aside>
       <div class="ec-hover-card" data-hover-card hidden><span class="ec-hover-kicker">可互动</span><strong data-hover-name></strong><small data-hover-copy>点击查看这位来宾的相遇入口</small></div>
-      <aside class="ec-venue-context" data-venue-context hidden><div class="ec-venue-source"><span>提供模型 · 真实转换</span><strong data-venue-source-name></strong><small data-venue-provenance></small></div><div class="ec-venue-view" role="group" aria-label="场地显示层"><button type="button" data-action="venue-view" data-id="source" aria-pressed="false">源模型</button><button type="button" data-action="venue-view" data-id="event" aria-pressed="false">活动布置</button></div><p data-venue-layer-note></p></aside>
+      <aside class="ec-venue-context" data-venue-context hidden><div class="ec-venue-source"><span>提供模型 · 真实转换</span><strong data-venue-source-name></strong><small data-venue-provenance></small></div><div class="ec-venue-view" role="group" aria-label="场地显示层"><button type="button" data-action="venue-view" data-id="source" aria-pressed="false">源模型</button><button type="button" data-action="venue-view" data-id="event" aria-pressed="false">活动布置</button></div><nav class="ec-venue-view" data-campus-regions aria-label="园区分区" hidden style="grid-template-columns:repeat(3,minmax(0,1fr));margin-top:6px"><button type="button" data-action="camera" data-id="towers" aria-pressed="false">T1–3 塔楼</button><button type="button" data-action="camera" data-id="hub" aria-pressed="false">HUB 中庭</button><button type="button" data-action="camera" data-id="commercial" aria-pressed="false">C 地块</button></nav><button type="button" class="ec-primary ec-full" data-campus-return data-action="venue" data-id="venue-campus" hidden style="margin-top:8px;min-height:40px">查看完整园区 ${icon("arrow")}</button><p data-venue-layer-note></p></aside>
       <div class="ec-hint" data-world-hint>拖动环看 <span>·</span> 滚轮缩放 <span>·</span> 点选人物</div>
       <footer class="ec-footer">
         <div class="ec-world-meta">
@@ -151,7 +151,7 @@ export class AppUI {
   setSceneLabel(name, id = null) {
     this.sceneLabel = String(name || "我的场景");
     this.sceneId = id || listSceneDefinitions().find(d => d.displayName === this.sceneLabel)?.id || "imported";
-    const coordinate = venueById(this.sceneId) ? "SOURCE MODEL" : { campus: "WHITE COURT", gallery: "WATER GALLERY", imported: "IMPORTED SCENE" }[this.sceneId] || "IMPORTED SCENE";
+    const coordinate = this.sceneId === "venue-campus" ? "THE WHOLE CAMPUS" : venueById(this.sceneId) ? "SOURCE MODEL" : { campus: "WHITE COURT", gallery: "WATER GALLERY", imported: "IMPORTED SCENE" }[this.sceneId] || "IMPORTED SCENE";
     const label = this.root.querySelector("[data-scene-coordinate]");
     if (label) label.textContent = coordinate;
     this.syncChrome();
@@ -162,15 +162,19 @@ export class AppUI {
     if (view === "source") this.hideWelcome(false);
     this.venueEventReady = !!eventReady;
     const context = this.root.querySelector("[data-venue-context]");
+    const isCampus = candidate?.id === "venue-campus";
     context.hidden = !candidate;
+    this.root.querySelector("[data-campus-regions]").hidden = !isCampus;
+    this.root.querySelector("[data-campus-return]").hidden = !candidate || isCampus;
     this.root.classList.toggle("ec-source-view", !!candidate && view === "source");
     this.root.classList.toggle("ec-event-view", !!candidate && view === "event");
-    const coordinate=this.root.querySelector("[data-scene-coordinate]");if(coordinate&&candidate)coordinate.textContent=view==="event"?"THE SOCIAL GARDEN":"SOURCE MODEL";
+    const coordinate=this.root.querySelector("[data-scene-coordinate]");if(coordinate&&candidate)coordinate.textContent=isCampus?"THE WHOLE CAMPUS":view==="event"?"THE SOCIAL GARDEN":"SOURCE MODEL";
     if (candidate) {
       this.root.querySelector("[data-venue-source-name]").textContent = candidate.source;
-      this.root.querySelector("[data-venue-provenance]").textContent = candidate.id.startsWith("venue-ab-") ? "AB 两份源文件版本 · A / B 边界尚未确认" : "C 地块文件包 · 转换模型预览";
-      this.root.querySelector("[data-venue-layer-note]").textContent = view === "source" ? "仅查看转换后的原始建筑，拖动环看、滚轮缩放。" : "自由探索 · 点选人物，开始一次相遇";
+      this.root.querySelector("[data-venue-provenance]").textContent = isCampus ? "塔楼 · T6 主楼 · HUB 中庭 · C 地块" : "园区局部查看 · 可一键回到完整园区";
+      this.root.querySelector("[data-venue-layer-note]").textContent = isCampus ? (view === "source" ? "拖动环看整个园区，选择分区靠近查看。" : "先看园区全景，再进入交流现场。") : (view === "source" ? "拖动环看、滚轮缩放，查看此区域建筑。" : "自由探索 · 点选人物，开始一次相遇");
       context.querySelectorAll("[data-action=venue-view]").forEach(button => {
+        if (button.dataset.id === "source") button.textContent = isCampus ? "园区建筑" : "源模型";
         const active = button.dataset.id === view;
         button.setAttribute("aria-pressed", String(active));
         button.classList.toggle("is-active", active);
@@ -178,14 +182,17 @@ export class AppUI {
         if (button.dataset.id === "event") button.title = eventReady ? "查看人物和活动点位叠加" : "活动坐标校准完成后可用";
       });
     }
-    const labels = candidate ? { overview:"外景", arrival:"入口", courtyard:view==="event"?"近看交流":"侧景", aerial:"俯瞰" } : CAMERA_LABELS;
-    this.root.querySelectorAll(".ec-camera-dock button").forEach((button,index) => { button.innerHTML = `<span class="ec-camera-number">0${index+1}</span>${labels[button.dataset.id]}`; });
+    const labels = isCampus ? { hero:"完整园区", arrival:"活动入口", garden:"近看交流", aerial:"总平面" } : candidate ? { overview:"外景", arrival:"入口", courtyard:view==="event"?"近看交流":"侧景", aerial:"俯瞰" } : CAMERA_LABELS;
+    this.root.querySelector(".ec-camera-dock").innerHTML = Object.entries(labels).map(([id,label],index) => `<button type="button" data-action="camera" data-id="${id}" aria-pressed="false"><span class="ec-camera-number">0${index+1}</span>${label}</button>`).join("");
+    this.root.querySelector(".ec-brand").dataset.id = isCampus ? "hero" : "overview";
+    this.setCameraSelection(this.selectedCamera);
     const hint = this.root.querySelector("[data-world-hint]");
     if (hint) hint.textContent = candidate && view === "source" ? "拖动环看 · 滚轮缩放" : "拖动环看 · 滚轮缩放 · 点选人物";
   }
   setCameraSelection(id) {
-    this.selectedCamera = ({hero:"overview",garden:"courtyard"})[id] || id;
-    this.root.querySelectorAll(".ec-camera-dock button").forEach(button => { const active = button.dataset.id === this.selectedCamera; button.classList.toggle("is-active", active); button.setAttribute("aria-pressed", String(active)); });
+    const aliases = this.activeVenueId === "venue-campus" ? {overview:"hero",courtyard:"garden"} : {hero:"overview",garden:"courtyard"};
+    this.selectedCamera = aliases[id] || id;
+    this.root.querySelectorAll(".ec-camera-dock button, [data-campus-regions] button").forEach(button => { const active = button.dataset.id === this.selectedCamera; button.classList.toggle("is-active", active); button.setAttribute("aria-pressed", String(active)); });
   }
   setBusy(text) {
     const busy = this.root.querySelector(".ec-busy");
@@ -251,10 +258,7 @@ export class AppUI {
     if (action === "welcome-dismiss") return this.hideWelcome();
     if (action === "welcome-start") { this.hideWelcome(); return this.me?.attendee ? this.setSelectedPerson(this.me.attendee) : this.openOnboarding(); }
     if (action === "camera") {
-      this.selectedCamera = id;
-      this.root.querySelectorAll(".ec-camera-dock button").forEach(b => {
-        const active = b.dataset.id === id; b.classList.toggle("is-active", active); b.setAttribute("aria-pressed", String(active));
-      });
+      this.setCameraSelection(id);
       return this.run("onCamera", id);
     }
     if (action === "tour") { this.closePanel(); return this.run("onTour"); }
@@ -488,6 +492,7 @@ export class AppUI {
     const current = new URL(this.root.ownerDocument.location.href);
     url.search = ""; url.hash = "";
     for (const key of ["sceneManifest", "scene", "venue", "view", "camera"]) if (current.searchParams.has(key)) url.searchParams.set(key, current.searchParams.get(key));
+    if (current.searchParams.get("scope") === "building") url.searchParams.set("scope", "building");
     if (stage) url.searchParams.set("mode", "stage");
     else { url.searchParams.set("entry", "nfc"); if (serial) url.searchParams.set("persona", serial); }
     return url.href;
@@ -522,7 +527,7 @@ export class AppUI {
     const errorBox = this.root.querySelector("[data-venue-error]");
     if (errorBox) errorBox.hidden = true;
     try {
-      await this.callbacks.onVenue(id);
+      await this.callbacks.onVenue(id, id === "venue-campus" ? { view: "event", camera: "hero" } : { view: "source", scope: "building" });
       if (this.panel === "scenes" && revision === this.panelRevision) this.closePanel();
     } catch (error) {
       if (errorBox?.isConnected) { errorBox.textContent = "未能载入源模型：" + error.message + "。当前场景保留，可重试或选择另一份源文件。"; errorBox.hidden = false; }
@@ -530,7 +535,7 @@ export class AppUI {
     } finally { this.venuePending = false; button.disabled = false; }
   }
   venueCardsMarkup() {
-    return `<section class="ec-venue-picker" aria-label="提供的真实场地模型"><div class="ec-section-heading"><h2>你提供的场地模型</h2><span>真实文件 · 可旋转查看</span></div><p class="ec-venue-picker-intro">先看建筑本身，再切换活动布置。AB 下两项为源文件版本，不能据此划分 A / B 地块。</p><div class="ec-venue-cards">${VENUE_CANDIDATES.map(candidate => `<article class="ec-venue-card ${this.activeVenueId === candidate.id ? "is-selected" : ""}"><button type="button" data-action="venue" data-id="${candidate.id}" aria-label="加载 ${esc(candidate.name)}"><span class="ec-venue-thumbnail"><img data-venue-thumbnail src="${esc(candidate.thumbnail)}" alt="${esc(candidate.name)}的真实转换模型截图" loading="lazy"><span class="ec-venue-thumbnail-unavailable">缩略图暂不可用</span></span><span class="ec-venue-card-copy"><strong>${esc(candidate.name)}</strong><small>${esc(candidate.source)}</small><span>${this.activeVenueId === candidate.id ? "当前模型" : "打开 3D 外景"} ${icon("arrow")}</span></span></button><a class="ec-venue-direct" href="${esc(venueUrl(candidate.id,{baseUrl:document.baseURI}))}" target="_blank" rel="noopener">单独打开 ${icon("external")}</a></article>`).join("")}</div><div class="ec-form-error" data-venue-error role="alert" hidden></div><p class="ec-venue-boundary-note">缩略图来自转换模型截图。活动点位、人物及关系线可独立开关；它们不属于原始建筑文件。</p></section>`;
+    return `<section class="ec-venue-picker" aria-label="提供的真实场地模型"><div class="ec-section-heading"><h2>完整园区与分区</h2><span>从全景走进现场</span></div><p class="ec-venue-picker-intro">完整园区汇集塔楼、T6 主楼、HUB 中庭与 C 地块。也可以单独查看各区域。</p><div class="ec-venue-cards">${VENUE_CANDIDATES.map(candidate => `<article class="ec-venue-card ${this.activeVenueId === candidate.id ? "is-selected" : ""}"><button type="button" data-action="venue" data-id="${candidate.id}" aria-label="加载 ${esc(candidate.name)}"><span class="ec-venue-thumbnail"><img data-venue-thumbnail src="${esc(candidate.thumbnail)}" alt="${esc(candidate.name)}的场地模型总览" loading="lazy"><span class="ec-venue-thumbnail-unavailable">缩略图暂不可用</span></span><span class="ec-venue-card-copy"><strong>${esc(candidate.name)}</strong><small>${esc(candidate.id === "venue-campus" ? "塔楼 · T6 主楼 · HUB 中庭 · C 地块" : candidate.id === "venue-ab-towers" ? "T1–3 塔楼区域" : candidate.id === "venue-ab-canopy" ? "T6 主楼与入口区域" : "C 地块商业裙房")}</small><span>${this.activeVenueId === candidate.id ? "当前场地" : candidate.id === "venue-campus" ? "进入完整园区" : "单独查看区域"} ${icon("arrow")}</span></span></button><a class="ec-venue-direct" href="${esc(venueUrl(candidate.id,{baseUrl:document.baseURI}))}" target="_blank" rel="noopener">单独打开 ${icon("external")}</a></article>`).join("")}</div><div class="ec-form-error" data-venue-error role="alert" hidden></div><p class="ec-venue-boundary-note">园区建筑与活动布置可分别查看。人物与互动点为活动演示内容。</p></section>`;
   }
   openScenePanel() {
     this.openPanel("scenes");

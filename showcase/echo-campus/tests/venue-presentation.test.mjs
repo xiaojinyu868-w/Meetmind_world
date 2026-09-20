@@ -7,15 +7,16 @@ import { defaultManifest } from "../src/runtime/SceneManifest.js";
 const baseUrl="https://example.com/echo-campus/";
 
 test("venue source files have distinct direct links and no invented A/B plot assignment",()=>{
- assert.equal(VENUE_CANDIDATES.length,3);
- assert.equal(new Set(VENUE_CANDIDATES.map(v=>v.manifest)).size,3);
+ assert.equal(VENUE_CANDIDATES.length,4);
+ assert.equal(VENUE_CANDIDATES[0].id,"venue-campus");
+ assert.equal(new Set(VENUE_CANDIDATES.map(v=>v.manifest)).size,4);
  for(const c of VENUE_CANDIDATES){
   const url=new URL(venueUrl(c.id,{baseUrl:baseUrl+"?code=secret&capture=1#old"}));
-  assert.equal(url.searchParams.get("venue"),c.id);assert.equal(url.searchParams.get("view"),"source");
+  assert.equal(url.searchParams.get("venue"),c.id);assert.equal(url.searchParams.get("view"),c.id==="venue-campus"?"event":"source");
   assert.equal(url.searchParams.has("code"),false);assert.equal(url.hash,"");
  }
- assert.match(VENUE_CANDIDATES[0].note,/不代表已确认/);
  assert.match(VENUE_CANDIDATES[1].note,/不代表已确认/);
+ assert.match(VENUE_CANDIDATES[2].note,/不代表已确认/);
  assert.throws(()=>venueUrl("missing",{baseUrl}),/未知/);
 });
 test("venue fetch resolves actual GLB relative to manifest and rejects missing or non-GLB assets",async()=>{
@@ -82,10 +83,12 @@ test("venue clipping keeps depth precision at building and attendee scale",()=>{
  assert.equal(nearPlaneForDistance(150),.5);
 });
 
-test("plain event URL defaults to real C source model while explicit imported/built-in links remain valid",()=>{
- assert.equal(startupVenueFromSearch(""),"venue-c");
- assert.equal(startupVenueFromSearch("?entry=nfc&persona=01"),"venue-c");
+test("plain event URL defaults to assembled campus while explicit imported/built-in links remain valid",()=>{
+ assert.equal(startupVenueFromSearch(""),"venue-campus");
+ assert.equal(startupVenueFromSearch("?entry=nfc&persona=01"),"venue-campus");
  assert.equal(startupVenueFromSearch("?venue=venue-ab-towers"),"venue-ab-towers");
+ assert.equal(startupVenueFromSearch("?venue=venue-ab-canopy&view=source"),"venue-ab-canopy");
+ assert.equal(startupVenueFromSearch("?venue=venue-c&scope=building"),"venue-c");
  assert.equal(startupVenueFromSearch("?scene=campus"),null);
  assert.equal(startupVenueFromSearch("?scene=gallery"),null);
  assert.equal(startupVenueFromSearch("?sceneManifest=./scene.json"),null);

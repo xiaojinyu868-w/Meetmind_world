@@ -8,6 +8,7 @@ import { Window } from "happy-dom";
 import { WebSocket } from "ws";
 import { createEventServer } from "../server/index.mjs";
 import { EventClient } from "../src/runtime/EventClient.js";
+import { resolveStartupVenue } from "../src/runtime/VenueCatalog.js";
 
 const bundle = await build({
   stdin: { contents: 'export {AppUI} from "./src/ui/AppUI.js"; export {registerScene} from "./src/runtime/SceneRegistry.js";', resolveDir: new URL("..",import.meta.url).pathname, sourcefile:"ui-test-entry.mjs" },
@@ -302,7 +303,8 @@ test("source venue picker invokes real load and failure preserves prior scene la
  a.ui.setSceneLabel("白庭校园");a.ui.openScenePanel();
  a.ui.root.querySelector(".ec-panel").scrollTop=240;a.ui.closePanel();a.ui.openScenePanel();assert.equal(a.ui.root.querySelector(".ec-panel").scrollTop,0);
  const button=a.ui.root.querySelector('[data-action="venue"][data-id="venue-c"]');
- assert.ok(button);assert.equal(a.ui.root.querySelectorAll('[data-action="venue"]').length,3);
+ assert.ok(button);assert.equal(a.ui.root.querySelectorAll('.ec-venue-card [data-action="venue"]').length,4);
+ assert.equal(a.ui.root.querySelector('.ec-venue-card [data-action="venue"]').dataset.id,"venue-campus");
  assert.equal(a.ui.root.querySelectorAll('.ec-site-art').length,0,"no invented CSS buildings");
  await a.ui.onClick({target:button});
  assert.deepEqual(calls,["venue-c"]);assert.equal(a.ui.sceneLabel,"白庭校园");assert.equal(a.ui.panel,"scenes");assert.equal(button.disabled,false);
@@ -354,4 +356,46 @@ test("blank onboarding enters as guest only after consent and edits require fres
   update.elements.consent.checked = true;
   await a.ui.onSubmit({ target: update, preventDefault() {} });
   assert.equal(a.client.me.attendee.name, "自愿补充");
+});
+
+test("campus navigation exposes every region, highlights cameras and returns from a single building",async t=>{
+ const {session}=await fixture(t),venues=[],cameras=[];
+ const a=await session("?venue=venue-campus&view=event",{onVenue:async(...args)=>venues.push(args),onCamera:id=>cameras.push(id)});activate(a.win);
+ const campus={id:"venue-campus",source:"以原始工程坐标组合塔楼、T6主楼、HUB中庭及C地块"};
+ a.ui.setVenueState({candidate:campus,view:"event",eventReady:true});
+ assert.equal(a.ui.root.querySelector("[data-campus-regions]").hidden,false);
+ assert.equal(a.ui.root.querySelector("[data-campus-return]").hidden,true);
+ assert.deepEqual([...a.ui.root.querySelectorAll(".ec-camera-dock button")].map(b=>b.dataset.id),["hero","arrival","garden","aerial"]);
+ for(const id of ["towers","hub","commercial"]){
+  const button=a.ui.root.querySelector(`[data-campus-regions] [data-id="${id}"]`);await a.ui.onClick({target:button});
+  assert.equal(button.getAttribute("aria-pressed"),"true");
+  assert.equal(a.ui.root.querySelectorAll('.ec-camera-dock [aria-pressed="true"], [data-campus-regions] [aria-pressed="true"]').length,1);
+ }
+ assert.deepEqual(cameras,["towers","hub","commercial"]);
+ a.ui.setCameraSelection("hero");assert.equal(a.ui.root.querySelector('.ec-camera-dock [data-id="hero"]').getAttribute("aria-pressed"),"true");
+ a.ui.openScenePanel();const card=a.ui.root.querySelector('.ec-venue-card [data-id="venue-campus"]');await a.ui.onClick({target:card});
+ assert.deepEqual(venues[0],["venue-campus",{view:"event",camera:"hero"}]);
+ a.ui.setVenueState({candidate:{id:"venue-c",source:"C 地块"},view:"source",eventReady:true});
+ assert.equal(a.ui.root.querySelector("[data-campus-regions]").hidden,true);
+ const back=a.ui.root.querySelector("[data-campus-return]");assert.equal(back.hidden,false);await a.ui.onClick({target:back});
+ assert.deepEqual(venues[1],["venue-campus",{view:"event",camera:"hero"}]);
+ assert.equal(a.ui.root.querySelectorAll(".ec-camera-dock button").length,4);
+});
+
+test("single-building intent survives phone, stage, QR and isolated-tab share routes",async t=>{
+ const {session}=await fixture(t);
+ const a=await session("?venue=venue-ab-canopy&view=event&scope=building&camera=garden&code=private&capture=1");activate(a.win);
+ const urls=[a.ui.demoUrl("01"),a.ui.demoUrl("02"),a.ui.demoUrl(null),a.ui.demoUrl("01",true),a.ui.tabDemoUrl()];
+ a.ui.openDemoPanel();urls.push(...[...a.ui.root.querySelectorAll(".ec-demo-links a")].map(link=>link.href));
+ for(const href of urls){
+  const url=new URL(href);
+  assert.equal(url.searchParams.get("scope"),"building");assert.equal(url.searchParams.get("view"),"event");assert.equal(url.searchParams.get("camera"),"garden");
+  assert.equal(resolveStartupVenue(url.search),"venue-ab-canopy","each shared URL must reopen the same single building");
+  assert.equal(url.searchParams.has("code"),false);assert.equal(url.searchParams.has("capture"),false);
+ }
+ for(const scope of ["internal-token","Building",""]){
+  a.win.history.replaceState(null,"",`?venue=venue-ab-canopy&view=event&scope=${scope}&camera=garden`);
+  const shared=new URL(a.ui.demoUrl());assert.equal(shared.searchParams.has("scope"),false,"only the supported building scope is shareable");
+  assert.equal(resolveStartupVenue(shared.search),"venue-campus","unsupported scope cannot disable legacy campus migration");
+ }
 });

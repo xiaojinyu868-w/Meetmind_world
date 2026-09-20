@@ -63,7 +63,7 @@ export function stablePersonSeed(id) {
  */
 export function demoSocialPose(personId, venueId, groundY = 0) {
   const pairIndex = DEMO_SOCIAL_PAIRS.findIndex(pair => pair.includes(personId));
-  const centers = PAIR_CENTERS[venueId];
+  const centers = PAIR_CENTERS[venueId === "venue-campus" ? "venue-ab-canopy" : venueId];
   if (pairIndex < 0 || !centers || !Number.isFinite(groundY)) return null;
   const member = DEMO_SOCIAL_PAIRS[pairIndex].indexOf(personId);
   const [cx, cz, axis] = centers[pairIndex];

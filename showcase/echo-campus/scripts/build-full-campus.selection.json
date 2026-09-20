@@ -1,0 +1,92 @@
+{
+  "policy": "One original project frame, one roads group, one bridge version. No invented placement or building cutouts.",
+  "hubBounds": {
+    "minX": 190.616,
+    "maxX": 324.527,
+    "minZ": -20.226,
+    "maxZ": 58.506
+  },
+  "sources": [
+    {
+      "id": "venue-ab-towers",
+      "entourage": "towers-entourage.json",
+      "skipNodes": [
+        23173,
+        25150,
+        27222,
+        27275,
+        27276,
+        27307,
+        28882,
+        28913,
+        29883,
+        29891
+      ],
+      "skipReason": "Original bridge components replaced by 2024 UFO+escalator bridge group; tower nodes 1,8959,18047 and road node17625 retained"
+    },
+    {
+      "id": "venue-ab-canopy",
+      "entourage": "canopy-entourage.json",
+      "skipNodes": [
+        1,
+        2440,
+        16231,
+        43218,
+        2439
+      ],
+      "skipReason": "Node1 duplicated _MA-road replaced by towers road; node2440 earlier bridge network replaced by 2024 UFO+escalator bridge group; node16231/43218 are disconnected underground reference copies; node2439 is 5 zero-thickness reference-plane triangles beyond the northern site boundary, without structures"
+    },
+    {
+      "id": "venue-ab-hub",
+      "skipNodes": [
+        12776
+      ],
+      "skipReason": "Only confirmed detached underground reference groups omitted"
+    },
+    {
+      "id": "venue-c-commercial-20230518",
+      "skipNodes": [],
+      "skipReason": "Only original bridge components replaced by shared bridge network; 110m tower and podium retained",
+      "towerBridgeSelection": {
+        "node": 1,
+        "keepAnyIntersectingTriangleXZ": [
+          389,
+          458,
+          57.8,
+          92
+        ],
+        "reason": "Only tower and foundation retained; source tower begins Z58.51 and old bridge ends Z57.14, leaving 0.71m separation."
+      }
+    },
+    {
+      "id": "venue-ab-ufo-escalator",
+      "includeNodes": [
+        15544
+      ],
+      "excludeHubInterior": true,
+      "skipReason": "Only updated bridge group included. HUB building and courtyard already present from HUB source; standalone root plane and underground reference copies excluded by component selection"
+    }
+  ],
+  "excludedSourceVersions": [
+    {
+      "id": "venue-c-commercial-20230504",
+      "reason": "Superseded C version; 98.19 percent of compared triangles already in 20230518."
+    },
+    {
+      "id": "venue-ab-ufo",
+      "reason": "Courtyard component already inside chosen HUB source."
+    },
+    {
+      "id": "venue-ab-stair",
+      "reason": "Unlocated detailed component at original X -104.85..-97.97, outside campus buildings; no placement transform supplied."
+    },
+    {
+      "id": "venue-ab-t6-ceiling",
+      "reason": "Unregistered local-workspace variant with floor Y71.1198 and top Y159.3198. Not an additional campus building."
+    },
+    {
+      "id": "venue-c-rhino",
+      "reason": "Alternate podium version, not stacked with chosen 20230518 tower and podium."
+    }
+  ]
+}

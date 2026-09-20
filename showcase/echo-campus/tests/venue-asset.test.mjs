@@ -19,3 +19,16 @@ test("failed derivative explicitly falls back to source; dual failure rejects wi
  assert.deepEqual(calls,[baseUrl+"scenes/venue/venue-ab-canopy-event.glb",manifest.url]);assert.equal(warning,1);assert.equal(result.venueAsset.fallback,true);assert.equal(result.venueAsset.prefiltered,false);
  await assert.rejects(loadVenueAsset({...args,view:"event",importer:async()=>{throw Error("offline");}}),/offline/);
 });
+
+test("assembled campus uses the same prepared geometry for source and event without a derivative request",async()=>{
+ const campus={...manifest,url:baseUrl+"scenes/venue/venue-campus.glb"};
+ const calls=[];let fallbacks=0;
+ for(const view of ["event","source"]){
+  const result=await loadVenueAsset({id:"venue-campus",manifest:campus,baseUrl,view,onFallback:()=>fallbacks++,importer:async input=>{calls.push(input);return {};}});
+  assert.equal(result.venueAsset.mode,view);assert.equal(result.venueAsset.prefiltered,true);assert.equal(result.venueAsset.url,campus.url);
+ }
+ assert.deepEqual(calls,[campus,campus]);assert.equal(fallbacks,0);
+ let attempts=0;
+ await assert.rejects(loadVenueAsset({id:"venue-campus",manifest:campus,baseUrl,view:"event",importer:async()=>{attempts++;throw Error("missing assembly");}}),/missing assembly/);
+ assert.equal(attempts,1);
+});

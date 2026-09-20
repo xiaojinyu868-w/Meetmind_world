@@ -43,6 +43,16 @@ export function validateManifest(input) {
     framingBounds = Object.fromEntries(["minX","maxX","minY","maxY","minZ","maxZ"].map(k => [k, finite(input.framingBounds[k], "主体展示边界")]));
     if (["X","Y","Z"].some(axis => framingBounds["min"+axis] >= framingBounds["max"+axis])) throw new Error("主体展示边界不正确");
   }
+  const regionBounds = {};
+  if (input.regionBounds !== undefined) {
+    if (!isObject(input.regionBounds) || Object.keys(input.regionBounds).length > 12) throw new Error("分区边界需要最多 12 个区域");
+    for (const [name, value] of Object.entries(input.regionBounds)) {
+      if (!/^[a-zA-Z][a-zA-Z0-9_-]{0,39}$/.test(name) || !isObject(value)) throw new Error("分区边界格式不正确");
+      const b = Object.fromEntries(["minX","maxX","minY","maxY","minZ","maxZ"].map(key => [key, finite(value[key], "分区边界")]));
+      if (["X","Y","Z"].some(axis => b["min"+axis] >= b["max"+axis])) throw new Error("分区边界不正确");
+      regionBounds[name] = b;
+    }
+  }
   const spawn = point(input.spawn ?? { x: 0, y: groundY, z: 8 }, "出生点");
   const inside = p => p.x >= bounds.minX && p.x <= bounds.maxX && p.z >= bounds.minZ && p.z <= bounds.maxZ;
   if (!inside(spawn)) throw new Error("出生点必须位于活动边界内");
@@ -85,6 +95,8 @@ export function validateManifest(input) {
     type: input.type, url: modelUrl(input.url), scale, position, rotation,
     bounds, spawn, groundY, anchors, cameras, colliders,
     ...(framingBounds ? { framingBounds } : {}),
+    ...(input.siteMode === "campus" ? { siteMode: "campus" } : {}),
+    ...(Object.keys(regionBounds).length ? { regionBounds } : {}),
   };
 }
 export function defaultManifest(type = "glb") {

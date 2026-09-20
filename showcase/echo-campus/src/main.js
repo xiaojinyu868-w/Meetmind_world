@@ -23,7 +23,7 @@ import {importScene} from "./runtime/SceneImporter.js";
 import {readSceneStartup} from "./runtime/SceneStartup.js";
 import {AppUI} from "./ui/AppUI.js";
 import {installCanvasRecorder} from "./runtime/CanvasRecorder.js";
-import {venueById,loadVenueManifest,startupVenueFromSearch} from "./runtime/VenueCatalog.js";
+import {venueById,loadVenueManifest,startupVenueFromSearch,resolveStartupVenue,venueViewLoadOptions} from "./runtime/VenueCatalog.js";
 import {inspectModelBounds,applyModelFraming,calibratedCheckpoints,setEventLayersVisible,CHECKPOINT_IDS,cameraForVenueView,nearPlaneForDistance,fitBuildingPreset,presentationBoundsForModel} from "./runtime/VenuePresentation.js";
 
 const canvas=document.getElementById("world");
@@ -72,7 +72,7 @@ const UI=new AppUI({
  client,
  onCamera:id=>goCamera(({overview:"hero",courtyard:"garden"})[id]||id),
  onScene:id=>switchScene(id),
- onVenue:id=>switchScene(id,{view:"source"}),
+ onVenue:(id,options={})=>switchScene(id,{view:"source",...options}),
  onView:view=>setVenueView(view),
  onImport:async ({manifest,file})=>{await switchScene("import",{manifest,file});},
  onTour:()=>toggleTour(),
@@ -95,7 +95,9 @@ function cameraTo(position,target,fov=43,duration=1800){
 function fitPreset(preset,id){
  const result={...preset,position:[...preset.position],target:[...preset.target]};
  if(innerWidth<720){const p=new THREE.Vector3(...result.position),t=new THREE.Vector3(...result.target);p.sub(t).multiplyScalar(1.3).add(t);result.position=p.toArray();result.fov=Math.min(58,(result.fov||43)+8);}
- return activeVenue&&venuePresentationBounds&&innerWidth<720&&!["arrival","garden"].includes(id)?fitBuildingPreset(result,venuePresentationBounds,camera.aspect):result;
+ const region=currentScene?.config?.regionBounds?.[id];
+ const bounds=region?{box:new THREE.Box3(new THREE.Vector3(region.minX,region.minY,region.minZ),new THREE.Vector3(region.maxX,region.maxY,region.maxZ))}:venuePresentationBounds;
+ return activeVenue&&bounds&&innerWidth<720&&(region||["hero","aerial"].includes(id))?fitBuildingPreset(result,bounds,camera.aspect):result;
 }
 function goCamera(id,duration=1700){if(!currentScene)return;const presets=venueView==="event"?{...currentScene.cameras,...currentScene.eventCameras}:currentScene.cameras,actual=presets[id]?id:"hero",preset=fitPreset(presets[actual],actual);if(activeVenue&&venuePresentationBounds){const distance=new THREE.Vector3(...preset.position).distanceTo(new THREE.Vector3(...preset.target)),reach=distance+venuePresentationBounds.radius;controls.maxDistance=Math.max(controls.maxDistance,distance*1.1);camera.far=Math.max(camera.far,reach*2);if(venueView!=="event"){scene.fog.near=Math.max(scene.fog.near,reach*1.05);scene.fog.far=Math.max(scene.fog.far,reach*1.7);}}cameraTo(preset.position,preset.target,preset.fov||43,duration);UI.setCameraSelection(actual);if(activeVenue){const url=new URL(location.href);url.searchParams.set("camera",actual);history.replaceState(null,"",url);}}
 function personPosition(index,isSelf=false,person=null){
@@ -149,7 +151,7 @@ async function setVenueView(view,{updateUrl=true,moveCamera=true,reloadAsset=tru
  if(reloadAsset){switchSerial++;UI.setBusy(null);}
  const next=view==="source"?"source":"event";
  if(activeVenue&&next==="event"&&!venueEventReady){UI.toast("此模型尚未完成活动坐标校准，先查看源模型");return;}
- if(reloadAsset&&activeVenue&&currentScene?.venueAsset?.mode!==next)return switchScene(activeVenue.id,{view:next});
+ if(reloadAsset&&activeVenue&&currentScene?.venueAsset?.mode!==next)return switchScene(activeVenue.id,venueViewLoadOptions(activeVenue.id,next));
  venueView=activeVenue?next:"event";
  if(activeVenue&&next==="source"){showcaseTimers.forEach(clearTimeout);showcaseTimers=[];showcaseStarted=false;tour=null;cameraMove=null;}
  keys.clear();clearSelection();
@@ -159,7 +161,7 @@ async function setVenueView(view,{updateUrl=true,moveCamera=true,reloadAsset=tru
  currentScene?.eventEntourage?.setEvent(venueView==="event");
  currentScene?.architectureShadows?.setEnabled(venueView==="event");
  UI.setVenueState({candidate:activeVenue,view:venueView,eventReady:venueEventReady});
- if(activeVenue&&moveCamera)goCamera(cameraForVenueView(venueView));
+ if(activeVenue&&moveCamera)goCamera(activeVenue.id==="venue-campus"?"hero":cameraForVenueView(venueView));
  if(updateUrl&&activeVenue){const url=new URL(location.href);url.searchParams.set("view",venueView);history.replaceState(null,"",url);if(UI.stage)UI.renderStageQr();}
 }
 function restoreBuiltInFraming(){
@@ -188,13 +190,16 @@ async function switchScene(id,options={}){
    result.eventGarden=await createEventGarden({venueId:id,config:manifest,quality,props:{treeUrl:new URL("assets/premium/garden-tree.glb",document.baseURI).href,treeHeight:3.2,benchUrl:new URL("assets/premium/garden-seat.glb",document.baseURI).href,benchWidth:2.6}});
    result.eventEntourage?.setEvent(true);
    result.architectureShadows=createArchitectureShadows(result.modelRoot,manifest);result.root.add(result.architectureShadows.root);
-   result.landscapeSite=createLandscapeSite(result.modelRoot,manifest,{quality,obstructionRoot:result.architectureShadows.root});result.root.add(result.landscapeSite.root);
-   result.contextLandscape=createContextLandscape(result.modelRoot,manifest,{quality});result.root.add(result.contextLandscape.root);
+   // Local event dressing stays at the surveyed T6 entrance; the complete park retains its authored landscape.
+   const landscapeConfig=manifest.siteMode==="campus"?{...manifest,framingBounds:{minX:20,maxX:170,minY:-10,maxY:90,minZ:45,maxZ:250}}:manifest;
+   result.landscapeSite=createLandscapeSite(result.modelRoot,landscapeConfig,{quality,obstructionRoot:result.architectureShadows.root});result.root.add(result.landscapeSite.root);
+   result.contextLandscape=createContextLandscape(result.modelRoot,landscapeConfig,{quality});result.root.add(result.contextLandscape.root);
    result.root.add(result.eventGarden.root);
    // A distant visual ground closes gaps beyond the supplied survey slab.
    // It sits below all source geometry and never changes walking or model bounds.
    const backdropMaterial=new THREE.MeshBasicMaterial({color:0xb9c4c0,fog:true,transparent:true,depthWrite:false});
-   backdropMaterial.onBeforeCompile=shader=>{shader.vertexShader="varying vec3 backdropViewPosition;\n"+shader.vertexShader.replace("#include <project_vertex>","#include <project_vertex>\nbackdropViewPosition=mvPosition.xyz;");shader.fragmentShader="varying vec3 backdropViewPosition;\n"+shader.fragmentShader.replace("#include <opaque_fragment>","diffuseColor.a *= 1.0-smoothstep(350.0,1050.0,length(backdropViewPosition));\n#include <opaque_fragment>");};
+   if(manifest.siteMode==="campus"){backdropMaterial.transparent=false;backdropMaterial.depthWrite=true;}
+   else backdropMaterial.onBeforeCompile=shader=>{shader.vertexShader="varying vec3 backdropViewPosition;\n"+shader.vertexShader.replace("#include <project_vertex>","#include <project_vertex>\nbackdropViewPosition=mvPosition.xyz;");shader.fragmentShader="varying vec3 backdropViewPosition;\n"+shader.fragmentShader.replace("#include <opaque_fragment>","diffuseColor.a *= 1.0-smoothstep(350.0,1050.0,length(backdropViewPosition));\n#include <opaque_fragment>");};
    backdropMaterial.customProgramCacheKey=()=>"distant-ground-fade-v1";
    const backdrop=new THREE.Mesh(new THREE.PlaneGeometry(8000,8000),backdropMaterial);
    backdrop.name="Distant landscape horizon";backdrop.rotation.x=-Math.PI/2;
@@ -203,13 +208,14 @@ async function switchScene(id,options={}){
    result.backdrop=backdrop;
    result.eventPeople=socialPeopleLayout(manifest,result.eventGarden.colliders);
    const a=manifest.anchors.arrival,y=manifest.groundY;
-   result.eventCameras=id==="venue-ab-canopy"?{
+   result.eventCameras=["venue-ab-canopy","venue-campus"].includes(id)?{
     hero:{position:[190,65,330],target:[87,37,164],fov:38},
     arrival:{position:[101,y+3.7,213],target:[85,y+1.7,204],fov:51},
     garden:{position:[84.2,y+1.85,211.1],target:[83.5,y+1.0,205.1],fov:34}
    }:{arrival:{position:[a.x+5,y+3.1,a.z+5],target:[a.x-2,y+1.1,a.z-7],fov:49},garden:{position:[a.x-5,y+2.3,a.z-1],target:[a.x,y+1.1,a.z-10],fov:45}};
    const pairA=demoSocialPose("seed-01",id,y),pairB=demoSocialPose("seed-02",id,y);
-   if(pairA&&pairB){const cx=(pairA.x+pairB.x)/2,cz=(pairA.z+pairB.z)/2;result.eventCameras.garden=id==="venue-ab-canopy"?{position:[cx+4.2,y+2.05,cz+5.3],target:[cx-.7,y+1.12,cz-.7],fov:38}:{position:[cx+.7,y+1.85,cz+6],target:[cx,y+1,cz],fov:34};}
+   if(pairA&&pairB){const cx=(pairA.x+pairB.x)/2,cz=(pairA.z+pairB.z)/2;result.eventCameras.garden=["venue-ab-canopy","venue-campus"].includes(id)?{position:[cx+4.2,y+2.05,cz+5.3],target:[cx-.7,y+1.12,cz-.7],fov:38}:{position:[cx+.7,y+1.85,cz+6],target:[cx,y+1,cz],fov:34};}
+   if(id==="venue-campus")result.eventCameras.hero=manifest.cameras.hero;
    const originalDispose=result.dispose;
    result.dispose=()=>{result.eventLook?.dispose();result.eventEntourage?.dispose();result.backdrop?.geometry.dispose();result.backdrop?.material.dispose();result.eventGarden?.dispose();result.architectureShadows?.dispose();result.landscapeSite?.dispose();result.contextLandscape?.dispose();originalDispose?.();};
   }
@@ -228,12 +234,12 @@ async function switchScene(id,options={}){
   syncPeople(client.snapshot);buildActivityMarkers();
   UI.setSceneLabel(candidate?.name||(id==="import"?manifest.name||"我的场景":getSceneDefinition(id).displayName),id);
   const url=new URL(location.href);url.searchParams.delete("scene");url.searchParams.delete("venue");url.searchParams.delete("camera");
-  if(candidate){url.searchParams.delete("sceneManifest");url.searchParams.set("venue",id);}
+  if(candidate){url.searchParams.delete("sceneManifest");url.searchParams.set("venue",id);if(options.scope==="building")url.searchParams.set("scope","building");else if(id==="venue-campus")url.searchParams.delete("scope");}
   else if(id!=="import"){url.searchParams.delete("sceneManifest");url.searchParams.delete("view");url.searchParams.set("scene",id);}
   else { url.searchParams.delete("view"); }
   history.replaceState(null,"",url);
   setVenueView(candidate?(options.view==="event"&&eventReady?"event":"source"):"event",{moveCamera:false,reloadAsset:false});
-  goCamera(options.camera||(candidate?cameraForVenueView(venueView):"hero"),0);
+  goCamera(options.camera||(id==="venue-campus"?"hero":candidate?cameraForVenueView(venueView):"hero"),0);
   if(UI.stage)UI.renderStageQr();
   try{localStorage.setItem("echo-campus-scene",id==="import"?"campus":id);}catch{}
   document.documentElement.dataset.ready="true";
@@ -411,9 +417,11 @@ if(params.has("capture")||params.has("debug")){
  try{
   premiumLoadPromise=loadCharacterLibrary({baseUrl:document.baseURI}).then(library=>{premiumLibrary=library;}).catch(error=>console.warn("Premium characters unavailable",error.message));
   const requestedVenue=startupVenueFromSearch(location.search);
+  // Existing partner links showed T6 alone. Keep their entrance framing while loading the complete campus.
+  const startupVenue=resolveStartupVenue(location.search);
   if(requestedVenue){
    if(!venueById(requestedVenue))throw new Error("未找到此源模型，请从场地面板选择");
-   await switchScene(requestedVenue,{view:params.get("view")||"source",camera:params.get("camera")||undefined});
+   await switchScene(startupVenue,{view:params.get("view")||(startupVenue==="venue-campus"?"event":"source"),camera:params.get("camera")||undefined});
   }else{
    let startup;
    try{startup=await readSceneStartup({search:location.search,baseUrl:document.baseURI});}catch(error){UI.toast("启动配置未完成："+error.message);startup={scene:"campus"};}

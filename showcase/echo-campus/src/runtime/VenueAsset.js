@@ -1,10 +1,16 @@
-// Source inspection and event performance use distinct, traceable assets.
+// Single-building event assets are derivatives; the assembled campus is already prepared.
 export function eventVenueUrl(id, baseUrl) {
+  if (id === "venue-campus") return new URL("./scenes/venue/venue-campus.glb", baseUrl).href;
   if (!["venue-ab-canopy", "venue-ab-towers", "venue-c"].includes(id)) throw new Error("未知活动模型");
   return new URL(`./scenes/venue/${id}-event.glb`, baseUrl).href;
 }
 
 export async function loadVenueAsset({ id, manifest, view, baseUrl, importer, onFallback = () => {} }) {
+  if (id === "venue-campus") {
+    const result = await importer(manifest);
+    result.venueAsset = { mode: view === "event" ? "event" : "source", prefiltered: true, url: manifest.url };
+    return result;
+  }
   if (view !== "event") {
     const result = await importer(manifest);
     result.venueAsset = { mode: "source", prefiltered: false, url: manifest.url };

@@ -1,0 +1,21 @@
+{
+  "errors": [],
+  "checks": [
+    "All four rendered share links, including stage, preserve scope=building",
+    "touch towers",
+    "touch hub",
+    "touch commercial",
+    "touch aerial",
+    "touch arrival",
+    "touch garden",
+    "touch hero",
+    "touch drag rotates the campus"
+  ],
+  "links": [
+    "https://capture.meetmind.online/echo-campus/?venue=venue-ab-canopy&view=event&camera=arrival&scope=building&entry=nfc&persona=01",
+    "https://capture.meetmind.online/echo-campus/?venue=venue-ab-canopy&view=event&camera=arrival&scope=building&entry=nfc&persona=02",
+    "https://capture.meetmind.online/echo-campus/?venue=venue-ab-canopy&view=event&camera=arrival&scope=building&mode=stage",
+    "https://capture.meetmind.online/echo-campus/?venue=venue-ab-canopy&view=event&camera=arrival&scope=building&entry=nfc&persona=02&demoSession=tab"
+  ],
+  "passed": true
+}
