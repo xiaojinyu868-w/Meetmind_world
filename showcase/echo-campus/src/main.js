@@ -1,3 +1,4 @@
+import {placeSignSurface} from "./runtime/SignSurface.js";
 import {loadVenueAsset} from "./runtime/VenueAsset.js";
 import {pickSocialPerson} from "./runtime/SocialPicking.js";
 import * as THREE from "three";
@@ -284,9 +285,9 @@ function buildActivityMarkers(){
   for(let i=0;i<3;i++){ctx.beginPath();ctx.arc(220,478,38+i*24,-.65,.65);ctx.stroke();}
   ctx.font="500 22px Microsoft YaHei, sans-serif";ctx.fillStyle="#536b59";ctx.fillText("点击探索 · 碰一碰",36,590);
   const map=new THREE.CanvasTexture(art);map.colorSpace=THREE.SRGBColorSpace;map.anisotropy=4;
-  const face=new THREE.Mesh(new THREE.PlaneGeometry(.695,.90),new THREE.MeshStandardMaterial({map,roughness:.78,side:THREE.DoubleSide}));face.position.set(0,1.16,.032);
-  const back=face.clone();back.rotation.y=Math.PI;back.position.z=-.032;
-  group.add(base,stem,board,face,back);group.traverse(o=>{o.userData.activityMarkerId=id;if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});activityMarkerRoot.add(group);
+  const face=new THREE.Mesh(new THREE.PlaneGeometry(.695,.90),new THREE.MeshStandardMaterial({map,roughness:.78}));face.position.y=1.16;placeSignSurface(face,board.geometry);
+  const back=face.clone();placeSignSurface(back,board.geometry,-1);
+  group.add(base,stem,board,face,back);group.traverse(o=>{o.userData.activityMarkerId=id;if(o.isMesh&&!o.userData.signSurface){o.castShadow=true;o.receiveShadow=true;}});activityMarkerRoot.add(group);
  }
 }
 function focusActivityCheckpoint(id){

@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { placeSignSurface } from "../runtime/SignSurface.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
@@ -356,9 +357,10 @@ export async function createEventGarden({ venueId="", config, quality="high", pr
   }
   function guide(p){
     panel(p,mats.dark,0,.025,0,.53,.46,.045,.055);
-    panel(p,mats.wood,0,.08,0,.47,.17,1.48,.07);
+    const backing=slab(.47,.17,1.48,.07);
     const t=labelTexture(p.label);resources.textures.add(t);const m=keepMaterial(`wayfinding ${p.label}`,{map:t,roughness:.88});
-    const g=new THREE.PlaneGeometry(.46,1.19);const mesh=new THREE.Mesh(g,m);mesh.position.set(0,.91,.11);mesh.name="event wayfinding";mesh.castShadow=false;
+    const g=new THREE.PlaneGeometry(.46,1.19);const mesh=new THREE.Mesh(g,m);mesh.position.y=.91;mesh.name="event wayfinding";placeSignSurface(mesh,backing);
+    batch.add(backing,mats.wood,p,0,.08,0);
     const group=new THREE.Group();group.position.set(p.x,p.y,p.z);group.rotation.y=p.yaw;group.add(mesh);root.add(group);resources.geometries.add(g);
     batch.add(new THREE.BoxGeometry(.39,.018,.013),mats.brass,p,0,.27,.111);
   }
