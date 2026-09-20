@@ -1,0 +1,2311 @@
+{
+  "schema": "echo-campus.event-venue-audit.v1",
+  "venueId": "venue-ab-canopy",
+  "builtAt": "2026-09-20T04:30:38.669Z",
+  "source": {
+    "file": "venue-ab-canopy.glb",
+    "bytes": 14998768,
+    "sha256": "c32b85f8430d8e24c8ed33b9f8342d9d22f586f5c0e6fbd5063f8d247a7b1761"
+  },
+  "output": {
+    "file": "venue-ab-canopy-event.glb",
+    "bytes": 7159012,
+    "sha256": "f43df03ffaf77db6a38c68084bd691407713781cc24d3ae9e40124251c66353d"
+  },
+  "decoder": {
+    "wrapperSha256": "8bb2952d2ba7d67e1414f8df819410cb0434a666be53f671fff75f68843d76f6",
+    "wasmSha256": "a680d927bed9cb864ddbd63521868891af2bfbe755092761b4837487618df8ac",
+    "source": "public/draco (the deployed THREE decoder)"
+  },
+  "settings": {
+    "ratio": 0.55,
+    "error": 0.0001,
+    "lockBorder": true,
+    "chunkMeters": 96,
+    "minChunkTriangles": 32000,
+    "compressionMethod": "edgebreaker",
+    "encodeSpeed": 3,
+    "decodeSpeed": 5,
+    "quantizePosition": 18,
+    "quantizeNormal": 10,
+    "quantizeTexcoord": 12
+  },
+  "entourage": {
+    "validatedGroups": [
+      {
+        "materialName": "*17",
+        "category": "human",
+        "positionFingerprint": "b9ee832d",
+        "indexFingerprint": "de062dac",
+        "inputTriangles": 317866,
+        "removedTriangles": 4612,
+        "outputTriangles": 313254,
+        "verifiedBoxes": 23
+      },
+      {
+        "materialName": "*93",
+        "category": "human",
+        "positionFingerprint": "4f642a3c",
+        "indexFingerprint": "20768f85",
+        "inputTriangles": 6557,
+        "removedTriangles": 298,
+        "outputTriangles": 6259,
+        "verifiedBoxes": 2
+      },
+      {
+        "materialName": "[Color C03]2",
+        "category": "human",
+        "positionFingerprint": "c8e1f490",
+        "indexFingerprint": "e529c8aa",
+        "inputTriangles": 284,
+        "removedTriangles": 284,
+        "outputTriangles": 0,
+        "verifiedBoxes": 1
+      },
+      {
+        "materialName": "[Color M00]1",
+        "category": "human",
+        "positionFingerprint": "64a63010",
+        "indexFingerprint": "5b3cae9a",
+        "inputTriangles": 130955,
+        "removedTriangles": 32632,
+        "outputTriangles": 98323,
+        "verifiedBoxes": 102
+      },
+      {
+        "materialName": "[Color M00]4",
+        "category": "human",
+        "positionFingerprint": "3179c909",
+        "indexFingerprint": "3348155b",
+        "inputTriangles": 3643,
+        "removedTriangles": 3622,
+        "outputTriangles": 21,
+        "verifiedBoxes": 9
+      },
+      {
+        "materialName": "[Translucent_Glass_Safety]",
+        "category": "human",
+        "positionFingerprint": "007d2b5d",
+        "indexFingerprint": "d97b710a",
+        "inputTriangles": 238579,
+        "removedTriangles": 510,
+        "outputTriangles": 238069,
+        "verifiedBoxes": 6
+      },
+      {
+        "materialName": "Original default",
+        "category": "human",
+        "positionFingerprint": "45302178",
+        "indexFingerprint": "02c79754",
+        "inputTriangles": 538960,
+        "removedTriangles": 18036,
+        "outputTriangles": 520924,
+        "verifiedBoxes": 66
+      },
+      {
+        "materialName": "bg_tf_TF134-002",
+        "category": "foliage",
+        "positionFingerprint": "ba6127e9",
+        "indexFingerprint": "004c089f",
+        "inputTriangles": 5650,
+        "removedTriangles": 5650,
+        "outputTriangles": 0,
+        "verifiedBoxes": 1
+      },
+      {
+        "materialName": "Cutout+Tree greener",
+        "category": "foliage",
+        "positionFingerprint": "40ae349d",
+        "indexFingerprint": "aa6ed4c5",
+        "inputTriangles": 24,
+        "removedTriangles": 24,
+        "outputTriangles": 0,
+        "verifiedBoxes": 1
+      },
+      {
+        "materialName": "fernleaf",
+        "category": "foliage",
+        "positionFingerprint": "cc5ea6a8",
+        "indexFingerprint": "4e1d9a39",
+        "inputTriangles": 37296,
+        "removedTriangles": 37296,
+        "outputTriangles": 0,
+        "verifiedBoxes": 1
+      },
+      {
+        "materialName": "grass1_alegion-stockLOW",
+        "category": "foliage",
+        "positionFingerprint": "7cfd9ce0",
+        "indexFingerprint": "688777b8",
+        "inputTriangles": 23920,
+        "removedTriangles": 23920,
+        "outputTriangles": 0,
+        "verifiedBoxes": 1
+      },
+      {
+        "materialName": "Grass2",
+        "category": "foliage",
+        "positionFingerprint": "98171b59",
+        "indexFingerprint": "6646ac05",
+        "inputTriangles": 48,
+        "removedTriangles": 48,
+        "outputTriangles": 0,
+        "verifiedBoxes": 1
+      },
+      {
+        "materialName": "l1",
+        "category": "foliage",
+        "positionFingerprint": "22a78d14",
+        "indexFingerprint": "0b077915",
+        "inputTriangles": 9060,
+        "removedTriangles": 9060,
+        "outputTriangles": 0,
+        "verifiedBoxes": 1
+      },
+      {
+        "materialName": "medwhtfern",
+        "category": "foliage",
+        "positionFingerprint": "ac7c5d36",
+        "indexFingerprint": "7c1bcb4c",
+        "inputTriangles": 94120,
+        "removedTriangles": 94120,
+        "outputTriangles": 0,
+        "verifiedBoxes": 1
+      },
+      {
+        "materialName": "SansevieriaLaurentii10x",
+        "category": "foliage",
+        "positionFingerprint": "88f86eb2",
+        "indexFingerprint": "87ff43ac",
+        "inputTriangles": 12320,
+        "removedTriangles": 12320,
+        "outputTriangles": 0,
+        "verifiedBoxes": 1
+      },
+      {
+        "materialName": "small lilac",
+        "category": "foliage",
+        "positionFingerprint": "0c6d648f",
+        "indexFingerprint": "31bae72a",
+        "inputTriangles": 283788,
+        "removedTriangles": 283788,
+        "outputTriangles": 0,
+        "verifiedBoxes": 1
+      },
+      {
+        "materialName": "treeeet1",
+        "category": "foliage",
+        "positionFingerprint": "5b55339c",
+        "indexFingerprint": "65b00ccb",
+        "inputTriangles": 12192,
+        "removedTriangles": 12192,
+        "outputTriangles": 0,
+        "verifiedBoxes": 1
+      },
+      {
+        "materialName": "Uviferaleaves",
+        "category": "foliage",
+        "positionFingerprint": "f3a17e1c",
+        "indexFingerprint": "249c5c4e",
+        "inputTriangles": 186525,
+        "removedTriangles": 186525,
+        "outputTriangles": 0,
+        "verifiedBoxes": 1
+      }
+    ],
+    "removedTriangles": 724937
+  },
+  "before": {
+    "triangles": 5046051,
+    "vertices": 5662586,
+    "primitiveCount": 199,
+    "materialNames": [
+      " 3D-STEEL",
+      " Material2",
+      "*104",
+      "*105",
+      "*112",
+      "*148",
+      "*149",
+      "*150",
+      "*16",
+      "*17",
+      "*18",
+      "*197",
+      "*204",
+      "*21",
+      "*223",
+      "*39",
+      "*43",
+      "*45",
+      "*46",
+      "*47",
+      "*50",
+      "*52",
+      "*6",
+      "*70",
+      "*71",
+      "*72",
+      "*75",
+      "*91",
+      "*92",
+      "*93",
+      "*95",
+      "03 - Default1",
+      "07c425711a92539b120613b3f5248aa2",
+      "22886293_124340414907002_5882252454515170618_n",
+      "32_slab marble emperador dark texture-seamless",
+      "34840_story_images",
+      "3D-ALUMINIUM2",
+      "3D-ALUMINIUM4",
+      "3D-BRASS",
+      "3D-BRASS1",
+      "3D-COWORKING FLOOR2",
+      "3D-MARBLE WALL1",
+      "3D-SHADOW GAP",
+      "3D-WOOD",
+      "3D-WOOD1",
+      "3D-WOOD2",
+      "8798118117406",
+      "96,96,96",
+      "<Beige>13",
+      "<Beige>3",
+      "<Beige>7",
+      "<Charcoal>",
+      "<CoolGray8>1",
+      "<CoolGray8>3",
+      "<Dark Brown>1",
+      "<DarkRed>",
+      "<ESCALATOR BIEGE>",
+      "<Gainsboro>1",
+      "<GhostWhite>",
+      "<Gray5>",
+      "<LightGray>",
+      "<LightGray>1",
+      "<Olive>4",
+      "<Wood-cherry>1",
+      "<auto>11",
+      "<auto>17",
+      "A6-G-ESCALATORS STEP",
+      "AWS- Aluminium",
+      "Black Perforated 1",
+      "Carpet_Plush_Tan",
+      "Cognac Silk leather",
+      "Color_2",
+      "Cutout+Tree greener",
+      "Glen Arbor Green Stone",
+      "Grass",
+      "Grass2",
+      "JavaJacket1",
+      "Leuchte_Tom Dixon_Beat Black",
+      "Leuchte_Tom Dixon_Beat Black gold",
+      "Leuchte_Tom Dixon_Beat Black gold1",
+      "Lisanne_Bandana",
+      "Lisanne_Metal",
+      "MI315",
+      "Material1",
+      "Metal Blackened Steel 1",
+      "Metal1",
+      "Mirror light truf",
+      "Muuto Black RAL 9005 ",
+      "Original default",
+      "Peace Lilly",
+      "Platinum",
+      "Riff Cut Oak",
+      "Riff Cut Oak 2",
+      "SansevieriaLaurentii10x",
+      "Skt_MDB_Ceramica",
+      "Skt_MDB_Leguminosa Roxa",
+      "Skt_MDB_Leguminosa Verde",
+      "Skt_MDB_Pedras",
+      "Steve_Glasses_Black1",
+      "Uviferaleaves",
+      "Warm Oak",
+      "Warm Oak V",
+      "Wood",
+      "Wood1",
+      "[0009_Linen]2",
+      "[0010_Snow]",
+      "[0010_Snow]2",
+      "[0020_Red]",
+      "[0039_DarkOrange]2",
+      "[0046_Gold]4",
+      "[0053_Ivory]2",
+      "[0056_Yellow]",
+      "[0131_Silver]",
+      "[0131_Silver]5",
+      "[0132_LightGray]1",
+      "[0133_Gray]",
+      "[0135_DarkGray]1",
+      "[0135_DarkGray]2",
+      "[Aluminum]",
+      "[Aluminum]6",
+      "[Aluminum]7",
+      "[Blinds Vertical Stripe Gray]2",
+      "[Chris_Shoe]",
+      "[Color A04]",
+      "[Color A04]2",
+      "[Color B01]",
+      "[Color C03]2",
+      "[Color G08]",
+      "[Color L06]",
+      "[Color M00]1",
+      "[Color M00]4",
+      "[Color M01]",
+      "[Color M03]9",
+      "[Color M04]4",
+      "[Color M07]",
+      "[Color M07]1",
+      "[Color M08]",
+      "[Color M08]1",
+      "[Color M09]",
+      "[Color M09]1",
+      "[Color_001]2",
+      "[Color_003]2",
+      "[Color_005]",
+      "[Color_006]",
+      "[Color_007]2",
+      "[Color_008]2",
+      "[Color_B01]1",
+      "[Color_B20]",
+      "[Color_B24]",
+      "[Color_B25]",
+      "[Color_C11]1",
+      "[Color_D15]",
+      "[Color_H07]1",
+      "[Color_H15]1",
+      "[Concrete_Aggregate_Smoke]2",
+      "[Concrete_Scored_Jointless]",
+      "[Granite Dark Gray]",
+      "[Grass Light Green]",
+      "[Groundcover Bark Chips]1",
+      "[Groundcover Gravel 1 inch]1",
+      "[Marble Carrara Gold Floor Tile]1",
+      "[Metal Aluminum Anodized]",
+      "[Metal Corrugated Shiny]9",
+      "[Metal Seamed]",
+      "[Metal Silver]2",
+      "[Metal_Corrogated_Shiny]1",
+      "[Mirror 02]1",
+      "[Polished Concrete New]1",
+      "[Polished Concrete New]2",
+      "[Polished Concrete New]3",
+      "[Small Aggregate]",
+      "[Stone_Pavers_Flagstone_Gray]1",
+      "[Translucent_Glass_Safety]",
+      "[Vegetation Blur 02]",
+      "[Vegetation_Grass_Artificial]5",
+      "[Vegetation_Grass_Artificial]7",
+      "[Water Sparkling]",
+      "[Wood Floor Light]",
+      "[Wood_Floor_Light]1",
+      "_Color_A01_2",
+      "_sGate-Black",
+      "_sGate-Metal-1",
+      "beton3",
+      "bg_tf_TF134-002",
+      "blueprint-2-small",
+      "ceiling1",
+      "cool grey",
+      "eik_ic",
+      "fernleaf",
+      "grass1_alegion-stockLOW",
+      "image2_20090828",
+      "jean blue2",
+      "l1",
+      "lamp",
+      "light barrasal",
+      "medwhtfern",
+      "seat back fabric",
+      "small lilac",
+      "treeeet1"
+    ],
+    "bounds": [
+      {
+        "min": [
+          -542.3265991210938,
+          -71.5207748413086,
+          -723.3972778320312
+        ],
+        "max": [
+          542.3265991210938,
+          83.89942169189453,
+          723.3911743164062
+        ]
+      }
+    ]
+  },
+  "filtered": {
+    "triangles": 4321114,
+    "vertices": 4524178,
+    "primitiveCount": 187,
+    "materialNames": [
+      " 3D-STEEL",
+      " Material2",
+      "*104",
+      "*105",
+      "*112",
+      "*148",
+      "*149",
+      "*150",
+      "*16",
+      "*17",
+      "*18",
+      "*197",
+      "*204",
+      "*21",
+      "*223",
+      "*39",
+      "*43",
+      "*45",
+      "*46",
+      "*47",
+      "*50",
+      "*52",
+      "*6",
+      "*70",
+      "*71",
+      "*72",
+      "*75",
+      "*91",
+      "*92",
+      "*93",
+      "*95",
+      "03 - Default1",
+      "07c425711a92539b120613b3f5248aa2",
+      "22886293_124340414907002_5882252454515170618_n",
+      "32_slab marble emperador dark texture-seamless",
+      "34840_story_images",
+      "3D-ALUMINIUM2",
+      "3D-ALUMINIUM4",
+      "3D-BRASS",
+      "3D-BRASS1",
+      "3D-COWORKING FLOOR2",
+      "3D-MARBLE WALL1",
+      "3D-SHADOW GAP",
+      "3D-WOOD",
+      "3D-WOOD1",
+      "3D-WOOD2",
+      "8798118117406",
+      "96,96,96",
+      "<Beige>13",
+      "<Beige>3",
+      "<Beige>7",
+      "<Charcoal>",
+      "<CoolGray8>1",
+      "<CoolGray8>3",
+      "<Dark Brown>1",
+      "<DarkRed>",
+      "<ESCALATOR BIEGE>",
+      "<Gainsboro>1",
+      "<GhostWhite>",
+      "<Gray5>",
+      "<LightGray>",
+      "<LightGray>1",
+      "<Olive>4",
+      "<Wood-cherry>1",
+      "<auto>11",
+      "<auto>17",
+      "A6-G-ESCALATORS STEP",
+      "AWS- Aluminium",
+      "Black Perforated 1",
+      "Carpet_Plush_Tan",
+      "Cognac Silk leather",
+      "Color_2",
+      "Glen Arbor Green Stone",
+      "Grass",
+      "JavaJacket1",
+      "Leuchte_Tom Dixon_Beat Black",
+      "Leuchte_Tom Dixon_Beat Black gold",
+      "Leuchte_Tom Dixon_Beat Black gold1",
+      "Lisanne_Bandana",
+      "Lisanne_Metal",
+      "MI315",
+      "Material1",
+      "Metal Blackened Steel 1",
+      "Metal1",
+      "Mirror light truf",
+      "Muuto Black RAL 9005 ",
+      "Original default",
+      "Peace Lilly",
+      "Platinum",
+      "Riff Cut Oak",
+      "Riff Cut Oak 2",
+      "Skt_MDB_Ceramica",
+      "Skt_MDB_Leguminosa Roxa",
+      "Skt_MDB_Leguminosa Verde",
+      "Skt_MDB_Pedras",
+      "Steve_Glasses_Black1",
+      "Warm Oak",
+      "Warm Oak V",
+      "Wood",
+      "Wood1",
+      "[0009_Linen]2",
+      "[0010_Snow]",
+      "[0010_Snow]2",
+      "[0020_Red]",
+      "[0039_DarkOrange]2",
+      "[0046_Gold]4",
+      "[0053_Ivory]2",
+      "[0056_Yellow]",
+      "[0131_Silver]",
+      "[0131_Silver]5",
+      "[0132_LightGray]1",
+      "[0133_Gray]",
+      "[0135_DarkGray]1",
+      "[0135_DarkGray]2",
+      "[Aluminum]",
+      "[Aluminum]6",
+      "[Aluminum]7",
+      "[Blinds Vertical Stripe Gray]2",
+      "[Chris_Shoe]",
+      "[Color A04]",
+      "[Color A04]2",
+      "[Color B01]",
+      "[Color G08]",
+      "[Color L06]",
+      "[Color M00]1",
+      "[Color M00]4",
+      "[Color M01]",
+      "[Color M03]9",
+      "[Color M04]4",
+      "[Color M07]",
+      "[Color M07]1",
+      "[Color M08]",
+      "[Color M08]1",
+      "[Color M09]",
+      "[Color M09]1",
+      "[Color_001]2",
+      "[Color_003]2",
+      "[Color_005]",
+      "[Color_006]",
+      "[Color_007]2",
+      "[Color_008]2",
+      "[Color_B01]1",
+      "[Color_B20]",
+      "[Color_B24]",
+      "[Color_B25]",
+      "[Color_C11]1",
+      "[Color_D15]",
+      "[Color_H07]1",
+      "[Color_H15]1",
+      "[Concrete_Aggregate_Smoke]2",
+      "[Concrete_Scored_Jointless]",
+      "[Granite Dark Gray]",
+      "[Grass Light Green]",
+      "[Groundcover Bark Chips]1",
+      "[Groundcover Gravel 1 inch]1",
+      "[Marble Carrara Gold Floor Tile]1",
+      "[Metal Aluminum Anodized]",
+      "[Metal Corrugated Shiny]9",
+      "[Metal Seamed]",
+      "[Metal Silver]2",
+      "[Metal_Corrogated_Shiny]1",
+      "[Mirror 02]1",
+      "[Polished Concrete New]1",
+      "[Polished Concrete New]2",
+      "[Polished Concrete New]3",
+      "[Small Aggregate]",
+      "[Stone_Pavers_Flagstone_Gray]1",
+      "[Translucent_Glass_Safety]",
+      "[Vegetation Blur 02]",
+      "[Vegetation_Grass_Artificial]5",
+      "[Vegetation_Grass_Artificial]7",
+      "[Water Sparkling]",
+      "[Wood Floor Light]",
+      "[Wood_Floor_Light]1",
+      "_Color_A01_2",
+      "_sGate-Black",
+      "_sGate-Metal-1",
+      "beton3",
+      "blueprint-2-small",
+      "ceiling1",
+      "cool grey",
+      "eik_ic",
+      "image2_20090828",
+      "jean blue2",
+      "lamp",
+      "light barrasal",
+      "seat back fabric"
+    ],
+    "bounds": [
+      {
+        "min": [
+          -542.3265991210938,
+          -71.5207748413086,
+          -723.3972778320312
+        ],
+        "max": [
+          542.3265991210938,
+          83.89942169189453,
+          723.3911743164062
+        ]
+      }
+    ]
+  },
+  "simplified": {
+    "triangles": 2487541,
+    "vertices": 2753400,
+    "primitiveCount": 187,
+    "materialNames": [
+      " 3D-STEEL",
+      " Material2",
+      "*104",
+      "*105",
+      "*112",
+      "*148",
+      "*149",
+      "*150",
+      "*16",
+      "*17",
+      "*18",
+      "*197",
+      "*204",
+      "*21",
+      "*223",
+      "*39",
+      "*43",
+      "*45",
+      "*46",
+      "*47",
+      "*50",
+      "*52",
+      "*6",
+      "*70",
+      "*71",
+      "*72",
+      "*75",
+      "*91",
+      "*92",
+      "*93",
+      "*95",
+      "03 - Default1",
+      "07c425711a92539b120613b3f5248aa2",
+      "22886293_124340414907002_5882252454515170618_n",
+      "32_slab marble emperador dark texture-seamless",
+      "34840_story_images",
+      "3D-ALUMINIUM2",
+      "3D-ALUMINIUM4",
+      "3D-BRASS",
+      "3D-BRASS1",
+      "3D-COWORKING FLOOR2",
+      "3D-MARBLE WALL1",
+      "3D-SHADOW GAP",
+      "3D-WOOD",
+      "3D-WOOD1",
+      "3D-WOOD2",
+      "8798118117406",
+      "96,96,96",
+      "<Beige>13",
+      "<Beige>3",
+      "<Beige>7",
+      "<Charcoal>",
+      "<CoolGray8>1",
+      "<CoolGray8>3",
+      "<Dark Brown>1",
+      "<DarkRed>",
+      "<ESCALATOR BIEGE>",
+      "<Gainsboro>1",
+      "<GhostWhite>",
+      "<Gray5>",
+      "<LightGray>",
+      "<LightGray>1",
+      "<Olive>4",
+      "<Wood-cherry>1",
+      "<auto>11",
+      "<auto>17",
+      "A6-G-ESCALATORS STEP",
+      "AWS- Aluminium",
+      "Black Perforated 1",
+      "Carpet_Plush_Tan",
+      "Cognac Silk leather",
+      "Color_2",
+      "Glen Arbor Green Stone",
+      "Grass",
+      "JavaJacket1",
+      "Leuchte_Tom Dixon_Beat Black",
+      "Leuchte_Tom Dixon_Beat Black gold",
+      "Leuchte_Tom Dixon_Beat Black gold1",
+      "Lisanne_Bandana",
+      "Lisanne_Metal",
+      "MI315",
+      "Material1",
+      "Metal Blackened Steel 1",
+      "Metal1",
+      "Mirror light truf",
+      "Muuto Black RAL 9005 ",
+      "Original default",
+      "Peace Lilly",
+      "Platinum",
+      "Riff Cut Oak",
+      "Riff Cut Oak 2",
+      "Skt_MDB_Ceramica",
+      "Skt_MDB_Leguminosa Roxa",
+      "Skt_MDB_Leguminosa Verde",
+      "Skt_MDB_Pedras",
+      "Steve_Glasses_Black1",
+      "Warm Oak",
+      "Warm Oak V",
+      "Wood",
+      "Wood1",
+      "[0009_Linen]2",
+      "[0010_Snow]",
+      "[0010_Snow]2",
+      "[0020_Red]",
+      "[0039_DarkOrange]2",
+      "[0046_Gold]4",
+      "[0053_Ivory]2",
+      "[0056_Yellow]",
+      "[0131_Silver]",
+      "[0131_Silver]5",
+      "[0132_LightGray]1",
+      "[0133_Gray]",
+      "[0135_DarkGray]1",
+      "[0135_DarkGray]2",
+      "[Aluminum]",
+      "[Aluminum]6",
+      "[Aluminum]7",
+      "[Blinds Vertical Stripe Gray]2",
+      "[Chris_Shoe]",
+      "[Color A04]",
+      "[Color A04]2",
+      "[Color B01]",
+      "[Color G08]",
+      "[Color L06]",
+      "[Color M00]1",
+      "[Color M00]4",
+      "[Color M01]",
+      "[Color M03]9",
+      "[Color M04]4",
+      "[Color M07]",
+      "[Color M07]1",
+      "[Color M08]",
+      "[Color M08]1",
+      "[Color M09]",
+      "[Color M09]1",
+      "[Color_001]2",
+      "[Color_003]2",
+      "[Color_005]",
+      "[Color_006]",
+      "[Color_007]2",
+      "[Color_008]2",
+      "[Color_B01]1",
+      "[Color_B20]",
+      "[Color_B24]",
+      "[Color_B25]",
+      "[Color_C11]1",
+      "[Color_D15]",
+      "[Color_H07]1",
+      "[Color_H15]1",
+      "[Concrete_Aggregate_Smoke]2",
+      "[Concrete_Scored_Jointless]",
+      "[Granite Dark Gray]",
+      "[Grass Light Green]",
+      "[Groundcover Bark Chips]1",
+      "[Groundcover Gravel 1 inch]1",
+      "[Marble Carrara Gold Floor Tile]1",
+      "[Metal Aluminum Anodized]",
+      "[Metal Corrugated Shiny]9",
+      "[Metal Seamed]",
+      "[Metal Silver]2",
+      "[Metal_Corrogated_Shiny]1",
+      "[Mirror 02]1",
+      "[Polished Concrete New]1",
+      "[Polished Concrete New]2",
+      "[Polished Concrete New]3",
+      "[Small Aggregate]",
+      "[Stone_Pavers_Flagstone_Gray]1",
+      "[Translucent_Glass_Safety]",
+      "[Vegetation Blur 02]",
+      "[Vegetation_Grass_Artificial]5",
+      "[Vegetation_Grass_Artificial]7",
+      "[Water Sparkling]",
+      "[Wood Floor Light]",
+      "[Wood_Floor_Light]1",
+      "_Color_A01_2",
+      "_sGate-Black",
+      "_sGate-Metal-1",
+      "beton3",
+      "blueprint-2-small",
+      "ceiling1",
+      "cool grey",
+      "eik_ic",
+      "image2_20090828",
+      "jean blue2",
+      "lamp",
+      "light barrasal",
+      "seat back fabric"
+    ],
+    "bounds": [
+      {
+        "min": [
+          -542.3265991210938,
+          -71.5207748413086,
+          -723.3972778320312
+        ],
+        "max": [
+          542.3265991210938,
+          83.89942169189453,
+          723.3911743164062
+        ]
+      }
+    ]
+  },
+  "partitioned": {
+    "triangles": 2487541,
+    "vertices": 2761552,
+    "primitiveCount": 265,
+    "materialNames": [
+      " 3D-STEEL",
+      " Material2",
+      "*104",
+      "*105",
+      "*112",
+      "*148",
+      "*149",
+      "*150",
+      "*16",
+      "*17",
+      "*18",
+      "*197",
+      "*204",
+      "*21",
+      "*223",
+      "*39",
+      "*43",
+      "*45",
+      "*46",
+      "*47",
+      "*50",
+      "*52",
+      "*6",
+      "*70",
+      "*71",
+      "*72",
+      "*75",
+      "*91",
+      "*92",
+      "*93",
+      "*95",
+      "03 - Default1",
+      "07c425711a92539b120613b3f5248aa2",
+      "22886293_124340414907002_5882252454515170618_n",
+      "32_slab marble emperador dark texture-seamless",
+      "34840_story_images",
+      "3D-ALUMINIUM2",
+      "3D-ALUMINIUM4",
+      "3D-BRASS",
+      "3D-BRASS1",
+      "3D-COWORKING FLOOR2",
+      "3D-MARBLE WALL1",
+      "3D-SHADOW GAP",
+      "3D-WOOD",
+      "3D-WOOD1",
+      "3D-WOOD2",
+      "8798118117406",
+      "96,96,96",
+      "<Beige>13",
+      "<Beige>3",
+      "<Beige>7",
+      "<Charcoal>",
+      "<CoolGray8>1",
+      "<CoolGray8>3",
+      "<Dark Brown>1",
+      "<DarkRed>",
+      "<ESCALATOR BIEGE>",
+      "<Gainsboro>1",
+      "<GhostWhite>",
+      "<Gray5>",
+      "<LightGray>",
+      "<LightGray>1",
+      "<Olive>4",
+      "<Wood-cherry>1",
+      "<auto>11",
+      "<auto>17",
+      "A6-G-ESCALATORS STEP",
+      "AWS- Aluminium",
+      "Black Perforated 1",
+      "Carpet_Plush_Tan",
+      "Cognac Silk leather",
+      "Color_2",
+      "Glen Arbor Green Stone",
+      "Grass",
+      "JavaJacket1",
+      "Leuchte_Tom Dixon_Beat Black",
+      "Leuchte_Tom Dixon_Beat Black gold",
+      "Leuchte_Tom Dixon_Beat Black gold1",
+      "Lisanne_Bandana",
+      "Lisanne_Metal",
+      "MI315",
+      "Material1",
+      "Metal Blackened Steel 1",
+      "Metal1",
+      "Mirror light truf",
+      "Muuto Black RAL 9005 ",
+      "Original default",
+      "Peace Lilly",
+      "Platinum",
+      "Riff Cut Oak",
+      "Riff Cut Oak 2",
+      "Skt_MDB_Ceramica",
+      "Skt_MDB_Leguminosa Roxa",
+      "Skt_MDB_Leguminosa Verde",
+      "Skt_MDB_Pedras",
+      "Steve_Glasses_Black1",
+      "Warm Oak",
+      "Warm Oak V",
+      "Wood",
+      "Wood1",
+      "[0009_Linen]2",
+      "[0010_Snow]",
+      "[0010_Snow]2",
+      "[0020_Red]",
+      "[0039_DarkOrange]2",
+      "[0046_Gold]4",
+      "[0053_Ivory]2",
+      "[0056_Yellow]",
+      "[0131_Silver]",
+      "[0131_Silver]5",
+      "[0132_LightGray]1",
+      "[0133_Gray]",
+      "[0135_DarkGray]1",
+      "[0135_DarkGray]2",
+      "[Aluminum]",
+      "[Aluminum]6",
+      "[Aluminum]7",
+      "[Blinds Vertical Stripe Gray]2",
+      "[Chris_Shoe]",
+      "[Color A04]",
+      "[Color A04]2",
+      "[Color B01]",
+      "[Color G08]",
+      "[Color L06]",
+      "[Color M00]1",
+      "[Color M00]4",
+      "[Color M01]",
+      "[Color M03]9",
+      "[Color M04]4",
+      "[Color M07]",
+      "[Color M07]1",
+      "[Color M08]",
+      "[Color M08]1",
+      "[Color M09]",
+      "[Color M09]1",
+      "[Color_001]2",
+      "[Color_003]2",
+      "[Color_005]",
+      "[Color_006]",
+      "[Color_007]2",
+      "[Color_008]2",
+      "[Color_B01]1",
+      "[Color_B20]",
+      "[Color_B24]",
+      "[Color_B25]",
+      "[Color_C11]1",
+      "[Color_D15]",
+      "[Color_H07]1",
+      "[Color_H15]1",
+      "[Concrete_Aggregate_Smoke]2",
+      "[Concrete_Scored_Jointless]",
+      "[Granite Dark Gray]",
+      "[Grass Light Green]",
+      "[Groundcover Bark Chips]1",
+      "[Groundcover Gravel 1 inch]1",
+      "[Marble Carrara Gold Floor Tile]1",
+      "[Metal Aluminum Anodized]",
+      "[Metal Corrugated Shiny]9",
+      "[Metal Seamed]",
+      "[Metal Silver]2",
+      "[Metal_Corrogated_Shiny]1",
+      "[Mirror 02]1",
+      "[Polished Concrete New]1",
+      "[Polished Concrete New]2",
+      "[Polished Concrete New]3",
+      "[Small Aggregate]",
+      "[Stone_Pavers_Flagstone_Gray]1",
+      "[Translucent_Glass_Safety]",
+      "[Vegetation Blur 02]",
+      "[Vegetation_Grass_Artificial]5",
+      "[Vegetation_Grass_Artificial]7",
+      "[Water Sparkling]",
+      "[Wood Floor Light]",
+      "[Wood_Floor_Light]1",
+      "_Color_A01_2",
+      "_sGate-Black",
+      "_sGate-Metal-1",
+      "beton3",
+      "blueprint-2-small",
+      "ceiling1",
+      "cool grey",
+      "eik_ic",
+      "image2_20090828",
+      "jean blue2",
+      "lamp",
+      "light barrasal",
+      "seat back fabric"
+    ],
+    "bounds": [
+      {
+        "min": [
+          -542.3265991210938,
+          -71.5207748413086,
+          -723.3972778320312
+        ],
+        "max": [
+          542.3265991210938,
+          83.89942169189453,
+          723.3911743164062
+        ]
+      }
+    ]
+  },
+  "zeroAreaFacesRemoved": 76709,
+  "verified": {
+    "triangles": 2410832,
+    "vertices": 2928034,
+    "primitiveCount": 265,
+    "materialNames": [
+      " 3D-STEEL",
+      " Material2",
+      "*104",
+      "*105",
+      "*112",
+      "*148",
+      "*149",
+      "*150",
+      "*16",
+      "*17",
+      "*18",
+      "*197",
+      "*204",
+      "*21",
+      "*223",
+      "*39",
+      "*43",
+      "*45",
+      "*46",
+      "*47",
+      "*50",
+      "*52",
+      "*6",
+      "*70",
+      "*71",
+      "*72",
+      "*75",
+      "*91",
+      "*92",
+      "*93",
+      "*95",
+      "03 - Default1",
+      "07c425711a92539b120613b3f5248aa2",
+      "22886293_124340414907002_5882252454515170618_n",
+      "32_slab marble emperador dark texture-seamless",
+      "34840_story_images",
+      "3D-ALUMINIUM2",
+      "3D-ALUMINIUM4",
+      "3D-BRASS",
+      "3D-BRASS1",
+      "3D-COWORKING FLOOR2",
+      "3D-MARBLE WALL1",
+      "3D-SHADOW GAP",
+      "3D-WOOD",
+      "3D-WOOD1",
+      "3D-WOOD2",
+      "8798118117406",
+      "96,96,96",
+      "<Beige>13",
+      "<Beige>3",
+      "<Beige>7",
+      "<Charcoal>",
+      "<CoolGray8>1",
+      "<CoolGray8>3",
+      "<Dark Brown>1",
+      "<DarkRed>",
+      "<ESCALATOR BIEGE>",
+      "<Gainsboro>1",
+      "<GhostWhite>",
+      "<Gray5>",
+      "<LightGray>",
+      "<LightGray>1",
+      "<Olive>4",
+      "<Wood-cherry>1",
+      "<auto>11",
+      "<auto>17",
+      "A6-G-ESCALATORS STEP",
+      "AWS- Aluminium",
+      "Black Perforated 1",
+      "Carpet_Plush_Tan",
+      "Cognac Silk leather",
+      "Color_2",
+      "Glen Arbor Green Stone",
+      "Grass",
+      "JavaJacket1",
+      "Leuchte_Tom Dixon_Beat Black",
+      "Leuchte_Tom Dixon_Beat Black gold",
+      "Leuchte_Tom Dixon_Beat Black gold1",
+      "Lisanne_Bandana",
+      "Lisanne_Metal",
+      "MI315",
+      "Material1",
+      "Metal Blackened Steel 1",
+      "Metal1",
+      "Mirror light truf",
+      "Muuto Black RAL 9005 ",
+      "Original default",
+      "Peace Lilly",
+      "Platinum",
+      "Riff Cut Oak",
+      "Riff Cut Oak 2",
+      "Skt_MDB_Ceramica",
+      "Skt_MDB_Leguminosa Roxa",
+      "Skt_MDB_Leguminosa Verde",
+      "Skt_MDB_Pedras",
+      "Steve_Glasses_Black1",
+      "Warm Oak",
+      "Warm Oak V",
+      "Wood",
+      "Wood1",
+      "[0009_Linen]2",
+      "[0010_Snow]",
+      "[0010_Snow]2",
+      "[0020_Red]",
+      "[0039_DarkOrange]2",
+      "[0046_Gold]4",
+      "[0053_Ivory]2",
+      "[0056_Yellow]",
+      "[0131_Silver]",
+      "[0131_Silver]5",
+      "[0132_LightGray]1",
+      "[0133_Gray]",
+      "[0135_DarkGray]1",
+      "[0135_DarkGray]2",
+      "[Aluminum]",
+      "[Aluminum]6",
+      "[Aluminum]7",
+      "[Blinds Vertical Stripe Gray]2",
+      "[Chris_Shoe]",
+      "[Color A04]",
+      "[Color A04]2",
+      "[Color B01]",
+      "[Color G08]",
+      "[Color L06]",
+      "[Color M00]1",
+      "[Color M00]4",
+      "[Color M01]",
+      "[Color M03]9",
+      "[Color M04]4",
+      "[Color M07]",
+      "[Color M07]1",
+      "[Color M08]",
+      "[Color M08]1",
+      "[Color M09]",
+      "[Color M09]1",
+      "[Color_001]2",
+      "[Color_003]2",
+      "[Color_005]",
+      "[Color_006]",
+      "[Color_007]2",
+      "[Color_008]2",
+      "[Color_B01]1",
+      "[Color_B20]",
+      "[Color_B24]",
+      "[Color_B25]",
+      "[Color_C11]1",
+      "[Color_D15]",
+      "[Color_H07]1",
+      "[Color_H15]1",
+      "[Concrete_Aggregate_Smoke]2",
+      "[Concrete_Scored_Jointless]",
+      "[Granite Dark Gray]",
+      "[Grass Light Green]",
+      "[Groundcover Bark Chips]1",
+      "[Groundcover Gravel 1 inch]1",
+      "[Marble Carrara Gold Floor Tile]1",
+      "[Metal Aluminum Anodized]",
+      "[Metal Corrugated Shiny]9",
+      "[Metal Seamed]",
+      "[Metal Silver]2",
+      "[Metal_Corrogated_Shiny]1",
+      "[Mirror 02]1",
+      "[Polished Concrete New]1",
+      "[Polished Concrete New]2",
+      "[Polished Concrete New]3",
+      "[Small Aggregate]",
+      "[Stone_Pavers_Flagstone_Gray]1",
+      "[Translucent_Glass_Safety]",
+      "[Vegetation Blur 02]",
+      "[Vegetation_Grass_Artificial]5",
+      "[Vegetation_Grass_Artificial]7",
+      "[Water Sparkling]",
+      "[Wood Floor Light]",
+      "[Wood_Floor_Light]1",
+      "_Color_A01_2",
+      "_sGate-Black",
+      "_sGate-Metal-1",
+      "beton3",
+      "blueprint-2-small",
+      "ceiling1",
+      "cool grey",
+      "eik_ic",
+      "image2_20090828",
+      "jean blue2",
+      "lamp",
+      "light barrasal",
+      "seat back fabric"
+    ],
+    "bounds": [
+      {
+        "min": [
+          -542.3265991210938,
+          -71.5207748413086,
+          -723.3972778320312
+        ],
+        "max": [
+          542.3273315429688,
+          83.90206146240234,
+          723.3911743164062
+        ]
+      }
+    ]
+  },
+  "primitiveAudit": [
+    {
+      "materialName": "03 - Default1",
+      "before": 8000,
+      "after": 7292
+    },
+    {
+      "materialName": "3D-ALUMINIUM2",
+      "before": 24,
+      "after": 24
+    },
+    {
+      "materialName": "3D-ALUMINIUM4",
+      "before": 14,
+      "after": 14
+    },
+    {
+      "materialName": "3D-BRASS",
+      "before": 2350,
+      "after": 1872
+    },
+    {
+      "materialName": "3D-BRASS1",
+      "before": 12,
+      "after": 12
+    },
+    {
+      "materialName": "3D-COWORKING FLOOR2",
+      "before": 88,
+      "after": 88
+    },
+    {
+      "materialName": "3D-MARBLE WALL1",
+      "before": 990,
+      "after": 774
+    },
+    {
+      "materialName": "3D-SHADOW GAP",
+      "before": 56,
+      "after": 56
+    },
+    {
+      "materialName": "3D-WOOD",
+      "before": 46,
+      "after": 46
+    },
+    {
+      "materialName": "3D-WOOD1",
+      "before": 200,
+      "after": 200
+    },
+    {
+      "materialName": "3D-WOOD2",
+      "before": 2522,
+      "after": 1386
+    },
+    {
+      "materialName": "07c425711a92539b120613b3f5248aa2",
+      "before": 1584,
+      "after": 1584
+    },
+    {
+      "materialName": "32_slab marble emperador dark texture-seamless",
+      "before": 616,
+      "after": 616
+    },
+    {
+      "materialName": "96,96,96",
+      "before": 330,
+      "after": 241
+    },
+    {
+      "materialName": "34840_story_images",
+      "before": 6491,
+      "after": 6491
+    },
+    {
+      "materialName": "22886293_124340414907002_5882252454515170618_n",
+      "before": 84,
+      "after": 84
+    },
+    {
+      "materialName": "8798118117406",
+      "before": 664,
+      "after": 664
+    },
+    {
+      "materialName": " 3D-STEEL",
+      "before": 396,
+      "after": 304
+    },
+    {
+      "materialName": " Material2",
+      "before": 700,
+      "after": 700
+    },
+    {
+      "materialName": "*6",
+      "before": 33838,
+      "after": 27882
+    },
+    {
+      "materialName": "*16",
+      "before": 3111,
+      "after": 2743
+    },
+    {
+      "materialName": "*17",
+      "before": 313254,
+      "after": 172275
+    },
+    {
+      "materialName": "*18",
+      "before": 12452,
+      "after": 10158
+    },
+    {
+      "materialName": "*21",
+      "before": 10031,
+      "after": 5517
+    },
+    {
+      "materialName": "*39",
+      "before": 168,
+      "after": 168
+    },
+    {
+      "materialName": "*43",
+      "before": 752,
+      "after": 682
+    },
+    {
+      "materialName": "*45",
+      "before": 284,
+      "after": 284
+    },
+    {
+      "materialName": "*46",
+      "before": 24,
+      "after": 24
+    },
+    {
+      "materialName": "*47",
+      "before": 3264,
+      "after": 2064
+    },
+    {
+      "materialName": "*50",
+      "before": 1443,
+      "after": 961
+    },
+    {
+      "materialName": "*52",
+      "before": 6,
+      "after": 6
+    },
+    {
+      "materialName": "*70",
+      "before": 38,
+      "after": 38
+    },
+    {
+      "materialName": "*71",
+      "before": 10593,
+      "after": 5825
+    },
+    {
+      "materialName": "*72",
+      "before": 18384,
+      "after": 10110
+    },
+    {
+      "materialName": "*75",
+      "before": 78,
+      "after": 78
+    },
+    {
+      "materialName": "*91",
+      "before": 54,
+      "after": 54
+    },
+    {
+      "materialName": "*92",
+      "before": 2,
+      "after": 2
+    },
+    {
+      "materialName": "*93",
+      "before": 6259,
+      "after": 4166
+    },
+    {
+      "materialName": "*95",
+      "before": 2,
+      "after": 2
+    },
+    {
+      "materialName": "*104",
+      "before": 248,
+      "after": 248
+    },
+    {
+      "materialName": "*105",
+      "before": 51300,
+      "after": 28214
+    },
+    {
+      "materialName": "*112",
+      "before": 4224,
+      "after": 2323
+    },
+    {
+      "materialName": "*148",
+      "before": 256,
+      "after": 256
+    },
+    {
+      "materialName": "*149",
+      "before": 9022,
+      "after": 8650
+    },
+    {
+      "materialName": "*150",
+      "before": 2025,
+      "after": 2025
+    },
+    {
+      "materialName": "*197",
+      "before": 253,
+      "after": 253
+    },
+    {
+      "materialName": "*204",
+      "before": 168,
+      "after": 168
+    },
+    {
+      "materialName": "*223",
+      "before": 3356,
+      "after": 3356
+    },
+    {
+      "materialName": "<auto>11",
+      "before": 470,
+      "after": 470
+    },
+    {
+      "materialName": "<auto>17",
+      "before": 1122,
+      "after": 1122
+    },
+    {
+      "materialName": "<Beige>3",
+      "before": 362,
+      "after": 255
+    },
+    {
+      "materialName": "<Beige>7",
+      "before": 244,
+      "after": 244
+    },
+    {
+      "materialName": "<Beige>13",
+      "before": 130,
+      "after": 130
+    },
+    {
+      "materialName": "<Charcoal>",
+      "before": 39410,
+      "after": 30569
+    },
+    {
+      "materialName": "<CoolGray8>1",
+      "before": 22,
+      "after": 22
+    },
+    {
+      "materialName": "<CoolGray8>3",
+      "before": 108,
+      "after": 108
+    },
+    {
+      "materialName": "<Dark Brown>1",
+      "before": 33,
+      "after": 33
+    },
+    {
+      "materialName": "<DarkRed>",
+      "before": 804,
+      "after": 792
+    },
+    {
+      "materialName": "<ESCALATOR BIEGE>",
+      "before": 25280,
+      "after": 23090
+    },
+    {
+      "materialName": "<Gainsboro>1",
+      "before": 190,
+      "after": 190
+    },
+    {
+      "materialName": "<GhostWhite>",
+      "before": 12,
+      "after": 12
+    },
+    {
+      "materialName": "<Gray5>",
+      "before": 2944,
+      "after": 1978
+    },
+    {
+      "materialName": "<LightGray>",
+      "before": 752,
+      "after": 534
+    },
+    {
+      "materialName": "<LightGray>1",
+      "before": 14160,
+      "after": 7788
+    },
+    {
+      "materialName": "<Olive>4",
+      "before": 229,
+      "after": 229
+    },
+    {
+      "materialName": "<Wood-cherry>1",
+      "before": 179,
+      "after": 179
+    },
+    {
+      "materialName": "[0009_Linen]2",
+      "before": 350,
+      "after": 350
+    },
+    {
+      "materialName": "[0010_Snow]",
+      "before": 3244,
+      "after": 2850
+    },
+    {
+      "materialName": "[0010_Snow]2",
+      "before": 2604,
+      "after": 2604
+    },
+    {
+      "materialName": "[0020_Red]",
+      "before": 176,
+      "after": 176
+    },
+    {
+      "materialName": "[0039_DarkOrange]2",
+      "before": 114,
+      "after": 114
+    },
+    {
+      "materialName": "[0046_Gold]4",
+      "before": 1584,
+      "after": 1584
+    },
+    {
+      "materialName": "[0053_Ivory]2",
+      "before": 367,
+      "after": 365
+    },
+    {
+      "materialName": "[0056_Yellow]",
+      "before": 176,
+      "after": 176
+    },
+    {
+      "materialName": "[0131_Silver]",
+      "before": 27801,
+      "after": 15289
+    },
+    {
+      "materialName": "[0131_Silver]5",
+      "before": 3796,
+      "after": 3618
+    },
+    {
+      "materialName": "[0132_LightGray]1",
+      "before": 124,
+      "after": 124
+    },
+    {
+      "materialName": "[0133_Gray]",
+      "before": 448,
+      "after": 422
+    },
+    {
+      "materialName": "[0135_DarkGray]1",
+      "before": 29664,
+      "after": 16314
+    },
+    {
+      "materialName": "[0135_DarkGray]2",
+      "before": 140,
+      "after": 140
+    },
+    {
+      "materialName": "[Aluminum]",
+      "before": 662,
+      "after": 662
+    },
+    {
+      "materialName": "[Aluminum]6",
+      "before": 8,
+      "after": 8
+    },
+    {
+      "materialName": "[Aluminum]7",
+      "before": 7305,
+      "after": 5647
+    },
+    {
+      "materialName": "[Blinds Vertical Stripe Gray]2",
+      "before": 74,
+      "after": 74
+    },
+    {
+      "materialName": "[Chris_Shoe]",
+      "before": 32,
+      "after": 32
+    },
+    {
+      "materialName": "[Color A04]",
+      "before": 2678,
+      "after": 2145
+    },
+    {
+      "materialName": "[Color A04]2",
+      "before": 4758,
+      "after": 3208
+    },
+    {
+      "materialName": "[Color B01]",
+      "before": 150,
+      "after": 150
+    },
+    {
+      "materialName": "[Color G08]",
+      "before": 5000,
+      "after": 5000
+    },
+    {
+      "materialName": "[Color L06]",
+      "before": 18020,
+      "after": 13264
+    },
+    {
+      "materialName": "[Color M00]1",
+      "before": 98323,
+      "after": 54076
+    },
+    {
+      "materialName": "[Color M00]4",
+      "before": 21,
+      "after": 21
+    },
+    {
+      "materialName": "[Color M01]",
+      "before": 30,
+      "after": 30
+    },
+    {
+      "materialName": "[Color M03]9",
+      "before": 5229,
+      "after": 3688
+    },
+    {
+      "materialName": "[Color M04]4",
+      "before": 748,
+      "after": 748
+    },
+    {
+      "materialName": "[Color M07]",
+      "before": 142318,
+      "after": 78274
+    },
+    {
+      "materialName": "[Color M07]1",
+      "before": 28144,
+      "after": 15478
+    },
+    {
+      "materialName": "[Color M08]",
+      "before": 409533,
+      "after": 107660
+    },
+    {
+      "materialName": "[Color M08]1",
+      "before": 98,
+      "after": 98
+    },
+    {
+      "materialName": "[Color M09]",
+      "before": 436573,
+      "after": 240111
+    },
+    {
+      "materialName": "[Color M09]1",
+      "before": 144,
+      "after": 144
+    },
+    {
+      "materialName": "[Color_001]2",
+      "before": 230,
+      "after": 230
+    },
+    {
+      "materialName": "[Color_003]2",
+      "before": 916,
+      "after": 916
+    },
+    {
+      "materialName": "[Color_005]",
+      "before": 40087,
+      "after": 39790
+    },
+    {
+      "materialName": "[Color_006]",
+      "before": 73223,
+      "after": 40271
+    },
+    {
+      "materialName": "[Color_007]2",
+      "before": 25800,
+      "after": 25050
+    },
+    {
+      "materialName": "[Color_008]2",
+      "before": 852,
+      "after": 834
+    },
+    {
+      "materialName": "[Color_B01]1",
+      "before": 2,
+      "after": 2
+    },
+    {
+      "materialName": "[Color_B20]",
+      "before": 13167,
+      "after": 7241
+    },
+    {
+      "materialName": "[Color_B24]",
+      "before": 118,
+      "after": 118
+    },
+    {
+      "materialName": "[Color_B25]",
+      "before": 20,
+      "after": 20
+    },
+    {
+      "materialName": "[Color_C11]1",
+      "before": 8,
+      "after": 8
+    },
+    {
+      "materialName": "[Color_D15]",
+      "before": 1396,
+      "after": 1396
+    },
+    {
+      "materialName": "[Color_H07]1",
+      "before": 738,
+      "after": 738
+    },
+    {
+      "materialName": "[Color_H15]1",
+      "before": 15072,
+      "after": 8286
+    },
+    {
+      "materialName": "[Concrete_Aggregate_Smoke]2",
+      "before": 360,
+      "after": 354
+    },
+    {
+      "materialName": "[Concrete_Scored_Jointless]",
+      "before": 6,
+      "after": 6
+    },
+    {
+      "materialName": "[Granite Dark Gray]",
+      "before": 363,
+      "after": 348
+    },
+    {
+      "materialName": "[Grass Light Green]",
+      "before": 10,
+      "after": 10
+    },
+    {
+      "materialName": "[Groundcover Bark Chips]1",
+      "before": 144,
+      "after": 144
+    },
+    {
+      "materialName": "[Groundcover Gravel 1 inch]1",
+      "before": 6,
+      "after": 6
+    },
+    {
+      "materialName": "[Marble Carrara Gold Floor Tile]1",
+      "before": 5756,
+      "after": 3226
+    },
+    {
+      "materialName": "[Metal Aluminum Anodized]",
+      "before": 30769,
+      "after": 26463
+    },
+    {
+      "materialName": "[Metal Corrugated Shiny]9",
+      "before": 38275,
+      "after": 28249
+    },
+    {
+      "materialName": "[Metal Seamed]",
+      "before": 2178,
+      "after": 1308
+    },
+    {
+      "materialName": "[Metal Silver]2",
+      "before": 1636,
+      "after": 1636
+    },
+    {
+      "materialName": "[Metal_Corrogated_Shiny]1",
+      "before": 75256,
+      "after": 75234
+    },
+    {
+      "materialName": "[Mirror 02]1",
+      "before": 400,
+      "after": 400
+    },
+    {
+      "materialName": "[Polished Concrete New]1",
+      "before": 49032,
+      "after": 44037
+    },
+    {
+      "materialName": "[Polished Concrete New]2",
+      "before": 396,
+      "after": 396
+    },
+    {
+      "materialName": "[Polished Concrete New]3",
+      "before": 3299,
+      "after": 3281
+    },
+    {
+      "materialName": "[Small Aggregate]",
+      "before": 194,
+      "after": 194
+    },
+    {
+      "materialName": "[Stone_Pavers_Flagstone_Gray]1",
+      "before": 5416,
+      "after": 4770
+    },
+    {
+      "materialName": "[Translucent_Glass_Safety]",
+      "before": 238069,
+      "after": 148395
+    },
+    {
+      "materialName": "[Vegetation Blur 02]",
+      "before": 56,
+      "after": 56
+    },
+    {
+      "materialName": "[Vegetation_Grass_Artificial]5",
+      "before": 19053,
+      "after": 10478
+    },
+    {
+      "materialName": "[Vegetation_Grass_Artificial]7",
+      "before": 12,
+      "after": 12
+    },
+    {
+      "materialName": "[Water Sparkling]",
+      "before": 75,
+      "after": 75
+    },
+    {
+      "materialName": "[Wood Floor Light]",
+      "before": 12,
+      "after": 12
+    },
+    {
+      "materialName": "[Wood_Floor_Light]1",
+      "before": 102,
+      "after": 102
+    },
+    {
+      "materialName": "_Color_A01_2",
+      "before": 301,
+      "after": 279
+    },
+    {
+      "materialName": "_sGate-Black",
+      "before": 325,
+      "after": 305
+    },
+    {
+      "materialName": "_sGate-Metal-1",
+      "before": 29700,
+      "after": 26350
+    },
+    {
+      "materialName": "A6-G-ESCALATORS STEP",
+      "before": 220,
+      "after": 220
+    },
+    {
+      "materialName": "AWS- Aluminium",
+      "before": 4700,
+      "after": 3842
+    },
+    {
+      "materialName": "beton3",
+      "before": 499,
+      "after": 489
+    },
+    {
+      "materialName": "Black Perforated 1",
+      "before": 38,
+      "after": 38
+    },
+    {
+      "materialName": "blueprint-2-small",
+      "before": 10032,
+      "after": 8252
+    },
+    {
+      "materialName": "Carpet_Plush_Tan",
+      "before": 1310,
+      "after": 720
+    },
+    {
+      "materialName": "ceiling1",
+      "before": 212,
+      "after": 212
+    },
+    {
+      "materialName": "Cognac Silk leather",
+      "before": 197496,
+      "after": 108622
+    },
+    {
+      "materialName": "Color_2",
+      "before": 560,
+      "after": 560
+    },
+    {
+      "materialName": "cool grey",
+      "before": 169,
+      "after": 169
+    },
+    {
+      "materialName": "eik_ic",
+      "before": 49,
+      "after": 49
+    },
+    {
+      "materialName": "Glen Arbor Green Stone",
+      "before": 9336,
+      "after": 5134
+    },
+    {
+      "materialName": "Grass",
+      "before": 137670,
+      "after": 86598
+    },
+    {
+      "materialName": "image2_20090828",
+      "before": 200,
+      "after": 200
+    },
+    {
+      "materialName": "JavaJacket1",
+      "before": 12438,
+      "after": 6840
+    },
+    {
+      "materialName": "jean blue2",
+      "before": 277,
+      "after": 221
+    },
+    {
+      "materialName": "lamp",
+      "before": 1804,
+      "after": 1211
+    },
+    {
+      "materialName": "Leuchte_Tom Dixon_Beat Black",
+      "before": 15760,
+      "after": 8666
+    },
+    {
+      "materialName": "Leuchte_Tom Dixon_Beat Black gold",
+      "before": 11040,
+      "after": 6072
+    },
+    {
+      "materialName": "Leuchte_Tom Dixon_Beat Black gold1",
+      "before": 2784,
+      "after": 1530
+    },
+    {
+      "materialName": "light barrasal",
+      "before": 219,
+      "after": 219
+    },
+    {
+      "materialName": "Lisanne_Bandana",
+      "before": 48,
+      "after": 48
+    },
+    {
+      "materialName": "Lisanne_Metal",
+      "before": 788,
+      "after": 788
+    },
+    {
+      "materialName": "Material1",
+      "before": 4,
+      "after": 4
+    },
+    {
+      "materialName": "Metal1",
+      "before": 9740,
+      "after": 5650
+    },
+    {
+      "materialName": "Metal Blackened Steel 1",
+      "before": 86256,
+      "after": 47438
+    },
+    {
+      "materialName": "MI315",
+      "before": 2,
+      "after": 2
+    },
+    {
+      "materialName": "Mirror light truf",
+      "before": 276,
+      "after": 276
+    },
+    {
+      "materialName": "Muuto Black RAL 9005 ",
+      "before": 374544,
+      "after": 205996
+    },
+    {
+      "materialName": "Original default",
+      "before": 520924,
+      "after": 294230
+    },
+    {
+      "materialName": "Peace Lilly",
+      "before": 21060,
+      "after": 15295
+    },
+    {
+      "materialName": "Platinum",
+      "before": 1538,
+      "after": 1086
+    },
+    {
+      "materialName": "Riff Cut Oak",
+      "before": 1140,
+      "after": 1140
+    },
+    {
+      "materialName": "Riff Cut Oak 2",
+      "before": 1050,
+      "after": 1050
+    },
+    {
+      "materialName": "seat back fabric",
+      "before": 39856,
+      "after": 21919
+    },
+    {
+      "materialName": "Skt_MDB_Ceramica",
+      "before": 9888,
+      "after": 5438
+    },
+    {
+      "materialName": "Skt_MDB_Leguminosa Roxa",
+      "before": 155040,
+      "after": 85272
+    },
+    {
+      "materialName": "Skt_MDB_Leguminosa Verde",
+      "before": 171360,
+      "after": 94248
+    },
+    {
+      "materialName": "Skt_MDB_Pedras",
+      "before": 768,
+      "after": 602
+    },
+    {
+      "materialName": "Steve_Glasses_Black1",
+      "before": 75,
+      "after": 75
+    },
+    {
+      "materialName": "Warm Oak",
+      "before": 92,
+      "after": 92
+    },
+    {
+      "materialName": "Warm Oak V",
+      "before": 92,
+      "after": 92
+    },
+    {
+      "materialName": "Wood",
+      "before": 1695,
+      "after": 1617
+    },
+    {
+      "materialName": "Wood1",
+      "before": 18292,
+      "after": 10924
+    }
+  ],
+  "chunks": [
+    {
+      "materialName": "*17",
+      "inputTriangles": 172275,
+      "cells": 3,
+      "trianglesPreserved": 172275
+    },
+    {
+      "materialName": "[Color M00]1",
+      "inputTriangles": 54076,
+      "cells": 8,
+      "trianglesPreserved": 54076
+    },
+    {
+      "materialName": "[Color M07]",
+      "inputTriangles": 78274,
+      "cells": 11,
+      "trianglesPreserved": 78274
+    },
+    {
+      "materialName": "[Color M08]",
+      "inputTriangles": 107660,
+      "cells": 4,
+      "trianglesPreserved": 107660
+    },
+    {
+      "materialName": "[Color M09]",
+      "inputTriangles": 240111,
+      "cells": 5,
+      "trianglesPreserved": 240111
+    },
+    {
+      "materialName": "[Color_006]",
+      "inputTriangles": 40271,
+      "cells": 4,
+      "trianglesPreserved": 40271
+    },
+    {
+      "materialName": "[Metal_Corrogated_Shiny]1",
+      "inputTriangles": 75234,
+      "cells": 4,
+      "trianglesPreserved": 75234
+    },
+    {
+      "materialName": "[Polished Concrete New]1",
+      "inputTriangles": 44037,
+      "cells": 15,
+      "trianglesPreserved": 44037
+    },
+    {
+      "materialName": "[Translucent_Glass_Safety]",
+      "inputTriangles": 148395,
+      "cells": 14,
+      "trianglesPreserved": 148395
+    },
+    {
+      "materialName": "Cognac Silk leather",
+      "inputTriangles": 108622,
+      "cells": 2,
+      "trianglesPreserved": 108622
+    },
+    {
+      "materialName": "Metal Blackened Steel 1",
+      "inputTriangles": 47438,
+      "cells": 2,
+      "trianglesPreserved": 47438
+    },
+    {
+      "materialName": "Muuto Black RAL 9005 ",
+      "inputTriangles": 205996,
+      "cells": 2,
+      "trianglesPreserved": 205996
+    },
+    {
+      "materialName": "Original default",
+      "inputTriangles": 294230,
+      "cells": 15,
+      "trianglesPreserved": 294230
+    },
+    {
+      "materialName": "Skt_MDB_Leguminosa Roxa",
+      "inputTriangles": 85272,
+      "cells": 2,
+      "trianglesPreserved": 85272
+    },
+    {
+      "materialName": "Skt_MDB_Leguminosa Verde",
+      "inputTriangles": 94248,
+      "cells": 2,
+      "trianglesPreserved": 94248
+    }
+  ],
+  "simplificationBoundsDelta": 0,
+  "compressionBoundsDelta": 0.0026397705078125,
+  "totalBoundsDelta": 0.0026397705078125,
+  "elapsedMs": 24753,
+  "notes": [
+    "Original GLBs unchanged.",
+    "Only audited entourage triangles removed. All remaining material groups, including M08 and M09, retained.",
+    "Simplification is bounded by meshoptimizer error and topology; target ratio is not a guaranteed reduction.",
+    "Spatial cells share the original local coordinate frame; no model or anchor transforms are changed.",
+    "Runtime must skip original entourage manifests for this prefiltered asset."
+  ]
+}

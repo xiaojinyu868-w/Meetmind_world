@@ -4,9 +4,9 @@ import { createLandscapeGrove } from "../scenes/EventGarden.js";
 const GRASS=new Set(["[Grass Light Green]","[Vegetation_Grass_Artificial]5","[Vegetation_Grass_Artificial]7","Grass","Grass2"]);
 
 // A design layer anchored to actual source lawn triangles, never to a guessed Y.
-export function createLandscapeSite(modelRoot,config,{quality="high",obstructionRoot=null}={}) {
+export function createLandscapeSite(modelRoot,config,{quality="balanced",obstructionRoot=null}={}) {
   modelRoot.updateMatrixWorld(true);obstructionRoot?.updateMatrixWorld(true);
-  const lawn=[],points=[],near=config.bounds,framing=config.framingBounds;
+  const lawn=[],candidates=[],near=config.bounds,framing=config.framingBounds;
   const a=new THREE.Vector3(),b=new THREE.Vector3(),c=new THREE.Vector3(),normal=new THREE.Vector3(),ab=new THREE.Vector3(),ac=new THREE.Vector3();
   modelRoot.traverse(o=>{
     if(!o.isMesh||!GRASS.has(o.material?.name))return;
@@ -23,13 +23,25 @@ export function createLandscapeSite(modelRoot,config,{quality="high",obstruction
       const u=Math.sqrt(random()),r=random();v.copy(triangle[0]).multiplyScalar(1-u).addScaledVector(triangle[1],u*(1-r)).addScaledVector(triangle[2],u*r);
       if(v.y<-.1||v.y>30||v.x<framing.minX-50||v.x>framing.maxX+50||v.z<framing.minZ-65||v.z>framing.maxZ+45)continue;
       if(v.x>near.minX-3&&v.x<near.maxX+3&&v.z>near.minZ-3&&v.z<near.maxZ+3)continue;
-      if(points.some(p=>Math.hypot(p.x-v.x,p.z-v.z)<6.8))continue;
+      if(candidates.some(p=>Math.hypot(p.x-v.x,p.z-v.z)<6.8))continue;
       ray.set(v.clone().add(new THREE.Vector3(0,9,0)),down);const hits=obstructionRoot?ray.intersectObject(obstructionRoot,true):[];
       if(hits.some(h=>h.point.y>v.y+.15&&h.point.y<v.y+9))continue;
-      points.push({x:v.x,y:v.y+.02,z:v.z,scale:(v.y>15?.9:1.45)+random()*.65,yaw:random()*Math.PI*2});
-      if(points.length>=(quality==="low"?50:95))break;
-    }if(points.length>=(quality==="low"?50:95))break;
+      candidates.push({x:v.x,y:v.y+.02,z:v.z,scale:(v.y>15?.9:1.45)+random()*.65,yaw:random()*Math.PI*2});
+      if(candidates.length>=95)break;
+    }if(candidates.length>=95)break;
+  }
+  const maxTrees=quality==="low"?24:quality==="cinema"||quality==="high"?95:40;
+  // Choose the broadest spatial coverage first instead of keeping the first N
+  // triangles' trees. Both roof lawns and ground pockets survive lower density.
+  const points=[];
+  if(candidates.length){
+    const remaining=[...candidates];points.push(remaining.shift());
+    while(points.length<maxTrees&&remaining.length){
+      let best=0,distance=-1;
+      remaining.forEach((point,index)=>{const nearest=Math.min(...points.map(p=>(p.x-point.x)**2+(p.z-point.z)**2+(p.y-point.y)**2));if(nearest>distance){best=index;distance=nearest;}});
+      points.push(remaining.splice(best,1)[0]);
+    }
   }
   const grove=createLandscapeGrove(points,{quality});grove.root.name="Landscape on verified source lawns";
-  return {...grove,diagnostics:{trees:points.length,sourceLawnTriangles:lawn.length,points}};
+  return {...grove,diagnostics:{trees:points.length,sourceLawnTriangles:lawn.length,candidateTrees:candidates.length,triangles:grove.root.userData.landscapeGrove.triangles,calls:grove.root.userData.landscapeGrove.calls,points}};
 }

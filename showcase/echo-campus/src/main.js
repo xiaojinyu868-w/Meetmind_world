@@ -1,3 +1,5 @@
+import {loadVenueAsset} from "./runtime/VenueAsset.js";
+import {pickSocialPerson} from "./runtime/SocialPicking.js";
 import * as THREE from "three";
 import "./ui/world.css";
 import {OrbitControls} from "three/addons/controls/OrbitControls.js";
@@ -27,9 +29,10 @@ const canvas=document.getElementById("world");
 const params=new URLSearchParams(location.search);
 const reduced=matchMedia("(prefers-reduced-motion:reduce)").matches;
 const mobile=matchMedia("(pointer:coarse)").matches||innerWidth<700;
-const quality=params.get("quality")||(mobile?"low":"high");
+const requestedQuality=params.get("quality");
+const quality=["low","balanced","cinema"].includes(requestedQuality)?requestedQuality:requestedQuality==="high"?"cinema":mobile?"low":"balanced";
 const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,preserveDrawingBuffer:params.has("capture")});
-renderer.setPixelRatio(Math.min(devicePixelRatio,quality==="low"?1.35:1.75));
+renderer.setPixelRatio(Math.min(devicePixelRatio,quality==="cinema"?1.75:quality==="low"?1:1.25));
 renderer.outputColorSpace=THREE.SRGBColorSpace;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure=1.03;
@@ -46,7 +49,7 @@ controls.minPolarAngle=.15;controls.maxPolarAngle=Math.PI*.485;
 controls.enablePan=true;controls.screenSpacePanning=false;controls.target.set(0,5,0);
 const hemi=new THREE.HemisphereLight(0xdaeaff,0xb0a184,1.1);scene.add(hemi);
 const sun=new THREE.DirectionalLight(0xffecd1,3.3);sun.position.set(-36,53,32);sun.castShadow=true;
-sun.shadow.mapSize.set(quality==="low"?1024:2048,quality==="low"?1024:2048);
+sun.shadow.mapSize.set(quality==="cinema"?2048:1024,quality==="cinema"?2048:1024);
 Object.assign(sun.shadow.camera,{left:-53,right:53,top:48,bottom:-48,near:1,far:145});
 sun.shadow.normalBias=.035;sun.shadow.bias=-.00005;scene.add(sun);scene.add(sun.target);
 const fill=new THREE.DirectionalLight(0xd5e7f4,.75);fill.position.set(35,18,-38);scene.add(fill);
@@ -58,7 +61,7 @@ const markerRoot=new THREE.Group();scene.add(markerRoot);
 const activityMarkerRoot=new THREE.Group();activityMarkerRoot.name="Activity checkpoints";scene.add(activityMarkerRoot);
 const client=new EventClient({storage:EventClient.storageFor(params)});
 let currentScene=null,sceneId="campus",switchSerial=0,cameraMove=null,tour=null,paused=false,time=0,last=performance.now(),selectedId=null,showcaseStarted=false;
-let premiumLibrary=null;
+let premiumLibrary=null,premiumLoadPromise=null;
 const people=new Map(),keys=new Set(),raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
 const hoverRoot=new THREE.Group();hoverRoot.name="Interaction hover";scene.add(hoverRoot);
 let hoveredId=null,hoveredMarker=null;
@@ -140,9 +143,12 @@ function syncLinks(snapshot){
  }
 }
 function clearPeople(){for(const person of people.values()){actors.remove(person.root);person.dispose?.();}people.clear();disposeLinks();}
-function setVenueView(view,{updateUrl=true,moveCamera=true}={}){
+async function setVenueView(view,{updateUrl=true,moveCamera=true,reloadAsset=true}={}){
+ // Every explicit choice supersedes pending loads, including a return to the displayed view.
+ if(reloadAsset){switchSerial++;UI.setBusy(null);}
  const next=view==="source"?"source":"event";
  if(activeVenue&&next==="event"&&!venueEventReady){UI.toast("此模型尚未完成活动坐标校准，先查看源模型");return;}
+ if(reloadAsset&&activeVenue&&currentScene?.venueAsset?.mode!==next)return switchScene(activeVenue.id,{view:next});
  venueView=activeVenue?next:"event";
  if(activeVenue&&next==="source"){showcaseTimers.forEach(clearTimeout);showcaseTimers=[];showcaseStarted=false;tour=null;cameraMove=null;}
  keys.clear();clearSelection();
@@ -169,20 +175,31 @@ async function switchScene(id,options={}){
   let manifest=options.manifest;
   if(candidate){const loaded=await loadVenueManifest(id,{baseUrl:document.baseURI});manifest=loaded.manifest;}
   if(serial!==switchSerial)return;
-  result=(id==="import"||candidate)?await importScene(manifest,{renderer,file:options.file,onProgress:t=>{if(serial===switchSerial)UI.setBusy(t);}}):await getSceneDefinition(id).factory({renderer,quality});
+  const importer=input=>importScene(input,{renderer,file:options.file,onProgress:t=>{if(serial===switchSerial)UI.setBusy(t);}});
+  result=candidate?await loadVenueAsset({id,manifest,view:options.view,baseUrl:document.baseURI,importer,onFallback:()=>{if(serial===switchSerial)UI.toast("轻量模型暂不可用，正在载入原始建筑");}}):id==="import"?await importer(manifest):await getSceneDefinition(id).factory({renderer,quality});
   if(serial!==switchSerial){result.dispose?.();return;}
   // Validate real geometry and all presentation data before touching the visible scene.
   const modelBounds=candidate?inspectModelBounds(result.modelRoot):null;
-  if(candidate&&quality==="low")result.modelRoot.traverse(object=>{if(object.isMesh)object.castShadow=false;});
+
   const eventReady=!!candidate&&!!manifest.anchors.people?.length&&CHECKPOINT_IDS.every(key=>manifest.anchors["checkpoint_"+key]);
-  if(eventReady){
-   result.eventEntourage=await prepareVenueEntourage(result.modelRoot,{venueId:id,baseUrl:new URL("./",document.baseURI).href});
+  if(eventReady&&options.view==="event"){
+   result.eventEntourage=result.venueAsset?.prefiltered?null:await prepareVenueEntourage(result.modelRoot,{venueId:id,baseUrl:new URL("./",document.baseURI).href});
    result.eventGarden=await createEventGarden({venueId:id,config:manifest,quality,props:{treeUrl:new URL("assets/premium/garden-tree.glb",document.baseURI).href,treeHeight:3.2,benchUrl:new URL("assets/premium/garden-seat.glb",document.baseURI).href,benchWidth:2.6}});
    result.eventEntourage?.setEvent(true);
    result.architectureShadows=createArchitectureShadows(result.modelRoot,manifest);result.root.add(result.architectureShadows.root);
    result.landscapeSite=createLandscapeSite(result.modelRoot,manifest,{quality,obstructionRoot:result.architectureShadows.root});result.root.add(result.landscapeSite.root);
    result.contextLandscape=createContextLandscape(result.modelRoot,manifest,{quality});result.root.add(result.contextLandscape.root);
    result.root.add(result.eventGarden.root);
+   // A distant visual ground closes gaps beyond the supplied survey slab.
+   // It sits below all source geometry and never changes walking or model bounds.
+   const backdropMaterial=new THREE.MeshBasicMaterial({color:0xb9c4c0,fog:true,transparent:true,depthWrite:false});
+   backdropMaterial.onBeforeCompile=shader=>{shader.vertexShader="varying vec3 backdropViewPosition;\n"+shader.vertexShader.replace("#include <project_vertex>","#include <project_vertex>\nbackdropViewPosition=mvPosition.xyz;");shader.fragmentShader="varying vec3 backdropViewPosition;\n"+shader.fragmentShader.replace("#include <opaque_fragment>","diffuseColor.a *= 1.0-smoothstep(350.0,1050.0,length(backdropViewPosition));\n#include <opaque_fragment>");};
+   backdropMaterial.customProgramCacheKey=()=>"distant-ground-fade-v1";
+   const backdrop=new THREE.Mesh(new THREE.PlaneGeometry(8000,8000),backdropMaterial);
+   backdrop.name="Distant landscape horizon";backdrop.rotation.x=-Math.PI/2;
+   backdrop.position.set(modelBounds.center.x,Math.min(-4,modelBounds.box.min.y-1),modelBounds.center.z);
+   backdrop.raycast=()=>{};backdrop.userData.noCollision=true;result.eventGarden.root.add(backdrop);
+   result.backdrop=backdrop;
    result.eventPeople=socialPeopleLayout(manifest,result.eventGarden.colliders);
    const a=manifest.anchors.arrival,y=manifest.groundY;
    result.eventCameras=id==="venue-ab-canopy"?{
@@ -191,11 +208,13 @@ async function switchScene(id,options={}){
     garden:{position:[84.2,y+1.85,211.1],target:[83.5,y+1.0,205.1],fov:34}
    }:{arrival:{position:[a.x+5,y+3.1,a.z+5],target:[a.x-2,y+1.1,a.z-7],fov:49},garden:{position:[a.x-5,y+2.3,a.z-1],target:[a.x,y+1.1,a.z-10],fov:45}};
    const pairA=demoSocialPose("seed-01",id,y),pairB=demoSocialPose("seed-02",id,y);
-   if(pairA&&pairB){const cx=(pairA.x+pairB.x)/2,cz=(pairA.z+pairB.z)/2;result.eventCameras.garden={position:[cx+.7,y+1.85,cz+6],target:[cx,y+1,cz],fov:34};}
+   if(pairA&&pairB){const cx=(pairA.x+pairB.x)/2,cz=(pairA.z+pairB.z)/2;result.eventCameras.garden=id==="venue-ab-canopy"?{position:[cx+4.2,y+2.05,cz+5.3],target:[cx-.7,y+1.12,cz-.7],fov:38}:{position:[cx+.7,y+1.85,cz+6],target:[cx,y+1,cz],fov:34};}
    const originalDispose=result.dispose;
-   result.dispose=()=>{result.eventLook?.dispose();result.eventEntourage?.dispose();result.eventGarden.dispose();result.architectureShadows?.dispose();result.landscapeSite?.dispose();result.contextLandscape?.dispose();originalDispose?.();};
+   result.dispose=()=>{result.eventLook?.dispose();result.eventEntourage?.dispose();result.backdrop?.geometry.dispose();result.backdrop?.material.dispose();result.eventGarden?.dispose();result.architectureShadows?.dispose();result.landscapeSite?.dispose();result.contextLandscape?.dispose();originalDispose?.();};
   }
-  if(eventReady){result.eventLook=await createEventLook({renderer,scene,modelRoot:result.modelRoot,config:manifest,sun,hemi,fill,baseUrl:new URL("./",document.baseURI).href,quality});result.eventEntourage?.setEvent(true);}
+  if(eventReady&&options.view==="event"){result.eventLook=await createEventLook({renderer,scene,modelRoot:result.modelRoot,config:manifest,sun,hemi,fill,baseUrl:new URL("./",document.baseURI).href,quality});result.eventEntourage?.setEvent(true);}
+  if(serial!==switchSerial){result.dispose?.();return;}
+  if(premiumLoadPromise)await premiumLoadPromise;
   if(serial!==switchSerial){result.dispose?.();return;}
   const previous=currentScene;
   previous?.eventLook?.dispose();
@@ -212,7 +231,7 @@ async function switchScene(id,options={}){
   else if(id!=="import"){url.searchParams.delete("sceneManifest");url.searchParams.delete("view");url.searchParams.set("scene",id);}
   else { url.searchParams.delete("view"); }
   history.replaceState(null,"",url);
-  setVenueView(candidate?(options.view==="event"&&eventReady?"event":"source"):"event",{moveCamera:false});
+  setVenueView(candidate?(options.view==="event"&&eventReady?"event":"source"):"event",{moveCamera:false,reloadAsset:false});
   goCamera(options.camera||(candidate?cameraForVenueView(venueView):"hero"),0);
   if(UI.stage)UI.renderStageQr();
   try{localStorage.setItem("echo-campus-scene",id==="import"?"campus":id);}catch{}
@@ -295,9 +314,10 @@ controls.addEventListener("start",()=>{cameraMove=null;tour=null;});
 let downPoint=null;
 canvas.addEventListener("pointerdown",e=>{downPoint={x:e.clientX,y:e.clientY};});
 canvas.addEventListener("pointermove",e=>{
- if(activeVenue&&venueView!=="event")return;
+ if((activeVenue&&venueView!=="event")||e.buttons||UI.panel)return;
  const rect=canvas.getBoundingClientRect();pointer.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(pointer,camera);
- const hits=raycaster.intersectObjects([...actors.children,...activityMarkerRoot.children],true),hit=hits[0];
+ const personHit=pickSocialPerson(raycaster.ray,people.values()),markerHit=raycaster.intersectObjects(activityMarkerRoot.children,true)[0];
+ const hit=personHit&&(!markerHit||personHit.distance<markerHit.distance)?personHit:markerHit;
  const nextPerson=hit?.object.userData.personId||null,nextMarker=hit?.object.userData.activityMarkerId||null;
  if(nextPerson!==hoveredId||nextMarker!==hoveredMarker){hoveredId=nextPerson;hoveredMarker=nextMarker;UI.setHoverTarget?.(nextPerson?people.get(nextPerson)?.person:nextMarker?{name:ACTIVITY_MARKERS[nextMarker]?.label}:null);hoverRoot.traverse(o=>{o.geometry?.dispose?.();const m=o.material;if(m){(Array.isArray(m)?m:[m]).forEach(x=>x?.dispose?.());}});hoverRoot.clear();
   if(nextPerson){const p=people.get(nextPerson);if(p){const ring=new THREE.Mesh(new THREE.RingGeometry(.58,.64,48),new THREE.MeshBasicMaterial({color:0xf3d39a,transparent:true,opacity:.72,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.copy(p.root.position).y+=.06;ring.userData.hoverRing=true;hoverRoot.add(ring);}}
@@ -308,7 +328,8 @@ canvas.addEventListener("pointerup",e=>{
  if(activeVenue&&venueView!=="event"){downPoint=null;return;}
  if(!downPoint||Math.hypot(e.clientX-downPoint.x,e.clientY-downPoint.y)>6)return;downPoint=null;
  const rect=canvas.getBoundingClientRect();pointer.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(pointer,camera);
- const hits=raycaster.intersectObjects([...actors.children,...activityMarkerRoot.children],true);const hit=hits[0];if(hit?.object.userData.personId)focusPerson(hit.object.userData.personId);else if(hit?.object.userData.activityMarkerId)focusActivityCheckpoint(hit.object.userData.activityMarkerId);
+ const personHit=pickSocialPerson(raycaster.ray,people.values()),markerHit=raycaster.intersectObjects(activityMarkerRoot.children,true)[0];
+ const hit=personHit&&(!markerHit||personHit.distance<markerHit.distance)?personHit:markerHit;if(hit?.object.userData.personId)focusPerson(hit.object.userData.personId);else if(hit?.object.userData.activityMarkerId)focusActivityCheckpoint(hit.object.userData.activityMarkerId);
 });
 window.addEventListener("keydown",e=>{if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;if(["w","a","s","d","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)){keys.add(e.key.toLowerCase());e.preventDefault();}if(e.key==="Escape"){UI.closePanel();cameraMove=null;tour=null;}});
 window.addEventListener("keyup",e=>keys.delete(e.key.toLowerCase()));window.addEventListener("blur",()=>keys.clear());
@@ -366,7 +387,7 @@ function tick(now){
   for(const ring of markerRoot.children){
    if(ring.userData.selectionRing)ring.scale.setScalar(reduced?1:1+Math.sin(time*3.5)*.05);
   }
-  for(const value of people.values()){
+  if(actors.visible)for(const value of people.values()){
    if(value.arrival!==null){const progress=Math.min(1,(time-value.arrival)/.75);value.root.scale.setScalar(Math.max(.02,1-Math.pow(1-progress,3)));if(progress===1)value.arrival=null;}
    // No cosmetic translation, yaw snapping, or Walk on a stationary avatar.
    value.update(elapsed,time,value.reactionUntil>time?"wave":value.person.source==="curated-demo"?conversationIntent(value.person.id,time):"idle");
@@ -377,7 +398,7 @@ function tick(now){
 requestAnimationFrame(tick);
 function diagnostics(){
  let meshes=0,materials=new Set(),geometries=new Set();scene.traverse(o=>{if(o.isMesh){meshes++;geometries.add(o.geometry);(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>materials.add(m));}});
- return {venue:activeVenue?.id||null,venueView,eventReady:venueEventReady,renderer:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures},fps,dpr:renderer.getPixelRatio(),scene:sceneId,people:people.size,characterPresentation:"continuous-social",meshes,materials:materials.size,geometries:geometries.size,postPasses:renderFinish.passes,shadowMapSize:sun.shadow.mapSize.x,quality,online:UI.online,premiumCharacters:!!premiumLibrary,gardenItems:currentScene?.eventGarden?.layout?.items?.length||0,landscapeSite:currentScene?.landscapeSite?.diagnostics,contextLandscape:currentScene?.contextLandscape?.diagnostics,architectureShadows:currentScene?.architectureShadows?.diagnostics,eventLook:currentScene?.eventLook?.diagnostics};
+ return {venue:activeVenue?.id||null,venueView,venueAsset:currentScene?.venueAsset,eventReady:venueEventReady,renderer:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures},fps,dpr:renderer.getPixelRatio(),scene:sceneId,people:people.size,characterPresentation:"continuous-social",meshes,materials:materials.size,geometries:geometries.size,postPasses:renderFinish.passes,shadowMapSize:sun.shadow.mapSize.x,quality,online:UI.online,premiumCharacters:!!premiumLibrary,gardenItems:currentScene?.eventGarden?.layout?.items?.length||0,landscapeSite:currentScene?.landscapeSite?.diagnostics,contextLandscape:currentScene?.contextLandscape?.diagnostics,architectureShadows:currentScene?.architectureShadows?.diagnostics,eventLook:currentScene?.eventLook?.diagnostics};
 }
 window.__THREE_GAME_DIAGNOSTICS__=diagnostics;
 installCanvasRecorder(canvas, diagnostics);
@@ -387,7 +408,7 @@ if(params.has("capture")||params.has("debug")){
 }
 (async()=>{
  try{
-  try{premiumLibrary=await loadCharacterLibrary({baseUrl:document.baseURI});}catch(error){console.warn("Premium characters unavailable",error.message);}
+  premiumLoadPromise=loadCharacterLibrary({baseUrl:document.baseURI}).then(library=>{premiumLibrary=library;}).catch(error=>console.warn("Premium characters unavailable",error.message));
   const requestedVenue=startupVenueFromSearch(location.search);
   if(requestedVenue){
    if(!venueById(requestedVenue))throw new Error("未找到此源模型，请从场地面板选择");

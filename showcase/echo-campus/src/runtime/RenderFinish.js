@@ -6,7 +6,7 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 
 export function createRenderFinish(renderer,scene,camera,quality) {
   renderer.info.autoReset=false;
-  if(quality==="low")return {render(){renderer.info.reset();renderer.render(scene,camera)},resize(){},setEnabled(){},passes:0};
+  if(quality!=="cinema")return {render(){renderer.info.reset();renderer.render(scene,camera)},resize(){},setEnabled(){},passes:0};
   const target=new THREE.WebGLRenderTarget(1,1,{type:THREE.HalfFloatType,samples:4});
   const composer=new EffectComposer(renderer,target),render=new RenderPass(scene,camera);
   const ao=new GTAOPass(scene,camera,innerWidth,innerHeight);

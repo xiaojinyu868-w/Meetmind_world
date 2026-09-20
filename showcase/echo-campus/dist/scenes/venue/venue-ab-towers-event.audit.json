@@ -1,0 +1,1025 @@
+{
+  "schema": "echo-campus.event-venue-audit.v1",
+  "venueId": "venue-ab-towers",
+  "builtAt": "2026-09-20T04:30:47.229Z",
+  "source": {
+    "file": "venue-ab-towers.glb",
+    "bytes": 3928840,
+    "sha256": "28b52d17c8c2fb08b3f24f715d8ff1ce2c4b52e3198e4c7dda439b038b618e97"
+  },
+  "output": {
+    "file": "venue-ab-towers-event.glb",
+    "bytes": 2421716,
+    "sha256": "89e713fb0966859741817390d6f1354b0efaa28865955d736a39eb864ca63594"
+  },
+  "decoder": {
+    "wrapperSha256": "8bb2952d2ba7d67e1414f8df819410cb0434a666be53f671fff75f68843d76f6",
+    "wasmSha256": "a680d927bed9cb864ddbd63521868891af2bfbe755092761b4837487618df8ac",
+    "source": "public/draco (the deployed THREE decoder)"
+  },
+  "settings": {
+    "ratio": 0.55,
+    "error": 0.0001,
+    "lockBorder": true,
+    "chunkMeters": 96,
+    "minChunkTriangles": 32000,
+    "compressionMethod": "edgebreaker",
+    "encodeSpeed": 3,
+    "decodeSpeed": 5,
+    "quantizePosition": 18,
+    "quantizeNormal": 10,
+    "quantizeTexcoord": 12
+  },
+  "entourage": {
+    "validatedGroups": [
+      {
+        "materialName": "+ people color",
+        "category": "human",
+        "positionFingerprint": "fdef17af",
+        "indexFingerprint": "962a0444",
+        "inputTriangles": 44965,
+        "removedTriangles": 5585,
+        "outputTriangles": 39380,
+        "verifiedBoxes": 31
+      },
+      {
+        "materialName": "[Color M00]1 metal",
+        "category": "human",
+        "positionFingerprint": "ab729e4b",
+        "indexFingerprint": "775cc384",
+        "inputTriangles": 1451,
+        "removedTriangles": 1451,
+        "outputTriangles": 0,
+        "verifiedBoxes": 13
+      },
+      {
+        "materialName": "[Color M00]2",
+        "category": "human",
+        "positionFingerprint": "2e76df47",
+        "indexFingerprint": "67bc6a5f",
+        "inputTriangles": 216,
+        "removedTriangles": 216,
+        "outputTriangles": 0,
+        "verifiedBoxes": 2
+      },
+      {
+        "materialName": "fernleaf",
+        "category": "foliage",
+        "positionFingerprint": "92474043",
+        "indexFingerprint": "fbae7717",
+        "inputTriangles": 21756,
+        "removedTriangles": 21756,
+        "outputTriangles": 0,
+        "verifiedBoxes": 1
+      },
+      {
+        "materialName": "Grass2",
+        "category": "foliage",
+        "positionFingerprint": "4769db29",
+        "indexFingerprint": "f813ff05",
+        "inputTriangles": 28,
+        "removedTriangles": 28,
+        "outputTriangles": 0,
+        "verifiedBoxes": 1
+      }
+    ],
+    "removedTriangles": 29036
+  },
+  "before": {
+    "triangles": 1157354,
+    "vertices": 1913785,
+    "primitiveCount": 81,
+    "materialNames": [
+      " 3D-STEEL",
+      " Alu_Black",
+      " Material1",
+      "*104",
+      "*18",
+      "*205",
+      "*21",
+      "*223",
+      "*27",
+      "*36",
+      "*37",
+      "*40",
+      "*51",
+      "*58",
+      "*95",
+      "+ people color",
+      "07c425711a92539b120613b3f5248aa2",
+      "14412885-escalator-texture-background1_28",
+      "3",
+      "3D-ALUMINIUM",
+      "3D-BEIGE STONE",
+      "3D-BRASS1",
+      "3D-COWORKING FLOOR2",
+      "3D-LED DISPLAY 2",
+      "4356821425_30a8f5876c_o",
+      "<GhostWhite>",
+      "<Gray5>",
+      "<WhiteSmoke>",
+      "<auto>76",
+      "Grass2",
+      "Material1",
+      "Material12",
+      "Metal Skygarden1",
+      "Original default",
+      "Sumele_Jewelry",
+      "[0010_Snow]",
+      "[Aluminum]9",
+      "[Carrera Marble]",
+      "[Color A04]",
+      "[Color A04]2",
+      "[Color C03]3",
+      "[Color D01]",
+      "[Color H01]1",
+      "[Color J08]1",
+      "[Color M00]1 metal",
+      "[Color M00]2",
+      "[Color M01]",
+      "[Color M01]2",
+      "[Color M01]4",
+      "[Color M02]3",
+      "[Color M03]",
+      "[Color M03]1",
+      "[Color M03]11",
+      "[Color M03]9",
+      "[Color M04]",
+      "[Color M04]2",
+      "[Color M05]",
+      "[Color M06]",
+      "[Color M06]1",
+      "[Color M06]3",
+      "[Color M06]7",
+      "[Color M07]",
+      "[Color M07]1",
+      "[Color_D15]",
+      "[Color_H07]1",
+      "[Metal Corrugated Shiny]6",
+      "[Metal Corrugated Shiny]9",
+      "[Metal Seamed]",
+      "[Metal Silver]2",
+      "[Metal_Aluminum_Anodized]10",
+      "[Polished Concrete New]4",
+      "[Small Aggregate]",
+      "[Vegetation_Grass_Artificial]5",
+      "[Water Sparkling]",
+      "[Wood_Floor_Light]1",
+      "_Color_A01_1",
+      "_sGate-Black",
+      "_sGate-Metal-01",
+      "fernleaf",
+      "lamp",
+      "穿孔板白1"
+    ],
+    "bounds": [
+      {
+        "min": [
+          -542.3265991210938,
+          -8.212281227111816,
+          -524.2728271484375
+        ],
+        "max": [
+          542.3265991210938,
+          147.25338745117188,
+          524.2667236328125
+        ]
+      }
+    ]
+  },
+  "filtered": {
+    "triangles": 1128318,
+    "vertices": 1837073,
+    "primitiveCount": 77,
+    "materialNames": [
+      " 3D-STEEL",
+      " Alu_Black",
+      " Material1",
+      "*104",
+      "*18",
+      "*205",
+      "*21",
+      "*223",
+      "*27",
+      "*36",
+      "*37",
+      "*40",
+      "*51",
+      "*58",
+      "*95",
+      "+ people color",
+      "07c425711a92539b120613b3f5248aa2",
+      "14412885-escalator-texture-background1_28",
+      "3",
+      "3D-ALUMINIUM",
+      "3D-BEIGE STONE",
+      "3D-BRASS1",
+      "3D-COWORKING FLOOR2",
+      "3D-LED DISPLAY 2",
+      "4356821425_30a8f5876c_o",
+      "<GhostWhite>",
+      "<Gray5>",
+      "<WhiteSmoke>",
+      "<auto>76",
+      "Material1",
+      "Material12",
+      "Metal Skygarden1",
+      "Original default",
+      "Sumele_Jewelry",
+      "[0010_Snow]",
+      "[Aluminum]9",
+      "[Carrera Marble]",
+      "[Color A04]",
+      "[Color A04]2",
+      "[Color C03]3",
+      "[Color D01]",
+      "[Color H01]1",
+      "[Color J08]1",
+      "[Color M01]",
+      "[Color M01]2",
+      "[Color M01]4",
+      "[Color M02]3",
+      "[Color M03]",
+      "[Color M03]1",
+      "[Color M03]11",
+      "[Color M03]9",
+      "[Color M04]",
+      "[Color M04]2",
+      "[Color M05]",
+      "[Color M06]",
+      "[Color M06]1",
+      "[Color M06]3",
+      "[Color M06]7",
+      "[Color M07]",
+      "[Color M07]1",
+      "[Color_D15]",
+      "[Color_H07]1",
+      "[Metal Corrugated Shiny]6",
+      "[Metal Corrugated Shiny]9",
+      "[Metal Seamed]",
+      "[Metal Silver]2",
+      "[Metal_Aluminum_Anodized]10",
+      "[Polished Concrete New]4",
+      "[Small Aggregate]",
+      "[Vegetation_Grass_Artificial]5",
+      "[Water Sparkling]",
+      "[Wood_Floor_Light]1",
+      "_Color_A01_1",
+      "_sGate-Black",
+      "_sGate-Metal-01",
+      "lamp",
+      "穿孔板白1"
+    ],
+    "bounds": [
+      {
+        "min": [
+          -542.3265991210938,
+          -8.212281227111816,
+          -524.2728271484375
+        ],
+        "max": [
+          542.3265991210938,
+          147.25338745117188,
+          524.2667236328125
+        ]
+      }
+    ]
+  },
+  "simplified": {
+    "triangles": 942499,
+    "vertices": 1293646,
+    "primitiveCount": 77,
+    "materialNames": [
+      " 3D-STEEL",
+      " Alu_Black",
+      " Material1",
+      "*104",
+      "*18",
+      "*205",
+      "*21",
+      "*223",
+      "*27",
+      "*36",
+      "*37",
+      "*40",
+      "*51",
+      "*58",
+      "*95",
+      "+ people color",
+      "07c425711a92539b120613b3f5248aa2",
+      "14412885-escalator-texture-background1_28",
+      "3",
+      "3D-ALUMINIUM",
+      "3D-BEIGE STONE",
+      "3D-BRASS1",
+      "3D-COWORKING FLOOR2",
+      "3D-LED DISPLAY 2",
+      "4356821425_30a8f5876c_o",
+      "<GhostWhite>",
+      "<Gray5>",
+      "<WhiteSmoke>",
+      "<auto>76",
+      "Material1",
+      "Material12",
+      "Metal Skygarden1",
+      "Original default",
+      "Sumele_Jewelry",
+      "[0010_Snow]",
+      "[Aluminum]9",
+      "[Carrera Marble]",
+      "[Color A04]",
+      "[Color A04]2",
+      "[Color C03]3",
+      "[Color D01]",
+      "[Color H01]1",
+      "[Color J08]1",
+      "[Color M01]",
+      "[Color M01]2",
+      "[Color M01]4",
+      "[Color M02]3",
+      "[Color M03]",
+      "[Color M03]1",
+      "[Color M03]11",
+      "[Color M03]9",
+      "[Color M04]",
+      "[Color M04]2",
+      "[Color M05]",
+      "[Color M06]",
+      "[Color M06]1",
+      "[Color M06]3",
+      "[Color M06]7",
+      "[Color M07]",
+      "[Color M07]1",
+      "[Color_D15]",
+      "[Color_H07]1",
+      "[Metal Corrugated Shiny]6",
+      "[Metal Corrugated Shiny]9",
+      "[Metal Seamed]",
+      "[Metal Silver]2",
+      "[Metal_Aluminum_Anodized]10",
+      "[Polished Concrete New]4",
+      "[Small Aggregate]",
+      "[Vegetation_Grass_Artificial]5",
+      "[Water Sparkling]",
+      "[Wood_Floor_Light]1",
+      "_Color_A01_1",
+      "_sGate-Black",
+      "_sGate-Metal-01",
+      "lamp",
+      "穿孔板白1"
+    ],
+    "bounds": [
+      {
+        "min": [
+          -542.3265991210938,
+          -8.212281227111816,
+          -524.2728271484375
+        ],
+        "max": [
+          542.3265991210938,
+          147.25338745117188,
+          524.2667236328125
+        ]
+      }
+    ]
+  },
+  "partitioned": {
+    "triangles": 942499,
+    "vertices": 1300858,
+    "primitiveCount": 132,
+    "materialNames": [
+      " 3D-STEEL",
+      " Alu_Black",
+      " Material1",
+      "*104",
+      "*18",
+      "*205",
+      "*21",
+      "*223",
+      "*27",
+      "*36",
+      "*37",
+      "*40",
+      "*51",
+      "*58",
+      "*95",
+      "+ people color",
+      "07c425711a92539b120613b3f5248aa2",
+      "14412885-escalator-texture-background1_28",
+      "3",
+      "3D-ALUMINIUM",
+      "3D-BEIGE STONE",
+      "3D-BRASS1",
+      "3D-COWORKING FLOOR2",
+      "3D-LED DISPLAY 2",
+      "4356821425_30a8f5876c_o",
+      "<GhostWhite>",
+      "<Gray5>",
+      "<WhiteSmoke>",
+      "<auto>76",
+      "Material1",
+      "Material12",
+      "Metal Skygarden1",
+      "Original default",
+      "Sumele_Jewelry",
+      "[0010_Snow]",
+      "[Aluminum]9",
+      "[Carrera Marble]",
+      "[Color A04]",
+      "[Color A04]2",
+      "[Color C03]3",
+      "[Color D01]",
+      "[Color H01]1",
+      "[Color J08]1",
+      "[Color M01]",
+      "[Color M01]2",
+      "[Color M01]4",
+      "[Color M02]3",
+      "[Color M03]",
+      "[Color M03]1",
+      "[Color M03]11",
+      "[Color M03]9",
+      "[Color M04]",
+      "[Color M04]2",
+      "[Color M05]",
+      "[Color M06]",
+      "[Color M06]1",
+      "[Color M06]3",
+      "[Color M06]7",
+      "[Color M07]",
+      "[Color M07]1",
+      "[Color_D15]",
+      "[Color_H07]1",
+      "[Metal Corrugated Shiny]6",
+      "[Metal Corrugated Shiny]9",
+      "[Metal Seamed]",
+      "[Metal Silver]2",
+      "[Metal_Aluminum_Anodized]10",
+      "[Polished Concrete New]4",
+      "[Small Aggregate]",
+      "[Vegetation_Grass_Artificial]5",
+      "[Water Sparkling]",
+      "[Wood_Floor_Light]1",
+      "_Color_A01_1",
+      "_sGate-Black",
+      "_sGate-Metal-01",
+      "lamp",
+      "穿孔板白1"
+    ],
+    "bounds": [
+      {
+        "min": [
+          -542.3265991210938,
+          -8.212281227111816,
+          -524.2728271484375
+        ],
+        "max": [
+          542.3265991210938,
+          147.25338745117188,
+          524.2667236328125
+        ]
+      }
+    ]
+  },
+  "zeroAreaFacesRemoved": 37714,
+  "verified": {
+    "triangles": 904785,
+    "vertices": 1371843,
+    "primitiveCount": 132,
+    "materialNames": [
+      " 3D-STEEL",
+      " Alu_Black",
+      " Material1",
+      "*104",
+      "*18",
+      "*205",
+      "*21",
+      "*223",
+      "*27",
+      "*36",
+      "*37",
+      "*40",
+      "*51",
+      "*58",
+      "*95",
+      "+ people color",
+      "07c425711a92539b120613b3f5248aa2",
+      "14412885-escalator-texture-background1_28",
+      "3",
+      "3D-ALUMINIUM",
+      "3D-BEIGE STONE",
+      "3D-BRASS1",
+      "3D-COWORKING FLOOR2",
+      "3D-LED DISPLAY 2",
+      "4356821425_30a8f5876c_o",
+      "<GhostWhite>",
+      "<Gray5>",
+      "<WhiteSmoke>",
+      "<auto>76",
+      "Material1",
+      "Material12",
+      "Metal Skygarden1",
+      "Original default",
+      "Sumele_Jewelry",
+      "[0010_Snow]",
+      "[Aluminum]9",
+      "[Carrera Marble]",
+      "[Color A04]",
+      "[Color A04]2",
+      "[Color C03]3",
+      "[Color D01]",
+      "[Color H01]1",
+      "[Color J08]1",
+      "[Color M01]",
+      "[Color M01]2",
+      "[Color M01]4",
+      "[Color M02]3",
+      "[Color M03]",
+      "[Color M03]1",
+      "[Color M03]11",
+      "[Color M03]9",
+      "[Color M04]",
+      "[Color M04]2",
+      "[Color M05]",
+      "[Color M06]",
+      "[Color M06]1",
+      "[Color M06]3",
+      "[Color M06]7",
+      "[Color M07]",
+      "[Color M07]1",
+      "[Color_D15]",
+      "[Color_H07]1",
+      "[Metal Corrugated Shiny]6",
+      "[Metal Corrugated Shiny]9",
+      "[Metal Seamed]",
+      "[Metal Silver]2",
+      "[Metal_Aluminum_Anodized]10",
+      "[Polished Concrete New]4",
+      "[Small Aggregate]",
+      "[Vegetation_Grass_Artificial]5",
+      "[Water Sparkling]",
+      "[Wood_Floor_Light]1",
+      "_Color_A01_1",
+      "_sGate-Black",
+      "_sGate-Metal-01",
+      "lamp",
+      "穿孔板白1"
+    ],
+    "bounds": [
+      {
+        "min": [
+          -542.3265991210938,
+          -8.212281227111816,
+          -524.2728271484375
+        ],
+        "max": [
+          542.3265991210938,
+          147.25538635253906,
+          524.26708984375
+        ]
+      }
+    ]
+  },
+  "primitiveAudit": [
+    {
+      "materialName": "3",
+      "before": 6096,
+      "after": 6096
+    },
+    {
+      "materialName": "3D-ALUMINIUM",
+      "before": 672,
+      "after": 368
+    },
+    {
+      "materialName": "3D-BEIGE STONE",
+      "before": 86,
+      "after": 86
+    },
+    {
+      "materialName": "3D-BRASS1",
+      "before": 644,
+      "after": 354
+    },
+    {
+      "materialName": "3D-COWORKING FLOOR2",
+      "before": 51,
+      "after": 51
+    },
+    {
+      "materialName": "3D-LED DISPLAY 2",
+      "before": 21,
+      "after": 21
+    },
+    {
+      "materialName": "07c425711a92539b120613b3f5248aa2",
+      "before": 6096,
+      "after": 6096
+    },
+    {
+      "materialName": "14412885-escalator-texture-background1_28",
+      "before": 18096,
+      "after": 18096
+    },
+    {
+      "materialName": "4356821425_30a8f5876c_o",
+      "before": 40,
+      "after": 40
+    },
+    {
+      "materialName": " 3D-STEEL",
+      "before": 1414,
+      "after": 1036
+    },
+    {
+      "materialName": " Alu_Black",
+      "before": 3611,
+      "after": 2826
+    },
+    {
+      "materialName": " Material1",
+      "before": 336,
+      "after": 336
+    },
+    {
+      "materialName": "*18",
+      "before": 224,
+      "after": 224
+    },
+    {
+      "materialName": "*21",
+      "before": 5492,
+      "after": 4105
+    },
+    {
+      "materialName": "*27",
+      "before": 20458,
+      "after": 16350
+    },
+    {
+      "materialName": "*36",
+      "before": 23577,
+      "after": 23434
+    },
+    {
+      "materialName": "*37",
+      "before": 24858,
+      "after": 24822
+    },
+    {
+      "materialName": "*40",
+      "before": 144,
+      "after": 144
+    },
+    {
+      "materialName": "*51",
+      "before": 3056,
+      "after": 3054
+    },
+    {
+      "materialName": "*58",
+      "before": 9248,
+      "after": 5612
+    },
+    {
+      "materialName": "*95",
+      "before": 2,
+      "after": 2
+    },
+    {
+      "materialName": "*104",
+      "before": 239,
+      "after": 239
+    },
+    {
+      "materialName": "*205",
+      "before": 2871,
+      "after": 2865
+    },
+    {
+      "materialName": "*223",
+      "before": 1512,
+      "after": 1512
+    },
+    {
+      "materialName": "+ people color",
+      "before": 39380,
+      "after": 32526
+    },
+    {
+      "materialName": "<auto>76",
+      "before": 723,
+      "after": 723
+    },
+    {
+      "materialName": "<GhostWhite>",
+      "before": 12,
+      "after": 12
+    },
+    {
+      "materialName": "<Gray5>",
+      "before": 9042,
+      "after": 6548
+    },
+    {
+      "materialName": "<WhiteSmoke>",
+      "before": 105,
+      "after": 105
+    },
+    {
+      "materialName": "[0010_Snow]",
+      "before": 516,
+      "after": 516
+    },
+    {
+      "materialName": "[Aluminum]9",
+      "before": 980,
+      "after": 980
+    },
+    {
+      "materialName": "[Carrera Marble]",
+      "before": 82,
+      "after": 82
+    },
+    {
+      "materialName": "[Color A04]",
+      "before": 3761,
+      "after": 3197
+    },
+    {
+      "materialName": "[Color A04]2",
+      "before": 2528,
+      "after": 1934
+    },
+    {
+      "materialName": "[Color C03]3",
+      "before": 4605,
+      "after": 4601
+    },
+    {
+      "materialName": "[Color D01]",
+      "before": 5888,
+      "after": 3508
+    },
+    {
+      "materialName": "[Color H01]1",
+      "before": 48365,
+      "after": 38285
+    },
+    {
+      "materialName": "[Color J08]1",
+      "before": 428,
+      "after": 428
+    },
+    {
+      "materialName": "[Color M01]",
+      "before": 28,
+      "after": 28
+    },
+    {
+      "materialName": "[Color M01]2",
+      "before": 32775,
+      "after": 29063
+    },
+    {
+      "materialName": "[Color M01]4",
+      "before": 2721,
+      "after": 2721
+    },
+    {
+      "materialName": "[Color M02]3",
+      "before": 37560,
+      "after": 36890
+    },
+    {
+      "materialName": "[Color M03]",
+      "before": 2136,
+      "after": 2136
+    },
+    {
+      "materialName": "[Color M03]1",
+      "before": 44131,
+      "after": 36579
+    },
+    {
+      "materialName": "[Color M03]9",
+      "before": 6196,
+      "after": 3887
+    },
+    {
+      "materialName": "[Color M03]11",
+      "before": 47696,
+      "after": 46625
+    },
+    {
+      "materialName": "[Color M04]",
+      "before": 232847,
+      "after": 225285
+    },
+    {
+      "materialName": "[Color M04]2",
+      "before": 2548,
+      "after": 2046
+    },
+    {
+      "materialName": "[Color M05]",
+      "before": 67545,
+      "after": 37795
+    },
+    {
+      "materialName": "[Color M06]",
+      "before": 12263,
+      "after": 12243
+    },
+    {
+      "materialName": "[Color M06]1",
+      "before": 4782,
+      "after": 4578
+    },
+    {
+      "materialName": "[Color M06]3",
+      "before": 8168,
+      "after": 8168
+    },
+    {
+      "materialName": "[Color M06]7",
+      "before": 1560,
+      "after": 1560
+    },
+    {
+      "materialName": "[Color M07]",
+      "before": 44108,
+      "after": 24259
+    },
+    {
+      "materialName": "[Color M07]1",
+      "before": 768,
+      "after": 768
+    },
+    {
+      "materialName": "[Color_D15]",
+      "before": 152,
+      "after": 152
+    },
+    {
+      "materialName": "[Color_H07]1",
+      "before": 584,
+      "after": 584
+    },
+    {
+      "materialName": "[Metal Corrugated Shiny]6",
+      "before": 5510,
+      "after": 5510
+    },
+    {
+      "materialName": "[Metal Corrugated Shiny]9",
+      "before": 23258,
+      "after": 18808
+    },
+    {
+      "materialName": "[Metal Seamed]",
+      "before": 4416,
+      "after": 2708
+    },
+    {
+      "materialName": "[Metal Silver]2",
+      "before": 1880,
+      "after": 1264
+    },
+    {
+      "materialName": "[Metal_Aluminum_Anodized]10",
+      "before": 4711,
+      "after": 4423
+    },
+    {
+      "materialName": "[Polished Concrete New]4",
+      "before": 9127,
+      "after": 6755
+    },
+    {
+      "materialName": "[Small Aggregate]",
+      "before": 166,
+      "after": 166
+    },
+    {
+      "materialName": "[Vegetation_Grass_Artificial]5",
+      "before": 1402,
+      "after": 1250
+    },
+    {
+      "materialName": "[Water Sparkling]",
+      "before": 75,
+      "after": 75
+    },
+    {
+      "materialName": "[Wood_Floor_Light]1",
+      "before": 12,
+      "after": 12
+    },
+    {
+      "materialName": "_Color_A01_1",
+      "before": 23,
+      "after": 23
+    },
+    {
+      "materialName": "_sGate-Black",
+      "before": 11680,
+      "after": 9778
+    },
+    {
+      "materialName": "_sGate-Metal-01",
+      "before": 12360,
+      "after": 10852
+    },
+    {
+      "materialName": "lamp",
+      "before": 804,
+      "after": 441
+    },
+    {
+      "materialName": "Material1",
+      "before": 8,
+      "after": 8
+    },
+    {
+      "materialName": "Material12",
+      "before": 24,
+      "after": 24
+    },
+    {
+      "materialName": "Metal Skygarden1",
+      "before": 2208,
+      "after": 2208
+    },
+    {
+      "materialName": "Original default",
+      "before": 256047,
+      "after": 190833
+    },
+    {
+      "materialName": "Sumele_Jewelry",
+      "before": 528,
+      "after": 528
+    },
+    {
+      "materialName": "穿孔板白1",
+      "before": 252,
+      "after": 252
+    }
+  ],
+  "chunks": [
+    {
+      "materialName": "+ people color",
+      "inputTriangles": 32526,
+      "cells": 10,
+      "trianglesPreserved": 32526
+    },
+    {
+      "materialName": "[Color H01]1",
+      "inputTriangles": 38285,
+      "cells": 12,
+      "trianglesPreserved": 38285
+    },
+    {
+      "materialName": "[Color M02]3",
+      "inputTriangles": 36890,
+      "cells": 11,
+      "trianglesPreserved": 36890
+    },
+    {
+      "materialName": "[Color M03]1",
+      "inputTriangles": 36579,
+      "cells": 4,
+      "trianglesPreserved": 36579
+    },
+    {
+      "materialName": "[Color M03]11",
+      "inputTriangles": 46625,
+      "cells": 7,
+      "trianglesPreserved": 46625
+    },
+    {
+      "materialName": "[Color M04]",
+      "inputTriangles": 225285,
+      "cells": 8,
+      "trianglesPreserved": 225285
+    },
+    {
+      "materialName": "Original default",
+      "inputTriangles": 190833,
+      "cells": 10,
+      "trianglesPreserved": 190833
+    }
+  ],
+  "simplificationBoundsDelta": 0,
+  "compressionBoundsDelta": 0.0019989013671875,
+  "totalBoundsDelta": 0.0019989013671875,
+  "elapsedMs": 8491,
+  "notes": [
+    "Original GLBs unchanged.",
+    "Only audited entourage triangles removed. All remaining material groups, including M08 and M09, retained.",
+    "Simplification is bounded by meshoptimizer error and topology; target ratio is not a guaranteed reduction.",
+    "Spatial cells share the original local coordinate frame; no model or anchor transforms are changed.",
+    "Runtime must skip original entourage manifests for this prefiltered asset."
+  ]
+}

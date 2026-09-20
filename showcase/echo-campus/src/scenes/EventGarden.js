@@ -126,7 +126,11 @@ function canopyLeafGeometry(){
  * No collision, vessels, ground guesses or fetching. Shared foliage is instanced;
  * woody branches are merged into one material batch. Dispose owns only this kit.
  */
-export function createLandscapeGrove(points=[],{quality="high"}={}){
+export function createLandscapeGrove(points=[],{quality="balanced"}={}){
+  // Distant foliage keeps its silhouette through broader overlapping leaves and
+  // solid inner crowns. Reserve individual leaf detail for explicit cinema mode.
+  const cinema=quality==="cinema"||quality==="high",leafCount=cinema?64:quality==="low"?16:24;
+  const leafScale=Math.min(1.7,Math.sqrt(64/leafCount)),coreScale=cinema?1:quality==="low"?1.3:1.2;
   const root=new THREE.Group();root.name="Architectural landscape grove";
   const bark=new THREE.MeshStandardMaterial({color:0x827661,roughness:.98});bark.name="landscape bark";
   const leaves=new THREE.MeshStandardMaterial({color:0xffffff,side:THREE.DoubleSide,roughness:.88});leaves.name="landscape oval foliage";
@@ -142,13 +146,13 @@ export function createLandscapeGrove(points=[],{quality="high"}={}){
       const x=Math.cos(a)*reach,z=Math.sin(a)*reach;
       branch([0,height*.40,0],[x,y,z],.026*scale);
       centers.push([x,y+.12*scale,z,j<6?.86:.78]);
-      cores.push({s,v:new THREE.Vector3(x,y+.15*scale,z),q:new THREE.Quaternion(),scale:new THREE.Vector3((j<6?.42:.38)*scale,.34*scale,(j<6?.43:.38)*scale),color:new THREE.Color().setHSL(.242,.30,.205+rng()*.055)});
+      cores.push({s,v:new THREE.Vector3(x,y+.15*scale,z),q:new THREE.Quaternion(),scale:new THREE.Vector3((j<6?.42:.38)*scale*coreScale,.34*scale*coreScale,(j<6?.43:.38)*scale*coreScale),color:new THREE.Color().setHSL(.242,.30,.205+rng()*.055)});
     }
-    const count=quality==="low"?44:64;
+    const count=leafCount;
     for(const [cx,cy,cz,cr] of centers)for(let j=0;j<count;j++){
       const a=j*2.399,v=1-2*(j+.5)/count,rad=Math.sqrt(1-v*v),r=cr*scale*(.68+rng()*.28),x=cx+Math.cos(a)*rad*r,y=cy+v*r*.73,z=cz+Math.sin(a)*rad*r;
       const color=new THREE.Color().setHSL(.238+rng()*.025,.28+rng()*.14,.20+(y/height)*.07+rng()*.065);
-      instances.push({s,v:new THREE.Vector3(x,y,z),q:new THREE.Quaternion().setFromEuler(new THREE.Euler((rng()-.5)*2.2,rng()*TAU,rng()*TAU)),scale:new THREE.Vector3((.18+rng()*.08)*scale,1,(.26+rng()*.11)*scale),color});
+      instances.push({s,v:new THREE.Vector3(x,y,z),q:new THREE.Quaternion().setFromEuler(new THREE.Euler((rng()-.5)*2.2,rng()*TAU,rng()*TAU)),scale:new THREE.Vector3((.18+rng()*.08)*scale*leafScale,1,(.26+rng()*.11)*scale*leafScale),color});
     }
   });
   batch.flush();
@@ -159,12 +163,12 @@ export function createLandscapeGrove(points=[],{quality="high"}={}){
   mesh.castShadow=false;mesh.receiveShadow=true;root.add(mesh);
   // At this distance leaves are lit detail, not expensive additional shadow
   // casters. Near-field event trees carry the architectural contact shadows.
-  const coreGeometry=new THREE.IcosahedronGeometry(1,1),coreMesh=new THREE.InstancedMesh(coreGeometry,leaves,cores.length);coreMesh.name="dense landscape inner crowns";
+  const coreGeometry=new THREE.IcosahedronGeometry(1,quality==="low"?0:1),coreMesh=new THREE.InstancedMesh(coreGeometry,leaves,cores.length);coreMesh.name="dense landscape inner crowns";
   cores.forEach((p,i)=>{m.compose(p.v,p.q,p.scale);q.setFromAxisAngle(new THREE.Vector3(0,1,0),p.s.yaw);world.compose(new THREE.Vector3(p.s.x,p.s.y,p.s.z),q,new THREE.Vector3(1,1,1)).multiply(m);coreMesh.setMatrixAt(i,world);coreMesh.setColorAt(i,p.color);});
   if(cores.length){coreMesh.instanceMatrix.needsUpdate=true;coreMesh.instanceColor.needsUpdate=true;coreMesh.computeBoundingBox();coreMesh.computeBoundingSphere();}root.add(coreMesh);
   root.traverse(o=>{if(o.isMesh){o.castShadow=false;o.receiveShadow=true;}});
   let triangles=0,calls=0;root.traverse(o=>{if(o.isMesh){calls++;triangles+=(o.geometry.index?.count??o.geometry.attributes.position.count)/3*(o.isInstancedMesh?o.count:1);}});
-  root.userData.landscapeGrove={trees:valid.length,triangles,calls};
+  root.userData.landscapeGrove={trees:valid.length,triangles,calls,leafCount,quality};
   let disposed=false;return {root,update(){},dispose(){if(disposed)return;disposed=true;root.traverse(o=>o.geometry?.dispose());bark.dispose();leaves.dispose();root.clear();}};
 }
 

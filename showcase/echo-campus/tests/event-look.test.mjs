@@ -100,7 +100,7 @@ test("successful sky/PMREM resources are owned once, source env restored before 
   const loaded = new THREE.Texture(), sky = new THREE.Texture(), envTexture = new THREE.Texture();
   let loadedDisposals = 0, skyDisposals = 0, envDisposals = 0;
   loaded.addEventListener("dispose", () => loadedDisposals++); sky.addEventListener("dispose", () => skyDisposals++);
-  const look = await createEventLook({ ...f, baseUrl: "/echo-campus/", loadTexture: async url => { assert.equal(url, "/echo-campus/assets/premium/garden-sky.webp"); return loaded; }, prepareSkyTexture: () => sky, createEnvironment: () => ({ texture: envTexture, dispose() { envDisposals++; } }) });
+  const look = await createEventLook({ ...f, baseUrl: "/echo-campus/", loadTexture: async url => { assert.equal(url, "/echo-campus/assets/premium/social-sunset.webp"); return loaded; }, prepareSkyTexture: () => sky, createEnvironment: () => ({ texture: envTexture, dispose() { envDisposals++; } }) });
   assert.equal(loadedDisposals, 1); assert.equal(look.diagnostics.sky, "generated-sky-and-reflections");
   look.setEnabled(true); assert.equal(f.scene.background, sky); assert.equal(f.scene.environment, envTexture);
   look.dispose(); look.dispose();

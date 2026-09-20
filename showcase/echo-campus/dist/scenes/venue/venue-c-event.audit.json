@@ -1,0 +1,589 @@
+{
+  "schema": "echo-campus.event-venue-audit.v1",
+  "venueId": "venue-c",
+  "builtAt": "2026-09-20T04:30:55.076Z",
+  "source": {
+    "file": "venue-c.glb",
+    "bytes": 4028340,
+    "sha256": "621948205b8ddc22bdd67643ddd8ed53c2889dfe5934c9f2615755cf9484ec00"
+  },
+  "output": {
+    "file": "venue-c-event.glb",
+    "bytes": 2007488,
+    "sha256": "968c115e48faf621cb7f238fb76a29a39b73195cb306dc562e6fc70ae041b15a"
+  },
+  "decoder": {
+    "wrapperSha256": "8bb2952d2ba7d67e1414f8df819410cb0434a666be53f671fff75f68843d76f6",
+    "wasmSha256": "a680d927bed9cb864ddbd63521868891af2bfbe755092761b4837487618df8ac",
+    "source": "public/draco (the deployed THREE decoder)"
+  },
+  "settings": {
+    "ratio": 0.55,
+    "error": 0.0001,
+    "lockBorder": true,
+    "chunkMeters": 96,
+    "minChunkTriangles": 32000,
+    "compressionMethod": "edgebreaker",
+    "encodeSpeed": 3,
+    "decodeSpeed": 5,
+    "quantizePosition": 18,
+    "quantizeNormal": 10,
+    "quantizeTexcoord": 12
+  },
+  "entourage": {
+    "manifest": null,
+    "validatedGroups": [],
+    "removedTriangles": 0
+  },
+  "before": {
+    "triangles": 1125513,
+    "vertices": 1721204,
+    "primitiveCount": 40,
+    "materialNames": [
+      "Source material 0",
+      "Source material 1",
+      "Source material 10",
+      "Source material 11",
+      "Source material 12",
+      "Source material 13",
+      "Source material 14",
+      "Source material 15",
+      "Source material 16",
+      "Source material 17",
+      "Source material 18",
+      "Source material 19",
+      "Source material 2",
+      "Source material 20",
+      "Source material 21",
+      "Source material 22",
+      "Source material 23",
+      "Source material 24",
+      "Source material 25",
+      "Source material 26",
+      "Source material 27",
+      "Source material 28",
+      "Source material 29",
+      "Source material 3",
+      "Source material 30",
+      "Source material 31",
+      "Source material 32",
+      "Source material 33",
+      "Source material 34",
+      "Source material 35",
+      "Source material 36",
+      "Source material 37",
+      "Source material 38",
+      "Source material 39",
+      "Source material 4",
+      "Source material 5",
+      "Source material 6",
+      "Source material 7",
+      "Source material 8",
+      "Source material 9"
+    ],
+    "bounds": [
+      {
+        "min": [
+          -601.883544921875,
+          -8.668001174926758,
+          -627.9110717773438
+        ],
+        "max": [
+          601.8929443359375,
+          53.398345947265625,
+          627.9110717773438
+        ]
+      }
+    ]
+  },
+  "filtered": {
+    "triangles": 1125513,
+    "vertices": 1721204,
+    "primitiveCount": 40,
+    "materialNames": [
+      "Source material 0",
+      "Source material 1",
+      "Source material 10",
+      "Source material 11",
+      "Source material 12",
+      "Source material 13",
+      "Source material 14",
+      "Source material 15",
+      "Source material 16",
+      "Source material 17",
+      "Source material 18",
+      "Source material 19",
+      "Source material 2",
+      "Source material 20",
+      "Source material 21",
+      "Source material 22",
+      "Source material 23",
+      "Source material 24",
+      "Source material 25",
+      "Source material 26",
+      "Source material 27",
+      "Source material 28",
+      "Source material 29",
+      "Source material 3",
+      "Source material 30",
+      "Source material 31",
+      "Source material 32",
+      "Source material 33",
+      "Source material 34",
+      "Source material 35",
+      "Source material 36",
+      "Source material 37",
+      "Source material 38",
+      "Source material 39",
+      "Source material 4",
+      "Source material 5",
+      "Source material 6",
+      "Source material 7",
+      "Source material 8",
+      "Source material 9"
+    ],
+    "bounds": [
+      {
+        "min": [
+          -601.883544921875,
+          -8.668001174926758,
+          -627.9110717773438
+        ],
+        "max": [
+          601.8929443359375,
+          53.398345947265625,
+          627.9110717773438
+        ]
+      }
+    ]
+  },
+  "simplified": {
+    "triangles": 729074,
+    "vertices": 1061556,
+    "primitiveCount": 40,
+    "materialNames": [
+      "Source material 0",
+      "Source material 1",
+      "Source material 10",
+      "Source material 11",
+      "Source material 12",
+      "Source material 13",
+      "Source material 14",
+      "Source material 15",
+      "Source material 16",
+      "Source material 17",
+      "Source material 18",
+      "Source material 19",
+      "Source material 2",
+      "Source material 20",
+      "Source material 21",
+      "Source material 22",
+      "Source material 23",
+      "Source material 24",
+      "Source material 25",
+      "Source material 26",
+      "Source material 27",
+      "Source material 28",
+      "Source material 29",
+      "Source material 3",
+      "Source material 30",
+      "Source material 31",
+      "Source material 32",
+      "Source material 33",
+      "Source material 34",
+      "Source material 35",
+      "Source material 36",
+      "Source material 37",
+      "Source material 38",
+      "Source material 39",
+      "Source material 4",
+      "Source material 5",
+      "Source material 6",
+      "Source material 7",
+      "Source material 8",
+      "Source material 9"
+    ],
+    "bounds": [
+      {
+        "min": [
+          -601.883544921875,
+          -8.668001174926758,
+          -627.9110717773438
+        ],
+        "max": [
+          601.8929443359375,
+          53.398345947265625,
+          627.9110717773438
+        ]
+      }
+    ]
+  },
+  "partitioned": {
+    "triangles": 729074,
+    "vertices": 1069233,
+    "primitiveCount": 79,
+    "materialNames": [
+      "Source material 0",
+      "Source material 1",
+      "Source material 10",
+      "Source material 11",
+      "Source material 12",
+      "Source material 13",
+      "Source material 14",
+      "Source material 15",
+      "Source material 16",
+      "Source material 17",
+      "Source material 18",
+      "Source material 19",
+      "Source material 2",
+      "Source material 20",
+      "Source material 21",
+      "Source material 22",
+      "Source material 23",
+      "Source material 24",
+      "Source material 25",
+      "Source material 26",
+      "Source material 27",
+      "Source material 28",
+      "Source material 29",
+      "Source material 3",
+      "Source material 30",
+      "Source material 31",
+      "Source material 32",
+      "Source material 33",
+      "Source material 34",
+      "Source material 35",
+      "Source material 36",
+      "Source material 37",
+      "Source material 38",
+      "Source material 39",
+      "Source material 4",
+      "Source material 5",
+      "Source material 6",
+      "Source material 7",
+      "Source material 8",
+      "Source material 9"
+    ],
+    "bounds": [
+      {
+        "min": [
+          -601.883544921875,
+          -8.668001174926758,
+          -627.9110717773438
+        ],
+        "max": [
+          601.8929443359375,
+          53.398345947265625,
+          627.9110717773438
+        ]
+      }
+    ]
+  },
+  "zeroAreaFacesRemoved": 15271,
+  "verified": {
+    "triangles": 713803,
+    "vertices": 1092817,
+    "primitiveCount": 79,
+    "materialNames": [
+      "Source material 0",
+      "Source material 1",
+      "Source material 10",
+      "Source material 11",
+      "Source material 12",
+      "Source material 13",
+      "Source material 14",
+      "Source material 15",
+      "Source material 16",
+      "Source material 17",
+      "Source material 18",
+      "Source material 19",
+      "Source material 2",
+      "Source material 20",
+      "Source material 21",
+      "Source material 22",
+      "Source material 23",
+      "Source material 24",
+      "Source material 25",
+      "Source material 26",
+      "Source material 27",
+      "Source material 28",
+      "Source material 29",
+      "Source material 3",
+      "Source material 30",
+      "Source material 31",
+      "Source material 32",
+      "Source material 33",
+      "Source material 34",
+      "Source material 35",
+      "Source material 36",
+      "Source material 37",
+      "Source material 38",
+      "Source material 39",
+      "Source material 4",
+      "Source material 5",
+      "Source material 6",
+      "Source material 7",
+      "Source material 8",
+      "Source material 9"
+    ],
+    "bounds": [
+      {
+        "min": [
+          -601.883544921875,
+          -8.668001174926758,
+          -627.9110717773438
+        ],
+        "max": [
+          601.8935546875,
+          53.39900207519531,
+          627.9110717773438
+        ]
+      }
+    ]
+  },
+  "primitiveAudit": [
+    {
+      "materialName": "Source material 0",
+      "before": 26448,
+      "after": 17615
+    },
+    {
+      "materialName": "Source material 1",
+      "before": 338628,
+      "after": 188549
+    },
+    {
+      "materialName": "Source material 2",
+      "before": 213984,
+      "after": 127904
+    },
+    {
+      "materialName": "Source material 3",
+      "before": 208254,
+      "after": 131734
+    },
+    {
+      "materialName": "Source material 4",
+      "before": 12557,
+      "after": 8295
+    },
+    {
+      "materialName": "Source material 5",
+      "before": 61596,
+      "after": 44918
+    },
+    {
+      "materialName": "Source material 6",
+      "before": 3956,
+      "after": 2938
+    },
+    {
+      "materialName": "Source material 7",
+      "before": 12820,
+      "after": 7186
+    },
+    {
+      "materialName": "Source material 8",
+      "before": 46632,
+      "after": 22078
+    },
+    {
+      "materialName": "Source material 9",
+      "before": 5088,
+      "after": 2798
+    },
+    {
+      "materialName": "Source material 10",
+      "before": 5163,
+      "after": 4643
+    },
+    {
+      "materialName": "Source material 11",
+      "before": 1293,
+      "after": 737
+    },
+    {
+      "materialName": "Source material 12",
+      "before": 142,
+      "after": 142
+    },
+    {
+      "materialName": "Source material 13",
+      "before": 428,
+      "after": 288
+    },
+    {
+      "materialName": "Source material 14",
+      "before": 392,
+      "after": 392
+    },
+    {
+      "materialName": "Source material 15",
+      "before": 13280,
+      "after": 9451
+    },
+    {
+      "materialName": "Source material 16",
+      "before": 5896,
+      "after": 4977
+    },
+    {
+      "materialName": "Source material 17",
+      "before": 16848,
+      "after": 9266
+    },
+    {
+      "materialName": "Source material 18",
+      "before": 100048,
+      "after": 99396
+    },
+    {
+      "materialName": "Source material 19",
+      "before": 20532,
+      "after": 20532
+    },
+    {
+      "materialName": "Source material 20",
+      "before": 4213,
+      "after": 4205
+    },
+    {
+      "materialName": "Source material 21",
+      "before": 5809,
+      "after": 4018
+    },
+    {
+      "materialName": "Source material 22",
+      "before": 3843,
+      "after": 3225
+    },
+    {
+      "materialName": "Source material 23",
+      "before": 4263,
+      "after": 2869
+    },
+    {
+      "materialName": "Source material 24",
+      "before": 172,
+      "after": 172
+    },
+    {
+      "materialName": "Source material 25",
+      "before": 30,
+      "after": 30
+    },
+    {
+      "materialName": "Source material 26",
+      "before": 1204,
+      "after": 1202
+    },
+    {
+      "materialName": "Source material 27",
+      "before": 32,
+      "after": 32
+    },
+    {
+      "materialName": "Source material 28",
+      "before": 2,
+      "after": 2
+    },
+    {
+      "materialName": "Source material 29",
+      "before": 822,
+      "after": 636
+    },
+    {
+      "materialName": "Source material 30",
+      "before": 197,
+      "after": 197
+    },
+    {
+      "materialName": "Source material 31",
+      "before": 8,
+      "after": 8
+    },
+    {
+      "materialName": "Source material 32",
+      "before": 2,
+      "after": 2
+    },
+    {
+      "materialName": "Source material 33",
+      "before": 703,
+      "after": 509
+    },
+    {
+      "materialName": "Source material 34",
+      "before": 12,
+      "after": 12
+    },
+    {
+      "materialName": "Source material 35",
+      "before": 76,
+      "after": 76
+    },
+    {
+      "materialName": "Source material 36",
+      "before": 432,
+      "after": 350
+    },
+    {
+      "materialName": "Source material 37",
+      "before": 6320,
+      "after": 4508
+    },
+    {
+      "materialName": "Source material 38",
+      "before": 316,
+      "after": 316
+    },
+    {
+      "materialName": "Source material 39",
+      "before": 3072,
+      "after": 2866
+    }
+  ],
+  "chunks": [
+    {
+      "materialName": "Source material 1",
+      "inputTriangles": 188549,
+      "cells": 10,
+      "trianglesPreserved": 188549
+    },
+    {
+      "materialName": "Source material 2",
+      "inputTriangles": 127904,
+      "cells": 10,
+      "trianglesPreserved": 127904
+    },
+    {
+      "materialName": "Source material 3",
+      "inputTriangles": 131734,
+      "cells": 9,
+      "trianglesPreserved": 131734
+    },
+    {
+      "materialName": "Source material 5",
+      "inputTriangles": 44918,
+      "cells": 9,
+      "trianglesPreserved": 44918
+    },
+    {
+      "materialName": "Source material 18",
+      "inputTriangles": 99396,
+      "cells": 6,
+      "trianglesPreserved": 99396
+    }
+  ],
+  "simplificationBoundsDelta": 0,
+  "compressionBoundsDelta": 0.0006561279296875,
+  "totalBoundsDelta": 0.0006561279296875,
+  "elapsedMs": 7815,
+  "notes": [
+    "Original GLBs unchanged.",
+    "Only audited entourage triangles removed. All remaining material groups, including M08 and M09, retained.",
+    "Simplification is bounded by meshoptimizer error and topology; target ratio is not a guaranteed reduction.",
+    "Spatial cells share the original local coordinate frame; no model or anchor transforms are changed.",
+    "Runtime must skip original entourage manifests for this prefiltered asset."
+  ]
+}

@@ -3,6 +3,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { createCharacterContactShadowResources, updateCharacterContactShadow } from "./CharacterContactShadow.js";
 
 // Keep source textures and geometry shared; only skeletons, mixers and name badges
 // belong to an individual attendee. Coordinates exposed to the world are meters.
@@ -261,6 +262,8 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
   // two authored host assets receive the cloth-mask variants.
   const wardrobe = premiumWardrobeForSeed(template.definition.id, seed);
   const height = template.definition.height * (wardrobe?.heightFactor || 1);
+  const contactShadow = library.contactShadowResources.create(height);
+  root.add(contactShadow);
   if (wardrobe) model.traverse(object => {
     if (!object.isMesh) return;
     const materials = Array.isArray(object.material) ? object.material : [object.material];
@@ -411,6 +414,7 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
         subtleBone(head, AXIS_Y, Math.sin(seconds * 0.55 + phase) * 0.025);
         subtleBone(chest, AXIS_X, Math.sin(seconds * 1.6 + phase) * 0.006);
       }
+      updateCharacterContactShadow(contactShadow, root);
       motion.position.y = 0;
       if (hipReference && !social) {
         motion.position.set(0, 0, 0);
@@ -467,6 +471,7 @@ export async function loadCharacterLibrary({ baseUrl, assets = PREMIUM_CHARACTER
     const library = {
       templates, errors: Object.freeze(errors), assets: Object.freeze(templates.map(template => template.info)),
       instances: 0, disposed: false, released: false, badgeGeometries: new Map(), wardrobeMaterials: new Map(),
+      contactShadowResources: createCharacterContactShadowResources(),
       badgeMaterial: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.68, metalness: 0.08 }),
       createPremiumCharacter(options = {}) {
         const numericSeed = Number(options.seed);
@@ -494,6 +499,7 @@ export async function loadCharacterLibrary({ baseUrl, assets = PREMIUM_CHARACTER
         }));
         library.badgeGeometries.forEach(geometry => geometry.dispose()); library.badgeGeometries.clear();
         library.badgeMaterial.dispose();
+        library.contactShadowResources.dispose();
         library.wardrobeMaterials.forEach(material => material.dispose()); library.wardrobeMaterials.clear();
         geometries.forEach(geometry => geometry.dispose()); materials.forEach(material => material.dispose());
         textures.forEach(texture => texture.dispose()); skeletons.forEach(skeleton => skeleton.dispose());

@@ -61,7 +61,7 @@ function indexFaces(faces, extent) {
  * all other overhead surfaces, source edges and the complete building frame
  * are subtracted, including a full crown-sized clearance from their edges.
  */
-export function planContextLandscape(modelRoot, config = {}, { quality = "high" } = {}) {
+export function planContextLandscape(modelRoot, config = {}, { quality = "balanced" } = {}) {
   const frame = config.framingBounds;
   const diagnostics = { trees: 0, clusters: 0, groundTriangles: 0, roadWaterTriangles: 0, obstructionTriangles: 0, candidatePoints: 0, points: [], warnings: [] };
   if (!frame || ![frame.minX, frame.maxX, frame.minZ, frame.maxZ].every(Number.isFinite)) {
@@ -144,7 +144,7 @@ export function planContextLandscape(modelRoot, config = {}, { quality = "high" 
     if (centers.every(center => Math.hypot(center.x - point.x, center.z - point.z) > 46)) centers.push(point);
     if (centers.length >= 13) break;
   }
-  const points = [], used = new Set(), maxTrees = quality === "low" ? 50 : 88;
+  const points = [], used = new Set(), maxTrees = quality === "low" ? 28 : quality === "cinema" || quality === "high" ? 88 : 42;
   // Round-robin grows several compact groves rather than exhausting the
   // earliest source triangle and forming one arbitrary wall of vegetation.
   const groups = centers.map(center => candidates.filter(p => Math.hypot(center.x - p.x, center.z - p.z) < 28).sort((a, b) => Math.hypot(center.x - a.x, center.z - a.z) - Math.hypot(center.x - b.x, center.z - b.z)));
@@ -170,20 +170,22 @@ export function planContextLandscape(modelRoot, config = {}, { quality = "high" 
  * root beside modelRoot in the same identity scene-space event container.
  * All source resources remain untouched; this layer owns its grove only.
  */
-export function createContextLandscape(modelRoot, config = {}, { quality = "high" } = {}) {
+export function createContextLandscape(modelRoot, config = {}, { quality = "balanced" } = {}) {
   const started = performance.now();
   const { points, diagnostics } = planContextLandscape(modelRoot, config, { quality });
   let grove = createLandscapeGrove(points, { quality });
   // Enforce the contract against actual instanced triangle counts, not a
   // hand-maintained estimate, even if the shared tree kit grows later.
-  while (grove.root.userData.landscapeGrove.triangles >= 500000 && points.length > 0) {
-    const count = Math.max(0, Math.floor(points.length * 490000 / grove.root.userData.landscapeGrove.triangles));
+  const triangleBudget = quality === "low" ? 70000 : quality === "cinema" || quality === "high" ? 490000 : 140000;
+  while (grove.root.userData.landscapeGrove.triangles > triangleBudget && points.length > 0) {
+    const count = Math.max(0, Math.floor(points.length * triangleBudget / grove.root.userData.landscapeGrove.triangles));
     grove.dispose(); points.length = count; grove = createLandscapeGrove(points, { quality });
   }
   grove.root.name = "Context park on verified bare site ground";
   diagnostics.trees = points.length;
   diagnostics.clusters = new Set(points.map(point => point.cluster)).size;
   diagnostics.triangles = grove.root.userData.landscapeGrove.triangles;
+  diagnostics.triangleBudget = triangleBudget;
   diagnostics.calls = grove.root.userData.landscapeGrove.calls;
   diagnostics.elapsedMs = Math.round((performance.now() - started) * 10) / 10;
   let disposed = false;
