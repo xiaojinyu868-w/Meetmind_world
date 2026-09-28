@@ -527,7 +527,7 @@ export class AppUI {
     const errorBox = this.root.querySelector("[data-venue-error]");
     if (errorBox) errorBox.hidden = true;
     try {
-      await this.callbacks.onVenue(id, id === "venue-campus" ? { view: "event", camera: "hero" } : { view: "source", scope: "building" });
+      await this.callbacks.onVenue(id, id === "venue-campus" ? { view: "event", camera: "arrival" } : { view: "source", scope: "building" });
       if (this.panel === "scenes" && revision === this.panelRevision) this.closePanel();
     } catch (error) {
       if (errorBox?.isConnected) { errorBox.textContent = "未能载入源模型：" + error.message + "。当前场景保留，可重试或选择另一份源文件。"; errorBox.hidden = false; }

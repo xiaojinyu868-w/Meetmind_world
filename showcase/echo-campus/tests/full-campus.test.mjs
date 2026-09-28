@@ -42,11 +42,19 @@ function lookFixture() {
   return {scene,modelRoot,sun,hemi,fill,renderer,config:campus};
 }
 
-test("assembled campus semantic survives manifest validation and retains calibrated activity coordinates",()=>{
+test("assembled campus preserves original geometry transforms and calibrates activities at the HUB south stair entrance",()=>{
   assert.equal(campus.siteMode,"campus");
   assert.equal(canopy.siteMode,undefined);
   assert.equal(campus.scale,1);assert.deepEqual(campus.position,[0,0,0]);assert.deepEqual(campus.rotation,[0,0,0]);
-  for(const key of ["bounds","spawn","groundY","anchors","colliders"])assert.deepEqual(campus[key],canopy[key],key);
+  assert.deepEqual(campus.bounds,{minX:155,maxX:188,minZ:78,maxZ:94});
+  assert.equal(campus.groundY,0);
+  assert.deepEqual(campus.anchors.arrival,{x:171.34,y:0,z:80});
+  assert.deepEqual(campus.spawn,{x:171.34,y:0,z:90});
+  assert.equal(campus.anchors.people.length,12);
+  for(const point of [campus.spawn,campus.anchors.arrival,campus.anchors.meeting,...campus.anchors.people,...Object.entries(campus.anchors).filter(([key])=>key.startsWith("checkpoint_")).map(([,value])=>value)]) {
+    assert.ok(point.x>=campus.bounds.minX&&point.x<=campus.bounds.maxX&&point.z>=campus.bounds.minZ&&point.z<=campus.bounds.maxZ,"HUB entrance anchor stays on the calibrated forecourt");
+    assert.equal(point.y,0,"HUB entrance anchor stays on the surveyed zero ground");
+  }
   assert.ok(campus.framingBounds.maxX-campus.framingBounds.minX>canopy.framingBounds.maxX-canopy.framingBounds.minX);
   assert.ok(campus.framingBounds.maxZ-campus.framingBounds.minZ>canopy.framingBounds.maxZ-canopy.framingBounds.minZ);
   for(const id of ["hero","aerial","arrival","garden","towers","hub","commercial"])assert.ok(campus.cameras[id],id);
@@ -71,18 +79,41 @@ test("every campus region preset has its actual target in front of desktop and p
   }
 });
 
-test("campus expansion preserves garden fixtures, social poses and ordinary attendee layout",()=>{
-  const original=planEventGarden(canopy,{venueId:"venue-ab-canopy"});
+test("campus entrance garden, social poses and ordinary attendee layout stay on the surveyed HUB forecourt",()=>{
   const combined=planEventGarden(campus,{venueId:"venue-campus"});
-  for(const key of ["y","bounds","protectedPoints","protectedGap","corridors","items"])assert.deepEqual(combined[key],original[key],key);
-  const furniture=original.items.filter(p=>Number.isFinite(p.r??p.radius));
-  assert.deepEqual(socialPeopleLayout(campus,furniture),socialPeopleLayout(canopy,furniture));
+  assert.equal(combined.y,0);
+  assert.deepEqual(combined.bounds,campus.bounds);
+  assert.ok(combined.items.length>=5);
+  for(const item of combined.items){
+    assert.equal(item.y,0);
+    assert.ok(item.x-item.r>=campus.bounds.minX&&item.x+item.r<=campus.bounds.maxX&&item.z-item.r>=campus.bounds.minZ&&item.z+item.r<=campus.bounds.maxZ);
+  }
+  const attendees=socialPeopleLayout(campus,combined.items.filter(item=>Number.isFinite(item.r??item.radius)));
+  for(const person of attendees){assert.equal(person.y,0);assert.ok(person.x>=campus.bounds.minX&&person.x<=campus.bounds.maxX&&person.z>=campus.bounds.minZ&&person.z<=campus.bounds.maxZ);}
   for(const id of DEMO_SOCIAL_PAIRS.flat()){
     const pose=demoSocialPose(id,"venue-campus",campus.groundY);
-    assert.deepEqual(pose,demoSocialPose(id,"venue-ab-canopy",canopy.groundY));assert.equal(pose.y,6.2991);
-    assert.ok(pose.x>=campus.bounds.minX&&pose.x<=campus.bounds.maxX&&pose.z>=campus.bounds.minZ&&pose.z<=campus.bounds.maxZ);
+    assert.equal(pose.y,0);assert.ok(pose.x>=campus.bounds.minX&&pose.x<=campus.bounds.maxX&&pose.z>=campus.bounds.minZ&&pose.z<=campus.bounds.maxZ);
   }
 });
+
+for (const quality of ["low", "balanced", "cinema"]) {
+  test(`campus curated social pairs clear event furniture at ${quality} quality`, () => {
+    const garden = planEventGarden(campus, { venueId: "venue-campus", quality });
+    // Match the ordinary attendee capsule radius, with room for idle and talking poses.
+    const characterRadius = .36, clearance = .12;
+    for (const id of DEMO_SOCIAL_PAIRS.flat()) {
+      const pose = demoSocialPose(id, "venue-campus", campus.groundY);
+      assert.ok(pose.x - characterRadius >= campus.bounds.minX && pose.x + characterRadius <= campus.bounds.maxX
+        && pose.z - characterRadius >= campus.bounds.minZ && pose.z + characterRadius <= campus.bounds.maxZ,
+      `${id} remains fully inside the calibrated forecourt`);
+      for (const item of garden.items) {
+        const distance = Math.hypot(pose.x - item.x, pose.z - item.z);
+        assert.ok(distance >= (item.r ?? item.radius) + characterRadius + clearance,
+          `${id} overlaps ${item.kind} at ${quality}: center distance ${distance.toFixed(3)} m`);
+      }
+    }
+  });
+}
 
 test("campus event look retains all original A04 site layers and restores source material identities",async()=>{
   const f=lookFixture(),surfaces=[];

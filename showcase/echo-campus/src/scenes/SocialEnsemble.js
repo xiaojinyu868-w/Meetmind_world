@@ -8,6 +8,7 @@ export const DEMO_SOCIAL_PAIRS = Object.freeze([
 const DEMO_IDS = new Set(DEMO_SOCIAL_PAIRS.flat());
 const PAIR_CENTERS = Object.freeze({
   "venue-ab-canopy": Object.freeze([[83.5, 205.1, .10], [90, 208.65, 1.12], [65.1, 205.25, 1.25]].map(Object.freeze)),
+  "venue-campus": Object.freeze([[164.5, 87.8, .10], [174, 90.4, 1.12], [181.5, 86, 1.25]].map(Object.freeze)),
   "venue-ab-towers": Object.freeze([[56.9, -221, .22], [48, -225, 1.25], [59, -230, .15]].map(Object.freeze)),
   "venue-c": Object.freeze([[57.5, 30.1, .20], [49, 29.1, .30], [63, 25.4, 1.20]].map(Object.freeze)),
 });
@@ -63,7 +64,7 @@ export function stablePersonSeed(id) {
  */
 export function demoSocialPose(personId, venueId, groundY = 0) {
   const pairIndex = DEMO_SOCIAL_PAIRS.findIndex(pair => pair.includes(personId));
-  const centers = PAIR_CENTERS[venueId === "venue-campus" ? "venue-ab-canopy" : venueId];
+  const centers = PAIR_CENTERS[venueId];
   if (pairIndex < 0 || !centers || !Number.isFinite(groundY)) return null;
   const member = DEMO_SOCIAL_PAIRS[pairIndex].indexOf(personId);
   const [cx, cz, axis] = centers[pairIndex];

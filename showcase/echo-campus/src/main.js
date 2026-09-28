@@ -187,7 +187,7 @@ async function setVenueView(view,{updateUrl=true,moveCamera=true,reloadAsset=tru
  currentScene?.eventEntourage?.setEvent(venueView==="event");
  currentScene?.architectureShadows?.setEnabled(venueView==="event");
  UI.setVenueState({candidate:activeVenue,view:venueView,eventReady:venueEventReady});
- if(activeVenue&&moveCamera)goCamera(activeVenue.id==="venue-campus"?"hero":cameraForVenueView(venueView));
+ if(activeVenue&&moveCamera)goCamera(cameraForVenueView(venueView));
  if(updateUrl&&activeVenue){const url=new URL(location.href);url.searchParams.set("view",venueView);history.replaceState(null,"",url);if(UI.stage)UI.renderStageQr();}
 }
 function restoreBuiltInFraming(){
@@ -224,7 +224,7 @@ async function switchScene(id,options={}){
    result.eventGarden=await createEventGarden({venueId:id,config:manifest,quality,props:{treeUrl:new URL("assets/premium/garden-tree.glb",document.baseURI).href,treeHeight:3.2,benchUrl:new URL("assets/premium/garden-seat.glb",document.baseURI).href,benchWidth:2.6}});
    result.eventEntourage?.setEvent(true);
    result.architectureShadows=createArchitectureShadows(result.modelRoot,manifest);result.root.add(result.architectureShadows.root);
-   // Local event dressing stays at the surveyed T6 entrance; the complete park retains its authored landscape.
+   // Local event dressing stays at the surveyed HUB south stair entrance; the complete park retains its authored landscape.
    const landscapeConfig=manifest.siteMode==="campus"?{...manifest,framingBounds:{minX:20,maxX:170,minY:-10,maxY:90,minZ:45,maxZ:250}}:manifest;
    result.landscapeSite=createLandscapeSite(result.modelRoot,landscapeConfig,{quality,obstructionRoot:result.architectureShadows.root});result.root.add(result.landscapeSite.root);
    result.contextLandscape=createContextLandscape(result.modelRoot,landscapeConfig,{quality});result.root.add(result.contextLandscape.root);
@@ -243,7 +243,11 @@ async function switchScene(id,options={}){
    result.backdrop=backdrop;
    result.eventPeople=socialPeopleLayout(manifest,result.eventGarden.colliders);
    const a=manifest.anchors.arrival,y=manifest.groundY;
-   result.eventCameras=["venue-ab-canopy","venue-campus"].includes(id)?{
+   result.eventCameras=id==="venue-campus"?{
+    hero:manifest.cameras.hero,
+    arrival:manifest.cameras.arrival,
+    garden:{position:[185,4.3,94],target:[171.34,3.5,73],fov:43}
+   }:id==="venue-ab-canopy"?{
     hero:{position:[190,65,330],target:[87,37,164],fov:38},
     arrival:{position:[101,y+3.7,213],target:[85,y+1.7,204],fov:51},
     garden:{position:[84.2,y+1.85,211.1],target:[83.5,y+1.0,205.1],fov:34}
@@ -274,7 +278,7 @@ async function switchScene(id,options={}){
   else { url.searchParams.delete("view"); }
   history.replaceState(null,"",url);
   setVenueView(candidate?(options.view==="event"&&eventReady?"event":"source"):"event",{moveCamera:false,reloadAsset:false});
-  goCamera(options.camera||(id==="venue-campus"?"hero":candidate?cameraForVenueView(venueView):"hero"),0);
+  goCamera(options.camera||(id==="venue-campus"&&options.view==="event"?"arrival":candidate?cameraForVenueView(venueView):"hero"),0);
   if(UI.stage)UI.renderStageQr();
   try{localStorage.setItem("echo-campus-scene",id==="import"?"campus":id);}catch{}
   document.documentElement.dataset.ready="true";
@@ -453,7 +457,7 @@ if(params.has("capture")||params.has("debug")){
   premiumLoadPromise=loadCharacterLibrary({baseUrl:document.baseURI}).then(library=>{premiumLibrary=library;}).catch(error=>console.warn("Premium characters unavailable",error.message));
   const resume=await consumeStandardDepthResume();
   const requestedVenue=startupVenueFromSearch(location.search);
-  // Existing partner links showed T6 alone. Keep their entrance framing while loading the complete campus.
+  // The complete campus opens at the surveyed HUB south stair entrance; regional links retain their own framing.
   const startupVenue=resolveStartupVenue(location.search);
   if(resume){await switchScene(resume.id,resume.options);const url=new URL(location.href);url.searchParams.delete("depthResume");history.replaceState(null,"",url);}
   else if(requestedVenue){

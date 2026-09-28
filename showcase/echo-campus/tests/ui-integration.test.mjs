@@ -374,11 +374,11 @@ test("campus navigation exposes every region, highlights cameras and returns fro
  assert.deepEqual(cameras,["towers","hub","commercial"]);
  a.ui.setCameraSelection("hero");assert.equal(a.ui.root.querySelector('.ec-camera-dock [data-id="hero"]').getAttribute("aria-pressed"),"true");
  a.ui.openScenePanel();const card=a.ui.root.querySelector('.ec-venue-card [data-id="venue-campus"]');await a.ui.onClick({target:card});
- assert.deepEqual(venues[0],["venue-campus",{view:"event",camera:"hero"}]);
+ assert.deepEqual(venues[0],["venue-campus",{view:"event",camera:"arrival"}]);
  a.ui.setVenueState({candidate:{id:"venue-c",source:"C 地块"},view:"source",eventReady:true});
  assert.equal(a.ui.root.querySelector("[data-campus-regions]").hidden,true);
  const back=a.ui.root.querySelector("[data-campus-return]");assert.equal(back.hidden,false);await a.ui.onClick({target:back});
- assert.deepEqual(venues[1],["venue-campus",{view:"event",camera:"hero"}]);
+ assert.deepEqual(venues[1],["venue-campus",{view:"event",camera:"arrival"}]);
  assert.equal(a.ui.root.querySelectorAll(".ec-camera-dock button").length,4);
 });
 
