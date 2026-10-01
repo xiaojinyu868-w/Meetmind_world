@@ -261,8 +261,9 @@ test("optional profile supports guest entry and blank fields without fabricated 
   const store = new EventStore();
   const a = store.join({ consent: true });
   const b = store.join({ consent: true, name: "  ", role: "\t", offer: "\n", need: "　", organization: " ", contact: " ", bio: " " });
-  assert.match(a.attendee.name, /^访客[0-9A-F]{6}$/);
-  assert.match(b.attendee.name, /^访客[0-9A-F]{6}$/);
+  assert.match(a.attendee.name, /^\S{2}·\d{3}$/, "blank name becomes persona codename and arrival number");
+  assert.match(b.attendee.name, /^\S{2}·\d{3}$/);
+  assert.equal(a.attendee.serial + 1, b.attendee.serial);
   assert.notEqual(a.attendee.id, b.attendee.id);
   for (const claim of [a, b]) {
     assert.equal(claim.attendee.role, "来宾");
@@ -314,7 +315,8 @@ test("HTTP guest entry needs consent but no personal profile and remains usable"
   assert.equal((await request("/api/join", { body: {} })).status, 400);
   const claim = await request("/api/join", { body: { consent: true } });
   assert.equal(claim.status, 201);
-  assert.match(claim.data.attendee.name, /^访客[0-9A-F]{6}$/);
+  assert.match(claim.data.attendee.name, /^\S{2}·\d{3}$/);
+  assert.ok(claim.data.attendee.persona);
   const me = await request("/api/me", { token: claim.data.token });
   assert.equal(me.data.attendee.id, claim.data.attendee.id);
   assert.deepEqual((await request("/api/matches", { token: claim.data.token })).data.matches, []);

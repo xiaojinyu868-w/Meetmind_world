@@ -1,0 +1,33 @@
+{
+  "name": "相遇之庭",
+  "brand": "ECHO CAMPUS",
+  "subtitle": "碰一下，就在这里相遇",
+  "location": "HUB 中庭南入口",
+  "startsAt": "2026-10-18T13:30:00+08:00",
+  "endsAt": "2026-10-19T18:00:00+08:00",
+  "demoMode": true,
+  "entry": { "label": "碰一下手环或立牌", "hint": "也可以扫码进入" },
+  "theme": { "ink": "#1c2621", "paper": "#f6f1e6", "accent": "#d2643c", "glow": "#ffcf8f", "sage": "#4a6a5b" },
+  "personas": ["qingliu", "shazhou", "songshi", "zhusha", "baizao", "qingci", "qingpao", "zheshi", "shuangye", "mochuan", "shanhu", "xiaoman"],
+  "categories": [
+    { "id": "investor", "label": "投资人", "wristbandColor": "#8066a8" },
+    { "id": "founder", "label": "创业者", "wristbandColor": "#4f82bd" },
+    { "id": "audience", "label": "观众", "wristbandColor": "#6d946f" },
+    { "id": "media", "label": "媒体", "wristbandColor": "#313845" },
+    { "id": "platform", "label": "平台伙伴", "wristbandColor": "#b7794c" },
+    { "id": "organizer", "label": "主办方", "wristbandColor": "#a65f70" },
+    { "id": "guest", "label": "其他来宾", "wristbandColor": "#778879" }
+  ],
+  "checkpoints": [
+    { "id": "welcome", "label": "入场签到", "partner": "主办方", "description": "碰一下入口立牌，领取你的分身。", "points": 10 },
+    { "id": "stage", "label": "主舞台", "partner": "主办方", "description": "在主舞台碰一下，留下一个想问嘉宾的问题。", "points": 20 },
+    { "id": "roadshow", "label": "项目路演区", "partner": "江苏投资人活动", "description": "听完一场路演，碰一下标记你感兴趣的方向。", "points": 20 },
+    { "id": "alipay", "label": "支付宝碰一下", "partner": "支付宝", "description": "在合作展台体验一次碰一下。", "points": 15 },
+    { "id": "connection", "label": "相遇确认", "partner": "ECHO CAMPUS", "description": "与一位伙伴互相确认，让连接在世界中点亮。", "points": 25 }
+  ],
+  "tags": {
+    "GATE-SOUTH": { "kind": "entry" },
+    "ALIPAY-BOOTH-01": { "kind": "checkpoint", "checkpoint": "alipay" },
+    "STAGE-MAIN": { "kind": "checkpoint", "checkpoint": "stage" }
+  }
+}

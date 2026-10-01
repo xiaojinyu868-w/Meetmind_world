@@ -4,6 +4,7 @@ import { resolve, dirname, extname, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import { EventStore, HttpError, fail } from "./store.mjs";
+import { readEventConfig } from "./event-config.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_ORIGINS = [
@@ -58,13 +59,19 @@ export function createEventServer({
   distDir = resolve(HERE, "../dist"),
   allowedOrigins = (process.env.ECHO_ALLOWED_ORIGINS || "").split(",").map(v => v.trim()).filter(Boolean),
   now = () => Date.now(),
-  rateLimit = { read: 240, write: 40, join: 12, windowMs: 60000 },
+  // Venue Wi-Fi puts many phones behind one NAT address; join allows a queue
+  // of arrivals per minute without opening unbounded writes.
+  rateLimit = { read: 600, write: 120, join: 60, windowMs: 60000 },
+  eventConfig = {},
+  tapSecret = "",
+  trustProxy = false,
+  maxAttendees = 1200,
 } = {}) {
   const origins = new Set([...DEFAULT_ORIGINS, ...allowedOrigins]);
   const sockets = new WebSocketServer({ noServer: true, maxPayload: 1024, perMessageDeflate: false });
   const limitBuckets = new Map();
   const store = new EventStore({
-    file: dataFile, now,
+    file: dataFile, now, eventConfig, maxAttendees,
     onChange(snapshot) {
       const message = JSON.stringify({ type: "snapshot", ...snapshot });
       for (const client of sockets.clients) {
@@ -76,8 +83,17 @@ export function createEventServer({
     },
   });
   function allowedOrigin(origin) { return !origin || origins.has(origin); }
+  function clientAddress(req) {
+    // Only a trusted reverse proxy may name the client; otherwise every guest
+    // behind Nginx would share one limit bucket (or could spoof another's).
+    if (trustProxy) {
+      const real = String(req.headers["x-real-ip"] || "").trim() || String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+      if (real) return real;
+    }
+    return req.socket.remoteAddress || "unknown";
+  }
   function rate(req, kind) {
-    const key = (req.socket.remoteAddress || "unknown") + ":" + kind;
+    const key = clientAddress(req) + ":" + kind;
     const moment = now();
     let bucket = limitBuckets.get(key);
     if (!bucket || moment >= bucket.until) {
@@ -124,6 +140,10 @@ export function createEventServer({
         }
         const confirm = url.pathname.match(/^\/api\/encounters\/(enc-[a-f0-9-]+)\/confirm$/);
         if (req.method === "POST" && confirm) return json(res, 200, store.confirmEncounter(token(req), confirm[1]));
+        const decline = url.pathname.match(/^\/api\/encounters\/(enc-[a-f0-9-]+)\/decline$/);
+        if (req.method === "POST" && decline) return json(res, 200, store.declineEncounter(token(req), decline[1]));
+        if (req.method === "POST" && url.pathname === "/api/tap") return json(res, 200, store.tap(token(req), await readBody(req), { secret: tapSecret }));
+        if (req.method === "POST" && url.pathname === "/api/leave") return json(res, 200, store.leave(token(req)));
         if (url.pathname === "/api/live") fail(426, "WEBSOCKET_REQUIRED", "请使用 WebSocket 连接");
         fail(404, "NOT_FOUND", "接口不存在");
       }
@@ -236,9 +256,15 @@ export function createEventServer({
 }
 const entry = process.argv[1] && pathToFileURL(resolve(process.argv[1])).href;
 if (entry === import.meta.url) {
+  const limit = (name, fallback) => { const value = Number(process.env[name]); return Number.isInteger(value) && value > 0 ? value : fallback; };
   const app = createEventServer({
     dataFile: process.env.ECHO_EVENT_DATA ? resolve(process.env.ECHO_EVENT_DATA) : resolve(HERE, "data/event.json"),
     distDir: process.env.ECHO_DIST_DIR ? resolve(process.env.ECHO_DIST_DIR) : resolve(HERE, "../dist"),
+    eventConfig: readEventConfig(process.env.ECHO_EVENT_CONFIG ? resolve(process.env.ECHO_EVENT_CONFIG) : ""),
+    tapSecret: process.env.ECHO_TAP_SECRET || "",
+    trustProxy: process.env.ECHO_TRUST_PROXY === "1",
+    maxAttendees: limit("ECHO_MAX_ATTENDEES", 1200),
+    rateLimit: { read: limit("ECHO_RATE_READ", 600), write: limit("ECHO_RATE_WRITE", 120), join: limit("ECHO_RATE_JOIN", 60), windowMs: 60000 },
   });
   const host = process.env.HOST || "127.0.0.1";
   const port = Number(process.env.PORT || 5189);
