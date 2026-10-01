@@ -1,17 +1,23 @@
 import * as THREE from "three";
 
 // Keep a person centered in the unobscured viewport for every world heading.
-export function profileCameraPreset({ position, yaw = 0, aspect = 1, panelFraction = 0, neighbors = [] }) {
+// panelFraction: share of the width covered by a desktop side card.
+// sheetFraction: share of the height covered by a phone bottom sheet; the
+// subject is then framed as a portrait in the visible strip above it.
+export function profileCameraPreset({ position, yaw = 0, aspect = 1, panelFraction = 0, sheetFraction = 0, neighbors = [] }) {
+  const sheet = Math.min(0.75, Math.max(0, sheetFraction));
   const candidates = [0.55, -0.55, 1.05, -1.05, 0].map((angle, index) => {
-  const heading = yaw + angle, fov = 43, distance = 3.4;
+  const heading = yaw + angle, fov = sheet ? 40 : 43, distance = sheet ? 3.2 : 3.4;
   const forward = new THREE.Vector3(Math.sin(heading), 0, Math.cos(heading));
   const right = new THREE.Vector3(forward.z, 0, -forward.x);
-  const target = new THREE.Vector3(position.x, position.y + 1.03, position.z);
-  const camera = target.clone().addScaledVector(forward, distance);
+  const eye = new THREE.Vector3(position.x, position.y + (sheet ? 1.34 : 1.03), position.z);
+  const target = eye.clone();
+  const camera = eye.clone().addScaledVector(forward, distance);
   const halfWidth = distance * Math.tan(THREE.MathUtils.degToRad(fov / 2)) * aspect;
   const shift = halfWidth * Math.min(0.6, Math.max(0, panelFraction));
   target.addScaledVector(right, shift);
   camera.addScaledVector(right, shift);
+  if (sheet) target.y -= distance * sheet * Math.tan(THREE.MathUtils.degToRad(fov / 2));
   const probe = new THREE.PerspectiveCamera(fov, aspect, 0.05, 100);
   probe.position.copy(camera);probe.lookAt(target);probe.updateMatrixWorld();
   const subject = new THREE.Vector3(position.x, position.y + 1.03, position.z).project(probe);

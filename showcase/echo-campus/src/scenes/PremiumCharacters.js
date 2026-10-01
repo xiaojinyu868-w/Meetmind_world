@@ -3,7 +3,9 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { createCharacterContactShadowResources, updateCharacterContactShadow } from "./CharacterContactShadow.js";
+import { personaById } from "../shared/personas.mjs";
 
 // Keep source textures and geometry shared; only skeletons, mixers and name badges
 // belong to an individual attendee. Coordinates exposed to the world are meters.
@@ -11,6 +13,13 @@ export const PREMIUM_CHARACTER_ASSETS = Object.freeze([
   Object.freeze({ id: "host-female", path: "assets/premium/host-female.glb?v=social-20260919", height: 1.68, forwardYaw: -Math.PI / 2 }),
   Object.freeze({ id: "host-male", path: "assets/premium/host-male.glb?v=social-20260919", height: 1.78, forwardYaw: -Math.PI / 2 }),
 ]);
+export const PERSONA_ASSET_VERSION = "20261002";
+/** One rigged Tripo GLB per preset persona, loaded on demand. */
+export function personaAssetDefinition(personaId) {
+  const persona = personaById(personaId);
+  if (!persona) return null;
+  return Object.freeze({ id: persona.id, path: `assets/personas/${persona.id}.glb?v=${PERSONA_ASSET_VERSION}`, height: persona.height, forwardYaw: -Math.PI / 2, persona: true });
+}
 
 const LIBRARIES = new Map();
 const AXIS_Y = new THREE.Vector3(0, 1, 0);
@@ -19,8 +28,11 @@ const CLIP_ALIASES = Object.freeze({
   idle: /idle|stand|breath|待机/i,
   walk: /walk|locomotion|行走/i,
   wave: /wave|greet|hello|挥手/i,
-  talk: /talk|speak|conversation|交谈/i,
+  talk: /talk|speak|conversation|agree|交谈/i,
+  celebrate: /clap|cheer|celebrat|鼓掌/i,
 });
+// A full Tripo clap take runs ~17 s; a celebration reads in its first beats.
+const CELEBRATE_SECONDS = 3.6;
 let defaultLibrary = null;
 const WARDROBE_COLORS = Object.freeze({
   "host-female": Object.freeze([0x667e70, 0x617987, 0x897985, 0xa48d73, 0xa6ac9f]),
@@ -87,6 +99,7 @@ function stateName(state) {
   if (/^(walk|walking|run|running)$/.test(value)) return "walk";
   if (/^(wave|arriving|greeting)$/.test(value)) return "wave";
   if (/^(talk|talking|meeting|in-meeting)$/.test(value)) return "talk";
+  if (/^(celebrate|celebrating|clap|connected)$/.test(value)) return "celebrate";
   return "idle";
 }
 
@@ -212,11 +225,11 @@ function findBone(model, matcher) {
 // Rebase only each take's constant stage origin. Hip weight shifts, both legs,
 // torso, shoulders, wrists and recovery remain authored animation throughout.
 function standingSocialClips(template) {
-  const names = { idle: "Social-Standing_Relax", talk: "Social-Agree", wave: "Social-Greet_02" };
+  const names = { idle: "Social-Standing_Relax", talk: "Social-Agree", wave: "Social-Greet_02", celebrate: "Social-Clap" };
   const result = new Map();
   let reference = null;
   for (const [state, name] of Object.entries(names)) {
-    const source = template.clips.find(clip => clip.name === name) || template.clipByState.get(state) || template.clipByState.get("idle");
+    const source = template.clips.find(clip => clip.name === name) || template.clipByState.get(state) || (state === "celebrate" ? null : template.clipByState.get("idle"));
     if (!source) continue;
     const clip = source.clone();
     clip.name = "Social" + state[0].toUpperCase() + state.slice(1);
@@ -340,7 +353,7 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
   const actions = new Map();
   for (const [state, clip] of clipByState) {
     const action = mixer.clipAction(clip);
-    if (state === "wave" || (social && state === "talk")) { action.setLoop(THREE.LoopOnce, 1); action.clampWhenFinished = true; }
+    if (state === "wave" || state === "celebrate" || (social && state === "talk")) { action.setLoop(THREE.LoopOnce, 1); action.clampWhenFinished = true; }
     actions.set(state, action);
   }
   const phase = ((Number(seed) || 1) * 0.61803398875 % 1) * Math.PI * 2;
@@ -377,7 +390,7 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
   }
   library.instances++;
   const character = {
-    root, model, mixer, height, conversationDuration: clipByState.get("talk")?.duration || 4, greetingDuration: (clipByState.get("wave")?.duration || 1) + 0.3, assetInfo: wardrobe ? Object.freeze({ ...template.info, height, wardrobe }) : template.info,
+    root, model, mixer, height, assetId: template.definition.id, conversationDuration: clipByState.get("talk")?.duration || 4, greetingDuration: (clipByState.get("wave")?.duration || 1) + 0.3, celebrationDuration: Math.min(CELEBRATE_SECONDS, clipByState.get("celebrate")?.duration || 0) || 0, assetInfo: wardrobe ? Object.freeze({ ...template.info, height, wardrobe }) : template.info,
     update(dt, time, state = "idle") {
       if (disposed) return;
       for (const { bone, before } of modified) bone.quaternion.copy(before);
@@ -390,9 +403,10 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
         // gesture short, and a held intent cannot repeat it indefinitely.
         if (nextState !== socialRequest) {
           socialRequest = nextState;
-          if (nextState === "wave" || (nextState === "talk" && performanceState === "idle")) transition(nextState);
+          if (nextState === "wave" || nextState === "celebrate" || (nextState === "talk" && performanceState === "idle")) transition(nextState);
         }
-        if (performanceState !== "idle" && !performanceReturning && activeAction.time >= activeAction.getClip().duration - 0.65) {
+        const phraseEnd = performanceState === "celebrate" ? Math.min(activeAction.getClip().duration, CELEBRATE_SECONDS) : activeAction.getClip().duration;
+        if (performanceState !== "idle" && !performanceReturning && activeAction.time >= phraseEnd - 0.65) {
           performanceReturning = true;
           transition("idle");
         }
@@ -454,29 +468,57 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
   return character;
 }
 
-export async function loadCharacterLibrary({ baseUrl, assets = PREMIUM_CHARACTER_ASSETS, onProgress } = {}) {
+export async function loadCharacterLibrary({ baseUrl, assets = PREMIUM_CHARACTER_ASSETS, onProgress, allowEmpty = false } = {}) {
   const base = baseLocation(baseUrl), definitions = assets.map(definition => ({ ...definition, url: new URL(definition.path, base).href }));
-  const key = JSON.stringify(definitions);
+  const key = JSON.stringify(definitions) + (allowEmpty ? ":lazy" : "");
   if (LIBRARIES.has(key)) { const library = await LIBRARIES.get(key); defaultLibrary = library; return library; }
   const promise = (async () => {
     const manager = new THREE.LoadingManager();
     if (onProgress) manager.onProgress = (url, completed, total) => onProgress({ url, completed, total });
-    const draco = new DRACOLoader(manager).setDecoderPath(new URL("draco/", base).href);
-    const loader = new GLTFLoader(manager).setDRACOLoader(draco), materialCache = new Map();
+    let draco = null;
+    const loaderFor = () => {
+      draco ||= new DRACOLoader(manager).setDecoderPath(new URL("draco/", base).href);
+      return new GLTFLoader(manager).setDRACOLoader(draco).setMeshoptDecoder(MeshoptDecoder);
+    };
+    const loader = loaderFor(), materialCache = new Map();
     const results = await Promise.allSettled(definitions.map(async definition => inspectAsset(await loader.loadAsync(definition.url), definition, materialCache)));
-    draco.dispose();
     const templates = results.filter(result => result.status === "fulfilled").map(result => result.value);
     const errors = results.flatMap((result, index) => result.status === "rejected" ? [{ id: definitions[index].id, message: result.reason?.message || String(result.reason) }] : []);
-    if (!templates.length) { materialCache.forEach(material => material.dispose()); throw new Error(`角色模型暂未加载：${errors.map(error => `${error.id} ${error.message}`).join("；")}`); }
+    if (!templates.length && !allowEmpty) { draco?.dispose(); materialCache.forEach(material => material.dispose()); throw new Error(`角色模型暂未加载：${errors.map(error => `${error.id} ${error.message}`).join("；")}`); }
+    const pending = new Map();
     const library = {
-      templates, errors: Object.freeze(errors), assets: Object.freeze(templates.map(template => template.info)),
+      templates, errors, assets: templates.map(template => template.info),
       instances: 0, disposed: false, released: false, badgeGeometries: new Map(), wardrobeMaterials: new Map(),
       contactShadowResources: createCharacterContactShadowResources(),
       badgeMaterial: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.68, metalness: 0.08 }),
+      hasPersona(id) { return templates.some(item => item.definition.id === id); },
+      /** Loads one persona GLB once; concurrent callers share the request. */
+      ensurePersona(id) { return library.ensureDefinition(personaAssetDefinition(id)); },
+      ensureDefinition(definition) {
+        const id = definition?.id;
+        if (library.hasPersona(id)) return Promise.resolve(templates.find(item => item.definition.id === id));
+        if (pending.has(id)) return pending.get(id);
+        if (!definition || library.disposed) return Promise.reject(new Error("未知的分身形象"));
+        const url = new URL(definition.path, base).href;
+        const request = loaderFor().loadAsync(url).then(gltf => {
+          if (library.released) throw new Error("角色库已释放");
+          const template = inspectAsset(gltf, { ...definition, url }, materialCache);
+          templates.push(template); library.assets.push(template.info);
+          return template;
+        }).catch(error => { errors.push({ id, message: error?.message || String(error) }); throw error; }).finally(() => pending.delete(id));
+        pending.set(id, request);
+        return request;
+      },
       createPremiumCharacter(options = {}) {
+        if (!templates.length) throw new Error("角色模型尚未就绪");
         const numericSeed = Number(options.seed);
         const seed = Math.abs(Number.isFinite(numericSeed) ? Math.trunc(numericSeed) : 1);
-        const template = templates.find(item => item.definition.id === options.assetId) || templates[seed % templates.length];
+        const sex = personaById(options.persona)?.sex;
+        const template = templates.find(item => item.definition.id === options.persona)
+          || templates.find(item => item.definition.id === options.assetId)
+          || templates.find(item => item.definition.id === (sex === "m" ? "host-male" : sex === "f" ? "host-female" : ""))
+          || templates.find(item => !item.definition.persona)
+          || templates[seed % templates.length];
         return makeCharacter(library, template, options);
       },
       dispose() {
@@ -499,6 +541,7 @@ export async function loadCharacterLibrary({ baseUrl, assets = PREMIUM_CHARACTER
         }));
         library.badgeGeometries.forEach(geometry => geometry.dispose()); library.badgeGeometries.clear();
         library.badgeMaterial.dispose();
+        draco?.dispose();
         library.contactShadowResources.dispose();
         library.wardrobeMaterials.forEach(material => material.dispose()); library.wardrobeMaterials.clear();
         geometries.forEach(geometry => geometry.dispose()); materials.forEach(material => material.dispose());

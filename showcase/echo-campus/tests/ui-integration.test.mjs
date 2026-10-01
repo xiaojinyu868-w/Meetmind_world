@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { Window } from "happy-dom";
 import { WebSocket } from "ws";
@@ -11,7 +12,7 @@ import { EventClient } from "../src/runtime/EventClient.js";
 import { resolveStartupVenue } from "../src/runtime/VenueCatalog.js";
 
 const bundle = await build({
-  stdin: { contents: 'export {AppUI} from "./src/ui/AppUI.js"; export {registerScene} from "./src/runtime/SceneRegistry.js";', resolveDir: new URL("..",import.meta.url).pathname, sourcefile:"ui-test-entry.mjs" },
+  stdin: { contents: 'export {AppUI} from "./src/ui/AppUI.js"; export {registerScene} from "./src/runtime/SceneRegistry.js";', resolveDir: fileURLToPath(new URL("..",import.meta.url)), sourcefile:"ui-test-entry.mjs" },
   bundle: true, write: false, format: "esm", platform: "browser",
   loader: { ".css": "empty" }, logLevel: "silent",
 });
@@ -334,15 +335,16 @@ test("blank onboarding enters as guest only after consent and edits require fres
     assert.equal(form.elements[key].value, "", key + " starts empty");
     assert.equal(form.elements[key].required, false, key + " is optional");
   }
-  assert.equal(form.elements.category.value, "guest");
-  assert.equal(form.elements.publicContact.checked, false);
+  assert.equal(form.querySelector('[name="category"]:checked').value, "guest");
+  assert.equal(form.querySelector('[name="contactVisibility"]:checked').value, "connections", "contact defaults to connections-only");
   assert.equal(form.elements.consent.checked, false);
   assert.equal(form.elements.consent.required, true);
   await a.ui.onSubmit({ target: form, preventDefault() {} });
   assert.equal(a.client.me, null);
   form.elements.consent.checked = true;
   await a.ui.onSubmit({ target: form, preventDefault() {} });
-  assert.match(a.client.me.attendee.name, /^访客[0-9A-F]{6}$/);
+  assert.match(a.client.me.attendee.name, /^\S{2}·\d{3}$/);
+  assert.equal(a.client.me.profile.contactVisibility, "hidden", "an empty contact is never shared");
   assert.equal(a.client.me.attendee.role, "来宾");
   await a.ui.openMatches();
   assert.ok(a.ui.root.querySelector(".ec-empty-state"));
@@ -398,4 +400,178 @@ test("single-building intent survives phone, stage, QR and isolated-tab share ro
   const shared=new URL(a.ui.demoUrl());assert.equal(shared.searchParams.has("scope"),false,"only the supported building scope is shareable");
   assert.equal(resolveStartupVenue(shared.search),"venue-campus","unsupported scope cannot disable legacy campus migration");
  }
+});
+
+test("NFC arrival is one tap: persona card, shuffle, join without a form, and it survives scene loads", async t => {
+  const { session } = await fixture(t);
+  const previews = [], arrivals = [];
+  const a = await session("?entry=nfc", { onPersonaPreview: id => previews.push(id), onArrive: attendee => arrivals.push(attendee) });
+  activate(a.win);
+  const layer = a.ui.root.querySelector("[data-arrival]");
+  assert.equal(layer.hidden, false, "arrival opens immediately for a tokenless NFC guest");
+  const first = layer.querySelector("[data-persona-card]").dataset.personaCard;
+  assert.ok(first && previews.includes(first));
+  a.ui.closePanel();
+  assert.equal(layer.hidden, false, "closing panels (e.g. on scene load) never dismisses the arrival");
+  await a.ui.onClick({ target: layer.querySelector('[data-action="arrival-shuffle"]') });
+  const second = layer.querySelector("[data-persona-card]").dataset.personaCard;
+  assert.notEqual(second, first);
+  assert.equal(layer.querySelector("form"), null, "no profile fields on the tap path");
+  await a.ui.arrive(layer.querySelector('[data-action="arrive"]'));
+  assert.equal(a.client.me.attendee.persona, second);
+  assert.match(a.client.me.attendee.name, /^\S{2}·\d{3}$/);
+  assert.equal(arrivals[0].id, a.client.me.attendee.id);
+  assert.equal(a.ui.arrivalOpen, false);
+  assert.equal(a.ui.root.querySelector("[data-entry-label]").textContent, a.client.me.attendee.name);
+  const returning = await session("?entry=nfc", {}, a.win.localStorage);
+  assert.equal(returning.ui.root.querySelector("[data-arrival]").hidden, true, "a returning device skips the arrival");
+});
+
+test("greeting note, decline and a mutual yes that reveals WeChat only to each other", async t => {
+  const { session } = await fixture(t);
+  const a = await session(), b = await session(), c = await session();
+  for (const [s, contact] of [[a, "wx_alpha"], [b, "wx_beta"]]) {
+    activate(s.win); s.ui.openOnboarding();
+    const form = s.ui.root.querySelector('[data-form="join"]');
+    form.elements.contact.value = contact;
+    form.querySelector('[name="contactVisibility"][value="connections"]').checked = true;
+    form.elements.consent.checked = true;
+    await s.ui.onSubmit({ target: form, preventDefault() {} });
+  }
+  activate(c.win); await c.client.join({ consent: true });
+  activate(a.win); a.ui.setSnapshot(await a.client.request("event"));
+  a.ui.setSelectedPerson(b.client.me.attendee);
+  await a.ui.onClick({ target: a.ui.root.querySelector('[data-action="compose"]') });
+  const compose = a.ui.root.querySelector('[data-form="compose"]');
+  assert.equal(compose.hidden, false);
+  await a.ui.onClick({ target: compose.querySelector('[data-action="note-preset"]') });
+  assert.equal(compose.elements.note.value, "你好，想认识你");
+  await a.ui.requestEncounter(b.client.me.attendee.id, compose.querySelector('[data-action="encounter"]'));
+  assert.ok(a.ui.root.textContent.includes("等待对方确认"));
+  activate(c.win); c.ui.setSnapshot(await c.client.request("event"));
+  await c.client.encounter(b.client.me.attendee.id, "也想认识你");
+  activate(b.win); await b.ui.openInbox();
+  assert.ok(b.ui.root.textContent.includes("你好，想认识你"), "recipient sees the note");
+  const declines = [...b.ui.root.querySelectorAll('[data-action="decline"]')];
+  const fromC = b.client.me.encounters.find(e => e.fromId === c.client.me.attendee.id);
+  await b.ui.declineEncounter(fromC.id, declines.find(btn => btn.dataset.id === fromC.id));
+  assert.equal(b.client.me.encounters.some(e => e.id === fromC.id), false);
+  const fromA = b.client.me.encounters.find(e => e.fromId === a.client.me.attendee.id);
+  await b.ui.confirmEncounter(fromA.id, b.ui.root.querySelector(`[data-action="confirm"][data-id="${fromA.id}"]`));
+  assert.ok(b.ui.root.textContent.includes("wx_alpha"), "B sees A's WeChat after confirming");
+  activate(a.win); await a.client.refreshMe(); a.ui.setMe(a.client.me);
+  a.ui.setSelectedPerson(b.client.me.attendee);
+  assert.ok(a.ui.root.querySelector(".court-contact strong").textContent.includes("wx_beta"));
+  activate(c.win); await c.client.refreshMe();
+  assert.equal(c.client.me.encounters[0].status, "pending", "a declined sender is not told");
+  assert.equal(JSON.stringify(await c.client.request("event")).includes("wx_"), false);
+});
+
+test("persona picker keeps the draft, and quick topics publish only after consent", async t => {
+  const { session } = await fixture(t);
+  const a = await session(); activate(a.win);
+  await a.client.join({ consent: true, persona: "qingliu" });
+  a.ui.setMe(a.client.me);
+  a.ui.openOnboarding();
+  let form = a.ui.root.querySelector('[data-form="join"]');
+  form.elements.name.value = "阿岚";
+  form.elements.bio.value = "做 AI 硬件";
+  await a.ui.onClick({ target: form.querySelector('[data-action="pick-persona"]') });
+  assert.equal(a.ui.panel, "persona");
+  await a.ui.onClick({ target: a.ui.root.querySelector('[data-action="choose-persona"][data-id="songshi"]') });
+  form = a.ui.root.querySelector('[data-form="join"]');
+  assert.equal(form.elements.persona.value, "songshi");
+  assert.equal(form.elements.name.value, "阿岚", "draft survives the picker");
+  assert.equal(form.elements.bio.value, "做 AI 硬件");
+  const chip = form.querySelector('[data-topic-picker="offer"] input[value="融资"]');
+  chip.checked = true; chip.dispatchEvent(new a.win.Event("change", { bubbles: true }));
+  assert.equal(form.querySelector('input[type="hidden"][name="offer"]').value, "融资");
+  form.elements.consent.checked = true;
+  await a.ui.onSubmit({ target: form, preventDefault() {} });
+  assert.equal(a.client.me.attendee.persona, "songshi");
+  assert.equal(a.client.me.attendee.offer, "融资");
+  const b = await session(); activate(b.win); await b.client.join({ consent: true }); b.ui.setMe(b.client.me);
+  await b.ui.openMatches();
+  const quick = b.ui.root.querySelector('[data-form="quick-topics"]');
+  assert.ok(quick, "an empty profile is offered one-tap topics");
+  const need = quick.querySelector('[data-topic-picker="need"] input[value="融资"]');
+  need.checked = true; need.dispatchEvent(new b.win.Event("change", { bubbles: true }));
+  await b.ui.onSubmit({ target: quick, preventDefault() {} });
+  assert.equal(b.client.me.attendee.need, "", "nothing is published without the consent tick");
+  quick.elements.consent.checked = true;
+  await b.ui.onSubmit({ target: quick, preventDefault() {} });
+  assert.equal(b.client.me.attendee.need, "融资");
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.ok(b.ui.root.querySelector(".ec-match-list").textContent.includes("阿岚"));
+});
+
+test("wristband tag presets the category on arrival and a checkpoint tag stamps the passport", async t => {
+  const { session } = await fixture(t);
+  const a = await session("?entry=nfc&tag=WB-investor-0007"); activate(a.win);
+  await a.ui.handleTap();
+  assert.ok(a.ui.root.querySelector("[data-arrival]").textContent.includes("投资人"));
+  await a.ui.arrive(a.ui.root.querySelector('[data-action="arrive"]'));
+  assert.equal(a.client.me.attendee.category, "investor");
+  const b = await session("?tag=CP-future", {}, a.win.localStorage); activate(b.win);
+  await b.ui.handleTap();
+  assert.equal(b.client.me.activity.points, 20);
+  assert.equal(b.ui.panel, "activity");
+  assert.ok(b.ui.root.querySelector('.court-stamp.is-done[data-checkpoint-id="future"]'));
+});
+
+test("a signed checkpoint tap is forwarded once, leaves the URL, and a new guest still gets the stamp", async t => {
+  const dir = mkdtempSync(join(tmpdir(), "echo-signed-"));
+  const app = createEventServer({ dataFile: join(dir, "event.json"), tapSecret: "booth-secret" });
+  const address = await app.listen(0); const base = "http://127.0.0.1:" + address.port + "/";
+  t.after(async () => { await app.close(); rmSync(dir, { recursive: true, force: true }); restore(); });
+  const ts = Math.floor(Date.now() / 1000), nonce = "nonce-ui-0001";
+  const { createHmac } = await import("node:crypto");
+  const sig = createHmac("sha256", "booth-secret").update(`CP-platform.${ts}.${nonce}`).digest("hex");
+  const win = new Window({ url: `${base}?entry=nfc&tag=CP-platform&ts=${ts}&nonce=${nonce}&sig=${sig}` });
+  win.document.body.innerHTML = '<canvas id="world"></canvas><div id="ui"></div>';
+  activate(win);
+  const client = new EventClient({ baseUrl: base, storage: win.localStorage, WebSocketImpl: null });
+  const ui = new AppUI({ client });
+  client.addEventListener("me", event => ui.setMe(event.detail));
+  t.after(() => { client.dispose(); ui.dispose(); });
+  await client.start();
+  const first = await ui.handleTap();
+  assert.equal(first.verified, true);
+  assert.equal(new URL(win.location.href).searchParams.has("sig"), false, "single-use parameters leave the address bar");
+  assert.equal(await ui.handleTap(), null, "a second call does not replay the nonce");
+  await ui.arrive(ui.root.querySelector('[data-action="arrive"]'));
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.equal(client.me.activity.points, 20);
+  await win.happyDOM.abort();
+});
+
+test("a guest who arrived with one tap and later adds WeChat shares it with encounters by default", async t => {
+  const { session } = await fixture(t);
+  const a = await session("?entry=nfc"), b = await session("?entry=nfc");
+  for (const s of [a, b]) { activate(s.win); await s.ui.arrive(s.ui.root.querySelector('[data-action="arrive"]')); }
+  activate(b.win); b.ui.openOnboarding();
+  const form = b.ui.root.querySelector('[data-form="join"]');
+  assert.equal(form.querySelector('[name="contactVisibility"]:checked').value, "connections");
+  form.elements.contact.value = "wx_after_tap"; form.elements.consent.checked = true;
+  await b.ui.onSubmit({ target: form, preventDefault() {} });
+  assert.equal(b.client.me.profile.contactVisibility, "connections");
+  activate(a.win); await a.client.encounter(b.client.me.attendee.id);
+  activate(b.win); await b.client.refreshMe(); await b.client.confirm(b.client.me.encounters[0].id);
+  activate(a.win); await a.client.refreshMe();
+  assert.equal(a.client.me.encounters[0].peerContact, "wx_after_tap");
+});
+
+test("deleting my data clears the local session and removes me from the world", async t => {
+  const { session } = await fixture(t);
+  const a = await session(); activate(a.win);
+  await a.client.join({ consent: true }); a.ui.setMe(a.client.me);
+  const id = a.client.me.attendee.id;
+  a.ui.openOnboarding();
+  const leave = a.ui.root.querySelector('[data-action="leave"]');
+  await a.ui.onClick({ target: leave });
+  assert.ok(a.client.token, "first tap only arms the button");
+  await a.ui.onClick({ target: leave });
+  assert.equal(a.client.token, "");
+  assert.equal(a.win.localStorage.getItem("echo-campus-token"), null);
+  assert.equal((await a.client.request("event")).attendees.some(p => p.id === id), false);
 });

@@ -7,7 +7,10 @@ import {OrbitControls} from "three/addons/controls/OrbitControls.js";
 import {RoomEnvironment} from "three/addons/environments/RoomEnvironment.js";
 import {getSceneDefinition} from "./runtime/SceneRegistry.js";
 import {createCharacter} from "./scenes/Characters.js";
-import {loadCharacterLibrary} from "./scenes/PremiumCharacters.js";
+import {loadCharacterLibrary,PREMIUM_CHARACTER_ASSETS} from "./scenes/PremiumCharacters.js";
+import {createArrivalEffects} from "./runtime/ArrivalEffects.js";
+import {createWorldLabels} from "./runtime/WorldLabels.js";
+import {personaById} from "./shared/personas.mjs";
 import {visibleSocialAttendees,demoSocialPose,stablePersonSeed,conversationIntent} from "./scenes/SocialEnsemble.js";
 import {createEventGarden} from "./scenes/EventGarden.js";
 import {socialPeopleLayout} from "./runtime/SocialPeopleLayout.js";
@@ -94,8 +97,17 @@ const hoverRoot=new THREE.Group();hoverRoot.name="Interaction hover";scene.add(h
 let hoveredId=null,hoveredMarker=null;
 let fpsFrames=0,fpsStart=performance.now(),fps=0,lastSnapshotVersion=-1,hasConnected=false;
 let audioContext=null,soundEnabled=false,activeVenue=null,venueView="event",venueEventReady=false,venuePresentationBounds=null;
+const arrivals=createArrivalEffects(scene,{reducedMotion:reduced});
+const labels=createWorldLabels({budget:mobile?7:params.get("mode")==="stage"?18:12});
+if(params.get("mode")==="stage")labels.layer.classList.add("court-stage-labels");
+const LINK_VERTEX="varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}";
+const LINK_FRAGMENT="uniform vec3 color;uniform float time;uniform float strength;uniform float burst;varying vec2 vUv;void main(){float flow=fract(vUv.x*2.6-time*0.42);float pulse=smoothstep(0.0,0.07,flow)*(1.0-smoothstep(0.1,0.4,flow));float ends=smoothstep(0.0,0.05,vUv.x)*(1.0-smoothstep(0.95,1.0,vUv.x));float d=(vUv.x-burst)*7.0;float wave=burst>=0.0?exp(-d*d)*1.6:0.0;float a=clamp((0.32+pulse*0.85+wave)*ends*strength,0.0,1.0);gl_FragColor=vec4(color*(0.85+pulse*0.7+wave),a);}";
+const linkTime={value:0};
+let pendingArrival=null,knownConnections=null,clientReady=null;
 const UI=new AppUI({
  client,
+ onArrive:attendee=>welcomeArrival(attendee),
+ onPersonaPreview:id=>requestPersona(id,true),
  onCamera:id=>goCamera(({overview:"hero",courtyard:"garden"})[id]||id),
  onScene:id=>switchScene(id),
  onVenue:(id,options={})=>switchScene(id,{view:"source",...options}),
@@ -135,40 +147,86 @@ function personPosition(index,isSelf=false,person=null){
  const available=points.filter(point=>[...occupied,...reserved].every(other=>Math.hypot(other.x-point.x,other.z-point.z)>1));
  return {...(available[0]||points[index%points.length])};
 }
+// Persona models stream in on demand (self and the selected guest first); a
+// guest appears the moment their own look is ready, never in a stand-in body.
+const personaState=new Map(),personaQueue=[];let personaLoads=0,fallbackPromise=null;
+function pumpPersonas(){
+ while(premiumLibrary&&personaLoads<(mobile?2:4)&&personaQueue.length){
+  const id=personaQueue.shift();personaLoads++;
+  premiumLibrary.ensurePersona(id).then(()=>personaState.set(id,"ready")).catch(error=>{console.warn("Persona unavailable",id,error.message);personaState.set(id,"failed");return ensureFallbackModels();})
+   .finally(()=>{personaLoads--;pumpPersonas();if(client.snapshot)syncPeople(client.snapshot);});
+ }
+}
+function requestPersona(id,urgent=false){
+ if(!personaById(id))return;
+ if(!premiumLibrary){premiumLoadPromise?.then(()=>requestPersona(id,urgent));return;}
+ if(personaState.has(id)){if(urgent&&personaState.get(id)==="queued"){personaQueue.splice(personaQueue.indexOf(id),1);personaQueue.unshift(id);}return;}
+ personaState.set(id,"queued");urgent?personaQueue.unshift(id):personaQueue.push(id);pumpPersonas();
+}
+function ensureFallbackModels(){return fallbackPromise??=Promise.allSettled(PREMIUM_CHARACTER_ASSETS.map(definition=>premiumLibrary.ensureDefinition(definition)));}
+function personaReady(person){
+ if(!premiumLibrary)return !premiumLoadPromise;
+ const id=personaById(person.persona)?.id;
+ if(id&&premiumLibrary.hasPersona(id))return true;
+ if(id&&personaState.get(id)!=="failed"){requestPersona(id,person.id===client.me?.attendee?.id||person.id===selectedId);return false;}
+ if(!premiumLibrary.templates.length){ensureFallbackModels().then(()=>client.snapshot&&syncPeople(client.snapshot));return false;}
+ return true;
+}
 function addPerson(person,index,animate=false){
- const character=(premiumLibrary?.createPremiumCharacter||createCharacter)({color:person.avatarColor||"#a59074",seed:stablePersonSeed(person.id),name:person.name,presentation:"social"});
+ const persona=personaById(person.persona);
+ const options={persona:persona?.id,color:person.avatarColor||persona?.color||"#a59074",seed:stablePersonSeed(person.id),name:person.name,presentation:"social"};
+ const character=premiumLibrary?.templates.length?premiumLibrary.createPremiumCharacter(options):createCharacter(options);
  character.root.userData.personId=person.id;
  character.root.traverse(o=>{o.userData.personId=person.id;});
- const pos=personPosition(index,person.id===client.me?.attendee?.id,person);character.root.position.set(pos.x,pos.y||0,pos.z);character.root.rotation.y=pos.yaw||0;
+ const self=person.id===client.me?.attendee?.id;
+ const pos=personPosition(index,self,person);character.root.position.set(pos.x,pos.y||0,pos.z);character.root.rotation.y=pos.yaw||0;
  actors.add(character.root);adaptPolygonOffsetMaterials(character.root,reversedDepth);
- people.set(person.id,{...character,person,index,pos,arrival:animate?time:null,reactionUntil:0});
- if(animate){character.root.scale.setScalar(.02);chime();}
+ people.set(person.id,{...character,person,index,pos,arrival:animate?time:null,reaction:null,labelColor:persona?.color||person.avatarColor,assetId:character.assetId,selfPlaced:self});
+ if(animate){character.root.scale.setScalar(.02);chime();arrivals.spawn(character.root.position,persona?.color||"#ffcf8f",{scale:self?1.3:1});}
  return character;
 }
 function syncPeople(snapshot){
  if(!currentScene||!snapshot||(activeVenue&&!venueEventReady))return;
- const visibleAttendees=visibleSocialAttendees(snapshot.attendees,{selectedId,selfId:client.me?.attendee?.id,maxRendered:36});
+ const selfId=client.me?.attendee?.id;
+ const visibleAttendees=visibleSocialAttendees(snapshot.attendees,{selectedId,selfId,maxRendered:mobile?20:36,ambientCurated:UI.stage?9:mobile?4:9});
  const ids=new Set(visibleAttendees.map(p=>p.id));
  for(const [id,value] of people)if(!ids.has(id)){if(selectedId===id)clearSelection();actors.remove(value.root);value.dispose?.();people.delete(id);}
-
+ const self=visibleAttendees.find(p=>p.id===selfId);if(self)requestPersona(self.persona,true);
  visibleAttendees.forEach((person,index)=>{
-  const old=people.get(person.id);if(old){if(old.person.avatarColor!==person.avatarColor){const position=old.root.position.clone(),yaw=old.root.rotation.y;actors.remove(old.root);old.dispose?.();people.delete(person.id);const replacement=addPerson(person,index,false);replacement.root.position.copy(position);replacement.root.rotation.y=yaw;}else old.person=person;return;}
-  addPerson(person,index,lastSnapshotVersion>=0);
+  const old=people.get(person.id);
+  if(old){
+   const upgrade=premiumLibrary?.hasPersona(person.persona)&&old.assetId!==person.persona;
+   if(old.person.persona!==person.persona||old.person.avatarColor!==person.avatarColor||upgrade){
+    if(!personaReady(person))return;
+    const position=old.root.position.clone(),yaw=old.root.rotation.y,placed=old.selfPlaced;actors.remove(old.root);old.dispose?.();people.delete(person.id);
+    const replacement=addPerson(person,index,false);replacement.root.position.copy(position);replacement.root.rotation.y=yaw;people.get(person.id).selfPlaced=placed;
+    arrivals.spawn(position,personaById(person.persona)?.color||"#ffcf8f",{scale:.8,duration:1.8});
+   }else old.person=person;
+   return;
+  }
+  if(!personaReady(person))return;
+  addPerson(person,index,lastSnapshotVersion>=0||person.id===selfId);
  });
- if(lastSnapshotVersion>=0&&snapshot.version>lastSnapshotVersion){const previousCount=linkRoot.children.length;syncLinks(snapshot);if(linkRoot.children.length>previousCount)chime("connection");}else syncLinks(snapshot);
+ syncLinks(snapshot);
  lastSnapshotVersion=snapshot.version;
 }
 function disposeLinks(){for(const o of [...linkRoot.children]){o.geometry.dispose();o.material.dispose();linkRoot.remove(o);}}
+function linkVisible(line){const self=client.me?.attendee?.id;return UI.stage||(!!selectedId&&line.userData.attendees.includes(selectedId))||(!!self&&line.userData.attendees.includes(self));}
 function syncLinks(snapshot){
  disposeLinks();
+ const ids=new Set((snapshot.connections||[]).map(c=>c.id));
+ const fresh=knownConnections?[...ids].filter(id=>!knownConnections.has(id)):[];
+ knownConnections=ids;
  for(const connection of snapshot.connections||[]){
  const a=people.get(connection.fromId||connection.attendeeIds?.[0]),b=people.get(connection.toId||connection.attendeeIds?.[1]);if(!a||!b)continue;
- const start=a.root.position.clone().add(new THREE.Vector3(0,.12,0)),end=b.root.position.clone().add(new THREE.Vector3(0,.12,0)),distance=start.distanceTo(end);
- const mid=start.clone().lerp(end,.5);mid.y+=Math.min(5,distance*.19);
+ const start=a.root.position.clone().add(new THREE.Vector3(0,1.15,0)),end=b.root.position.clone().add(new THREE.Vector3(0,1.15,0)),distance=start.distanceTo(end);
+ const mid=start.clone().lerp(end,.5);mid.y+=Math.min(4,.6+distance*.24);
  const curve=new THREE.QuadraticBezierCurve3(start,mid,end);
- const geometry=new THREE.TubeGeometry(curve,44,.017,5,false);
- const material=new THREE.MeshStandardMaterial({color:0xbc955c,metalness:.5,roughness:.45,transparent:true,opacity:connection.synthetic?.52:.9});
- const line=new THREE.Mesh(geometry,material);line.name="confirmed-"+connection.id;line.userData.attendees=[a.person.id,b.person.id];line.visible=!!selectedId&&line.userData.attendees.includes(selectedId);linkRoot.add(line);
+ const geometry=new THREE.TubeGeometry(curve,64,.026,6,false);
+ const isNew=fresh.includes(connection.id);
+ const material=new THREE.ShaderMaterial({uniforms:{color:{value:new THREE.Color(0xffc977)},time:linkTime,strength:{value:connection.synthetic&&!isNew?.6:1},burst:{value:isNew?0:-1}},vertexShader:LINK_VERTEX,fragmentShader:LINK_FRAGMENT,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending});
+ const line=new THREE.Mesh(geometry,material);line.name="confirmed-"+connection.id;line.raycast=()=>{};line.renderOrder=3;line.userData.attendees=[a.person.id,b.person.id];line.userData.burstStart=isNew?time:null;line.visible=linkVisible(line);linkRoot.add(line);
+ if(isNew){for(const p of [a,b]){p.reaction={state:"celebrate",until:time+(p.celebrationDuration||3.2)};arrivals.spawn(p.root.position,"#ffcf8f",{scale:.7,duration:2});}chime("connection");}
  }
 }
 function clearPeople(){for(const person of people.values()){actors.remove(person.root);person.dispose?.();}people.clear();disposeLinks();}
@@ -213,7 +271,9 @@ async function switchScene(id,options={}){
   if(candidate){const loaded=await loadVenueManifest(id,{baseUrl:document.baseURI});manifest=loaded.manifest;}
   if(serial!==switchSerial)return;
   const importer=input=>importScene(input,{renderer,file:options.file,onProgress:t=>{if(serial===switchSerial)UI.setBusy(t);}});
-  result=candidate?await loadVenueAsset({id,manifest,view:options.view,baseUrl:document.baseURI,importer,onFallback:()=>{if(serial===switchSerial)UI.toast("轻量模型暂不可用，正在载入原始建筑");}}):id==="import"?await importer(manifest):await getSceneDefinition(id).factory({renderer,quality});
+  // Phone guests stand in the courtyard; they never need the far towers.
+  const light=mobile&&!UI.stage&&!UI.partnerOpen&&params.get("venueDetail")!=="full";
+  result=candidate?await loadVenueAsset({id,manifest,view:options.view,baseUrl:document.baseURI,importer,light,onFallback:()=>{if(serial===switchSerial)UI.toast("轻量模型暂不可用，正在载入原始建筑");}}):id==="import"?await importer(manifest):await getSceneDefinition(id).factory({renderer,quality});
   if(serial!==switchSerial){result.dispose?.();return;}
   // Validate real geometry and all presentation data before touching the visible scene.
   const modelBounds=candidate?inspectModelBounds(result.modelRoot):null;
@@ -245,7 +305,8 @@ async function switchScene(id,options={}){
    const a=manifest.anchors.arrival,y=manifest.groundY;
    result.eventCameras=id==="venue-campus"?{
     hero:manifest.cameras.hero,
-    arrival:manifest.cameras.arrival,
+    // The courtyard where guests stand, with the HUB stair and canopy behind.
+    arrival:{position:[171.34,7.4,108.5],target:[171.34,.9,86.5],fov:46},
     garden:{position:[185,4.3,94],target:[171.34,3.5,73],fov:43}
    }:id==="venue-ab-canopy"?{
     hero:{position:[190,65,330],target:[87,37,164],fov:38},
@@ -283,6 +344,7 @@ async function switchScene(id,options={}){
   try{localStorage.setItem("echo-campus-scene",id==="import"?"campus":id);}catch{}
   document.documentElement.dataset.ready="true";
   UI.setBusy(null);document.getElementById("loading").classList.add("loaded");document.getElementById("loading").setAttribute("aria-hidden","true");
+  if(pendingArrival){const attendee=pendingArrival;setTimeout(()=>welcomeArrival(attendee),60);}
  }catch(error){if(result&&result!==currentScene)result.dispose?.();if(serial===switchSerial){UI.setBusy(null);UI.toast("场景加载失败："+error.message);if(!currentScene)document.getElementById("loading-detail").textContent=error.message;}throw error;}
 }
 function clearSelection(){
@@ -340,23 +402,67 @@ function focusActivityCheckpoint(id){
  const marker=activityMarkerRoot.children.find(item=>item.userData.activityMarkerId===id);if(!marker)return UI.openActivity(id);
  UI.openActivity(id);const target=marker.position.clone().add(new THREE.Vector3(0,.82,0));const position=target.clone().add(new THREE.Vector3(1.4,1,3.7));cameraTo(position.toArray(),target.toArray(),45,1000);
 }
-function focusPerson(id){
+function framePerson(position,yaw,{exclude=null,duration=1200,sheet=true}={}){
+ const panelWidth=innerWidth>760?(document.querySelector(".ec-panel")?.getBoundingClientRect().width||420)+44:0;
+ const sheetFraction=innerWidth<=760&&sheet?Math.min(.68,(Math.min(innerHeight*.66,620)+10)/innerHeight):0;
+ const preset=profileCameraPreset({position,yaw,aspect:camera.aspect,panelFraction:panelWidth/innerWidth,sheetFraction,neighbors:[...people.values()].filter(other=>other!==exclude).map(other=>other.root.position)});
+ cameraTo(preset.position,preset.target,preset.fov,duration);
+}
+function focusPerson(id,{openCard=true,duration=1200}={}){
  if(activeVenue&&venueView!=="event")return;
  let p=people.get(id);
- if(!p){const person=client.snapshot?.attendees.find(person=>person.id===id);if(!person)return;selectedId=id;syncPeople(client.snapshot);p=people.get(id);}
- if(!p)return;selectedId=id;p.reactionUntil=time+(p.greetingDuration||5.8);
- linkRoot.children.forEach(o=>o.visible=o.userData.attendees?.includes(id));UI.setSelectedPerson(p.person);UI.toast(`${p.person.name} · 名片已打开`);
+ const known=client.snapshot?.attendees.find(person=>person.id===id);
+ if(!p){if(!known)return;selectedId=id;syncPeople(client.snapshot);p=people.get(id);}
+ // Their look may still be streaming in: the card never waits for the model.
+ if(!p){if(openCard)UI.setSelectedPerson(known);return;}
+ selectedId=id;p.reaction={state:"wave",until:time+(p.greetingDuration||5.8)};
+ linkRoot.children.forEach(o=>o.visible=linkVisible(o));
+ if(openCard)UI.setSelectedPerson(p.person);
  for(const o of [...markerRoot.children]){o.geometry.dispose();o.material.dispose();markerRoot.remove(o);}
- const ring=new THREE.Mesh(new THREE.RingGeometry(.46,.51,64),new THREE.MeshBasicMaterial({color:0xc68d42,side:THREE.DoubleSide,transparent:true,opacity:.9}));ring.rotation.x=-Math.PI/2;ring.position.copy(p.root.position).y+=.055;ring.userData.selectionRing=true;markerRoot.add(ring);
- const panelWidth=innerWidth>760?(document.querySelector(".ec-panel")?.getBoundingClientRect().width||420)+44:0;
- const preset=profileCameraPreset({position:p.root.position,yaw:p.root.rotation.y,aspect:camera.aspect,panelFraction:panelWidth/innerWidth,neighbors:[...people.values()].filter(other=>other!==p).map(other=>other.root.position)});
- cameraTo(preset.position,preset.target,preset.fov,1200);
+ const ring=new THREE.Mesh(new THREE.RingGeometry(.46,.51,64),new THREE.MeshBasicMaterial({color:new THREE.Color(p.labelColor||"#c68d42"),side:THREE.DoubleSide,transparent:true,opacity:.95}));ring.rotation.x=-Math.PI/2;ring.position.copy(p.root.position).y+=.055;ring.userData.selectionRing=true;markerRoot.add(ring);
+ framePerson(p.root.position,p.root.rotation.y,{exclude:p,duration,sheet:openCard});
 }
+// After a one-tap arrival: a short descent from above the courtyard to the
+// guest's own avatar, which materializes in a beam of light.
+function welcomeArrival(attendee){
+ if(!attendee)return;
+ if(!currentScene||(activeVenue&&!venueEventReady)){pendingArrival=attendee;return;}
+ pendingArrival=null;
+ if(activeVenue&&venueView!=="event")setVenueView("event");
+ requestPersona(attendee.persona,true);
+ const spawn=currentScene.spawn,center=new THREE.Vector3(spawn.x,spawn.y||0,spawn.z);
+ cameraTo([center.x+9,center.y+22,center.z+18],[center.x,center.y+1,center.z],52,0);
+ if(client.snapshot)syncPeople(client.snapshot);
+ const p=people.get(attendee.id);
+ setTimeout(()=>{
+  const current=people.get(attendee.id);
+  if(current){current.reaction={state:"wave",until:time+(current.greetingDuration||5)};selectedId=attendee.id;}
+  framePerson(current?.root.position||center,current?.root.rotation.y??0,{exclude:current,duration:2600,sheet:false});
+  if(p&&!p.arrival)arrivals.spawn(p.root.position,personaById(attendee.persona)?.color,{scale:1.3,duration:3});
+ },180);
+}
+// Big screen: a slow orbit over the courtyard so every arrival and lit
+// connection stays in frame without an operator.
+// A pendulum over the open south side of the court; a full circle would pass
+// behind the HUB stair and landscape slopes.
+const stageOrbit={phase:0};
+function updateStageCamera(dt){
+ if(!UI.stage||!currentScene||cameraMove||tour||controlsActive)return;
+ const b=currentScene.config?.bounds,y=currentScene.spawn?.y||0;
+ const center=b?new THREE.Vector3((b.minX+b.maxX)/2,y,(b.minZ+b.maxZ)/2):controls.target.clone();
+ const radius=b?Math.max(15,Math.hypot(b.maxX-b.minX,b.maxZ-b.minZ)*.5):24;
+ stageOrbit.phase+=dt*(reduced?0:.05);
+ const angle=.12+Math.sin(stageOrbit.phase)*.62;
+ camera.position.set(center.x+Math.sin(angle)*radius,y+radius*.42,center.z+Math.cos(angle)*radius);
+ controls.target.set(center.x,y+.8,center.z);
+}
+let controlsActive=false;
 function toggleTour(){
  UI.closePanel();cameraMove=null;if(tour){tour=null;UI.toast("已暂停园区导览");return;}
  tour={started:performance.now(),base:camera.position.clone(),target:controls.target.clone()};UI.toast("导览已开始，拖动画面即可暂停");
 }
-controls.addEventListener("start",()=>{cameraMove=null;tour=null;});
+controls.addEventListener("start",()=>{cameraMove=null;tour=null;controlsActive=true;});
+controls.addEventListener("end",()=>{controlsActive=false;});
 let downPoint=null;
 canvas.addEventListener("pointerdown",e=>{downPoint={x:e.clientX,y:e.clientY};});
 canvas.addEventListener("pointermove",e=>{
@@ -397,7 +503,7 @@ function moveView(dt){
  controls.target.add(movement);camera.position.add(movement);
 }
 client.addEventListener("snapshot",e=>{hasConnected=true;UI.setSnapshot(e.detail);syncPeople(e.detail);});
-client.addEventListener("me",e=>{UI.setMe(e.detail);const me=e.detail?.attendee;if(me&&currentScene){const p=people.get(me.id);if(p&&!p.selfPlaced){p.root.position.set(currentScene.spawn.x,currentScene.spawn.y,currentScene.spawn.z);p.selfPlaced=true;syncLinks(client.snapshot);}}});
+client.addEventListener("me",e=>{UI.setMe(e.detail);const me=e.detail?.attendee;if(me)requestPersona(me.persona,true);if(me&&currentScene){const p=people.get(me.id);if(p&&!p.selfPlaced){p.root.position.set(currentScene.spawn.x,currentScene.spawn.y,currentScene.spawn.z);p.selfPlaced=true;syncLinks(client.snapshot);}}});
 client.addEventListener("status",e=>{UI.setOnline(e.detail.online);if(!e.detail.online&&e.detail.message)UI.toast("活动连接暂不可用，场景仍可浏览");});
 function resize(){renderer.setSize(innerWidth,innerHeight,false);renderFinish.resize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
 window.addEventListener("resize",resize);resize();
@@ -436,9 +542,17 @@ function tick(now){
   if(actors.visible)for(const value of people.values()){
    if(value.arrival!==null){const progress=Math.min(1,(time-value.arrival)/.75);value.root.scale.setScalar(Math.max(.02,1-Math.pow(1-progress,3)));if(progress===1)value.arrival=null;}
    // No cosmetic translation, yaw snapping, or Walk on a stationary avatar.
-   value.update(elapsed,time,value.reactionUntil>time?"wave":value.person.source==="curated-demo"?conversationIntent(value.person.id,time):"idle");
+   const reacting=value.reaction&&value.reaction.until>time?value.reaction.state:null;
+   value.update(elapsed,time,reacting||(value.person.source==="curated-demo"?conversationIntent(value.person.id,time):"idle"));
   }
+  linkTime.value=time;
+  for(const line of linkRoot.children){const start=line.userData.burstStart;if(start!==null&&start!==undefined){const t=(time-start)/2.2;line.material.uniforms.burst.value=t<1?t:-1;if(t>=1)line.userData.burstStart=null;}}
+  arrivals.update(dt);
+  updateStageCamera(dt);
  }
+ const showLabels=actors.visible&&!UI.root.classList.contains("ec-cinema-mode")&&!(activeVenue&&venueView!=="event");
+ labels.setHidden(!showLabels);
+ if(showLabels)labels.update(camera,people,{selfId:client.me?.attendee?.id,selectedId,pendingIds:new Set((client.me?.encounters||[]).filter(c=>c.canConfirm).map(c=>c.fromId))});
  renderFinish.render();fpsFrames++;if(now-fpsStart>1000){fps=Math.round(fpsFrames*1000/(now-fpsStart));fpsFrames=0;fpsStart=now;}
 }
 requestAnimationFrame(tick);
@@ -454,7 +568,10 @@ if(params.has("capture")||params.has("debug")){
 }
 (async()=>{
  try{
-  premiumLoadPromise=loadCharacterLibrary({baseUrl:document.baseURI}).then(library=>{premiumLibrary=library;}).catch(error=>console.warn("Premium characters unavailable",error.message));
+  premiumLoadPromise=loadCharacterLibrary({baseUrl:document.baseURI,assets:[],allowEmpty:true}).then(library=>{premiumLibrary=library;pumpPersonas();}).catch(error=>{premiumLoadPromise=null;console.warn("Premium characters unavailable",error.message);});
+  // The event connection never waits for architecture: an NFC guest can
+  // claim a persona while the campus is still streaming in.
+  clientReady=client.start().then(()=>UI.handleTap());
   const resume=await consumeStandardDepthResume();
   const requestedVenue=startupVenueFromSearch(location.search);
   // The complete campus opens at the surveyed HUB south stair entrance; regional links retain their own framing.
@@ -468,11 +585,11 @@ if(params.has("capture")||params.has("debug")){
    try{startup=await readSceneStartup({search:location.search,baseUrl:document.baseURI});}catch(error){UI.toast("启动配置未完成："+error.message);startup={scene:"campus"};}
    try{await switchScene(startup.scene,startup.manifest?{manifest:startup.manifest}:{});}catch(error){if(startup.scene!=="campus"){await switchScene("campus");UI.toast("自定义场景加载失败，已回到白庭");}else throw error;}
   }
-  await client.start();if(params.get("tour")==="1")toggleTour();document.documentElement.dataset.ready="true";
+  await clientReady;if(params.get("tour")==="1")toggleTour();document.documentElement.dataset.ready="true";
  }catch(error){
   document.getElementById("loading-detail").textContent="加载未完成："+error.message;
   if(startupVenueFromSearch(location.search)){document.getElementById("loading").classList.add("loaded");document.getElementById("loading").setAttribute("aria-hidden","true");UI.openScenePanel();UI.sceneError("真实模型加载未完成："+error.message+"。请选择可用源文件重试。");}
-  if(startupVenueFromSearch(location.search))client.start().catch(connectionError=>UI.toast("活动连接暂不可用："+connectionError.message));
+  if(startupVenueFromSearch(location.search))(clientReady||client.start()).catch(connectionError=>UI.toast("活动连接暂不可用："+connectionError.message));
   console.error(error);
  }
 })();

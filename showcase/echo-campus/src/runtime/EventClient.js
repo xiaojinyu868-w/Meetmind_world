@@ -111,8 +111,8 @@ export class EventClient extends EventTarget {
     this.emit("me", this.me);
     return result;
   }
-  async encounter(peerId) {
-    const result = await this.request("encounters", { method: "POST", body: JSON.stringify({ peerId }) });
+  async encounter(peerId, note = "") {
+    const result = await this.request("encounters", { method: "POST", body: JSON.stringify(note ? { peerId, note } : { peerId }) });
     this.meTargetVersion = Math.max(this.meTargetVersion, result.version || 0);
     await this.refreshMe(); return result;
   }
@@ -120,6 +120,23 @@ export class EventClient extends EventTarget {
     const result = await this.request("encounters/" + encodeURIComponent(id) + "/confirm", { method: "POST", body: "{}" });
     this.meTargetVersion = Math.max(this.meTargetVersion, result.version || 0);
     await this.refreshMe(); return result;
+  }
+  async decline(id) {
+    const result = await this.request("encounters/" + encodeURIComponent(id) + "/decline", { method: "POST", body: "{}" });
+    this.meTargetVersion = Math.max(this.meTargetVersion, result.version || 0);
+    await this.refreshMe(); return result;
+  }
+  /** NFC/QR tag resolution; anonymous taps only describe the tag. */
+  async tap(tag, signature = {}) {
+    const result = await this.request("tap", { method: "POST", body: JSON.stringify({ tag, ...signature }) });
+    if (result.checkin?.snapshot) this.setSnapshot(result.checkin.snapshot);
+    if (this.token && (result.attendee || result.checkin)) await this.refreshMe();
+    return result;
+  }
+  async leave() {
+    const result = await this.request("leave", { method: "POST", body: "{}" });
+    this.clearSession(this.token);
+    return result;
   }
   startPolling() {
     if (this.closed || this.pollTimer !== null) return;

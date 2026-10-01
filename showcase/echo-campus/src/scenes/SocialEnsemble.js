@@ -23,7 +23,7 @@ const CYCLE_SECONDS = TALK_SECONDS * 2 + HANDOFF_SECONDS + REST_SECONDS;
  * Selected and self always fit, even when they exceed a very small budget.
  * Returns the original DTO references in snapshot order, without mutation.
  */
-export function visibleSocialAttendees(snapshotAttendees, { selectedId = null, selfId = null, maxRendered = 36 } = {}) {
+export function visibleSocialAttendees(snapshotAttendees, { selectedId = null, selfId = null, maxRendered = 36, ambientCurated = 0 } = {}) {
   const input = Array.isArray(snapshotAttendees) ? snapshotAttendees : [];
   const unique = new Map();
   for (const person of input) if (person && typeof person.id === "string" && person.id && !unique.has(person.id)) unique.set(person.id, person);
@@ -31,9 +31,13 @@ export function visibleSocialAttendees(snapshotAttendees, { selectedId = null, s
   const requested = Number(maxRendered);
   const limit = requested === Infinity ? Infinity : Number.isFinite(requested) ? Math.max(0, Math.floor(requested)) : 36;
   const chosen = new Set([selfId, selectedId].filter(id => unique.has(id)));
+  // Ambient curated guests fill an otherwise empty courtyard; real arrivals
+  // always outrank them within the mesh budget.
+  const ambient = people.filter(person => person.source === "curated-demo" && !DEMO_IDS.has(person.id)).slice(0, Math.max(0, Math.floor(Number(ambientCurated) || 0)));
   const candidates = [
     ...people.filter(person => person.source !== "curated-demo"),
     ...people.filter(person => person.source === "curated-demo" && DEMO_IDS.has(person.id)),
+    ...ambient,
   ];
   for (const person of candidates) {
     if (chosen.has(person.id)) continue;
