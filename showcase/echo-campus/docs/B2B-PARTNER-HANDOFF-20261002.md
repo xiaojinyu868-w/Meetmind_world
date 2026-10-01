@@ -1,8 +1,59 @@
 # Echo Campus To B 合作线交接文档
 
-**文档版本**：v1.0 · 2026-10-02  
-**用途**：把 Echo Campus 的合作方 / To B 展示线迁移到另一台服务器，继续开发场景、活动流程与 NFC/支付宝联调。  
+**文档版本**：v1.1 · 2026-10-02（v1.0 同日上午）\
+**用途**：把 Echo Campus 的合作方 / To B 展示线迁移到另一台服务器，继续开发场景、活动流程与 NFC/支付宝联调。\
 **当前状态**：代码已推送到独立 Git 分支；本分支尚未部署，也没有替换现有线上 Showcase 服务。
+
+## 0. v1.1：相遇之庭来宾体验重做（先读这一节）
+
+本节说明 v1.0 之后同一分支上的改动；第 1 节起的迁移、部署和回滚步骤仍然有效，只是多了几个可选环境变量（见 0.3）。
+
+### 0.1 体验
+
+- **碰一下即进**：`?entry=nfc` 打开深色入场仪式，展示分配到的分身卡（代号、特征、即将成为第 N 位来客），一键「以『朱砂』进入」，不填任何资料；可「换一个形象」。修复了 v1.0 中 NFC 入口的资料面板会被场景加载自动关闭的问题。
+- **12 款预设分身**：新增 10 款 Tripo 生成并绑骨的角色（银发眼镜、红贝雷帽、白耳机、玉簪、白棒球帽、卷发、银白短发配丝巾、光头短须、蓬松卷发、双麻花辫），加原有 2 款，每款 4 段动作（站立、点头、挥手、鼓掌）。服务端按「使用最少」分配，人群尽量不重样；默认名「代号·编号」。
+- **名片与轻社交**：手机底部抽屉 / 电脑右侧浮卡；标签化的供需、「你们的交集」、带一句话的招呼、「先不了」、双方确认后互相显示微信（默认「相遇后可见」）、隐身、删除本人资料。
+- **庭院**：名字牌、抵达光柱、新相遇时两人鼓掌与金色连线脉冲；默认镜头对准人群所在的庭院。
+- **大屏**（`?mode=stage`）：活动名、实时人数与相遇数、「刚刚抵达 / 刚刚相遇」、入场二维码、钟摆式环拍。
+- **合作方控制台**：原有场地切换、源模型、导入、导览与双端演示面板收进右上「展示控制台」（`?mode=partner` 直达）。
+- **手机加载**：手机来宾默认加载庭院裁切版场景（gzip 约 8 MB，原整园约 35 MB），分身按需加载（每款约 0.65 MB）。
+
+设计意图、流程细节与视觉规范见 `docs/EXPERIENCE-DESIGN.md`。
+
+### 0.2 底座（下一场合作直接复用）
+
+| 能力 | 文件 |
+| --- | --- |
+| 活动配置（名称、主题色、分身阵容、类别、点位、标签表） | `docs/EVENT-PROFILE.md`、`config/events/*.example.json`、`server/event-config.mjs` |
+| NFC / 支付宝触碰协议（HMAC 签名、时间窗、单次 nonce、标签表） | `docs/TAP-ADAPTER.md`、`POST /api/tap` |
+| 分身生产管线（Tripo → Blender → 压缩 → 头像） | `docs/PERSONA-PIPELINE.md`、`scripts/personas/`、`tools/portrait-studio.*` |
+| 场景裁切（手机轻量版） | `scripts/venue/crop-court.mjs` |
+| 共享分身表与供需词表（前后端同源） | `src/shared/personas.mjs`、`src/shared/topics.mjs` |
+
+### 0.3 新增的可选环境变量
+
+| 变量 | 说明 |
+| --- | --- |
+| `ECHO_EVENT_CONFIG` | 活动配置 JSON 路径（放在仓库与静态目录之外） |
+| `ECHO_TAP_SECRET` | 触碰签名密钥；设置后所有 `/api/tap` 必须签名 |
+| `ECHO_TRUST_PROXY=1` | 按 Nginx 传来的真实地址限流；同时在 `location` 里加 `proxy_set_header X-Real-IP $remote_addr;` |
+| `ECHO_MAX_ATTENDEES` | 人数上限，默认 1200 |
+| `ECHO_RATE_READ` / `ECHO_RATE_WRITE` / `ECHO_RATE_JOIN` | 每个地址每分钟限额，默认 600 / 120 / 60（v1.0 为 240 / 40 / 12，场馆 Wi-Fi 共用出口时会挡住排队入场） |
+
+不设置这些变量时行为与 v1.0 一致（演示模式、未签名触碰仅演示可用）。
+
+### 0.4 数据兼容
+
+旧的 `event.json` 启动时自动迁移：补齐分身、到场编号、联系方式可见范围（原 `publicContact:true` → `public`，其余 → `hidden`）与隐身标记；「访客XXXXXX」式临时名改为「代号·编号」。迁移前请照常备份数据文件。
+
+### 0.5 追加验收项
+
+- [ ] 手机碰一下 / 扫码后 1 秒内看到入场仪式；「进入」后镜头降落到自己的分身。
+- [ ] 两部手机：一方打招呼（带一句话），另一方看到并接受；双方都能在名片里看到对方填写的微信；第三台设备和大屏看不到。
+- [ ] 「先不了」后发起方不收到拒绝提示；隐身后从大屏与推荐中消失；删除后无法再用原设备会话。
+- [ ] 手环标签 `?entry=nfc&tag=WB-investor-xxxx` 新来宾入场后类别为投资人；点位 `?tag=CP-xxx` 盖章且重复不加分。
+- [ ] 正式活动：`demoMode:false` + `ECHO_TAP_SECRET`，未签名、过期、重放的触碰全部被拒。
+- [ ] 目标手机首屏流量与帧率实测（本地无头浏览器约 17 MB、约 60 FPS，不等于实体手机）。
 
 ## 1. 这条分支解决什么问题
 
@@ -148,6 +199,10 @@ Environment=PORT=5291
 Environment=ECHO_DIST_DIR=/srv/meetmind/Meetmind_world/showcase/echo-campus/dist
 Environment=ECHO_EVENT_DATA=/var/lib/echo-campus-b2b/event.json
 Environment=ECHO_ALLOWED_ORIGINS=https://b2b.example.com
+Environment=ECHO_TRUST_PROXY=1
+# 可选（v1.1）：活动配置与触碰签名密钥，文件放在服务目录与静态目录之外
+# Environment=ECHO_EVENT_CONFIG=/etc/echo-campus-b2b/event.json
+# EnvironmentFile=/etc/echo-campus-b2b/secrets.env   # 内含 ECHO_TAP_SECRET=...
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
@@ -200,6 +255,7 @@ location ^~ /echo-campus/ {
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection $meetmind_b2b_connection_upgrade;
     proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Real-IP $remote_addr;   # v1.1：配合 ECHO_TRUST_PROXY=1 按真实来源限流
     proxy_buffering off;
     proxy_cache off;
     proxy_read_timeout 3600s;
