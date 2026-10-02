@@ -13,6 +13,7 @@
   → 4 段 retarget，FBX：standing_relax / agree / greet_02 / clap     各 10 积分
   → Blender 4.5：合并 4 段动作为一个 GLB（scripts/personas/convert_personas.py）
   → 修正法线贴图、去掉静止缩放通道、meshopt 压缩（scripts/personas/optimize-personas.mjs）
+  → 特写高清贴图：rig GLB 的 4K 原图 → 2K 颜色 / 1K 法线 / 1K 粗糙度（scripts/personas/build-hd-textures.mjs）
   → 用正式运行时渲染头像与全身像（tools/portrait-studio.html + scripts/render-persona-portraits.mjs）
 ```
 
@@ -24,6 +25,8 @@
 2. **旧动作骨骼数不同**：9 月的 FBX 带 13 根零权重 `*_end` 末端骨，新 FBX 没有。合并时只比较参与变形的骨骼，41 根共有骨骼静止姿态误差 < 2e-5。
 3. **Tripo 并发限制**：一次只能跑有限任务，超出返回 429。管线把 429 当作「未受理、未扣费」，退避后重试；其他提交失败一律不自动重发，避免重复扣费。
 4. **鼓掌太长**：`clap` 一段约 17 秒，运行时只取前 3.6 秒作为「相遇点亮」时的庆祝动作。
+5. **ORM 的 AO 是纯白**：Tripo 的 ORM 贴图里环境光遮蔽通道没有信息（全 255），粗糙度通道（G）才有真实差异。特写集只取粗糙度，并压到 0.45–1.0，避免暖光下夹克反光像镜面。
+6. **待机双臂外张**：Tripo 的 `standing_relax` 仍带 A 字姿势，运行时在待机时把上臂向身体收约 6°（`ARM_SETTLE`），手势动作不受影响。
 
 ## 3. 体积
 
@@ -32,6 +35,7 @@
 | Tripo rig GLB（4K 贴图，无动作） | ~8.8 MB |
 | Blender 合并（1K 颜色 + 512 法线 + 4 段动作） | ~1.58 MB |
 | meshopt + 量化 + 去冗余通道 | **~0.65 MB** |
+| 特写高清集（2K 颜色 WebP + 1K 法线 + 1K 粗糙度，按需加载） | ~0.25–0.6 MB |
 
 头像（bust 512²）与全身像（720×1100）为透明 WebP，每张约 20–60 KB。
 
@@ -61,6 +65,7 @@
 3. 满意后 `… auto <id> anim 2` 跑完模型、骨骼与 4 段动作。
 4. `blender -b --factory-startup -P scripts/personas/convert_personas.py -- <id>`。
 5. 从 rig GLB 提取 `NormalGL` 缩到 512（见第 2 节），运行 `node scripts/personas/optimize-personas.mjs <blender 输出目录> public/assets/personas <法线目录>`。
+5b. 把 rig GLB 里的 4K `Color_` / `NormalGL_` / `ORM_` 原样取出为 `<id>-color.jpg`、`<id>-normal.png`、`<id>-orm.jpg`，运行 `node scripts/personas/build-hd-textures.mjs <原图目录>`，生成 `public/assets/personas/hd/` 与带哈希的 `manifest.json`（青柳、沙洲两款旧形象自动从 `public/assets/premium/` 取 2K 原图）。
 6. 在 `src/shared/personas.mjs` 登记代号、气质、特征、主色、身高。
 7. `npm run dev` 后运行 `node scripts/render-persona-portraits.mjs` 生成头像。
-8. `npm test`（会检查每款形象的模型、4 段动作和两张头像都已就位）。
+8. `npm test`（会检查每款形象的模型、4 段动作、两张头像，以及特写贴图与清单哈希一致）。
