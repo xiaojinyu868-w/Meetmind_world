@@ -1,0 +1,199 @@
+{
+ "schema": "echo-persona-hd.v1",
+ "personas": {
+  "qingliu": {
+   "color": {
+    "file": "qingliu-color.webp",
+    "bytes": 153272,
+    "sha256": "866b829f1c336a9a793c73d9babedcca96c4dbabdff03c503af65fe1058458b8"
+   },
+   "normal": {
+    "file": "qingliu-normal.jpg",
+    "bytes": 26724,
+    "sha256": "1681e31782f59284acc0fc7023097168e80c2fa27d88a76e4706b3ec89f06e60"
+   }
+  },
+  "shazhou": {
+   "color": {
+    "file": "shazhou-color.webp",
+    "bytes": 188220,
+    "sha256": "0a5c78c705c4a13ed1b35c165b850657a5db8d1c736257a2c1bec108dff7ae23"
+   },
+   "normal": {
+    "file": "shazhou-normal.jpg",
+    "bytes": 29599,
+    "sha256": "4383efbd9e56a4caa9534eb2f1784c09aa9ab4acec6e189f9b6921b64facb103"
+   }
+  },
+  "songshi": {
+   "color": {
+    "file": "songshi-color.webp",
+    "bytes": 362666,
+    "sha256": "16b14079d8cd50b1d927603e16c2f2b870f1342d0367a59007445420fcfed800"
+   },
+   "normal": {
+    "file": "songshi-normal.jpg",
+    "bytes": 70518,
+    "sha256": "fb8df1a8350337b6f3d2102df24ee84917c42e9d8f4f6c0db2018acb8a415ec2"
+   },
+   "roughness": {
+    "file": "songshi-roughness.jpg",
+    "bytes": 53902,
+    "sha256": "47b816e239155e0d0e4d0bbcb91b862305946903d40626a76560c46c7d17a3fd"
+   }
+  },
+  "zhusha": {
+   "color": {
+    "file": "zhusha-color.webp",
+    "bytes": 488882,
+    "sha256": "b19aee5eb81650f3075b91f754de9d34c32703600b2c84347c4167b6df54751f"
+   },
+   "normal": {
+    "file": "zhusha-normal.jpg",
+    "bytes": 74603,
+    "sha256": "312b2c54b3d786e30d87f3def56cffbc23a2e33f5c3f0bc0f61940ac282a5a00"
+   },
+   "roughness": {
+    "file": "zhusha-roughness.jpg",
+    "bytes": 45572,
+    "sha256": "4db4525fe88aea8d5015ef64a653fc03ca18f104acc18eb887b5201fe9697284"
+   }
+  },
+  "baizao": {
+   "color": {
+    "file": "baizao-color.webp",
+    "bytes": 230100,
+    "sha256": "913fe0ee8767d7576cccde61699807523f9f8d246ab57a987fddde859929cea1"
+   },
+   "normal": {
+    "file": "baizao-normal.jpg",
+    "bytes": 86044,
+    "sha256": "0e31d8c621f1f896cfecb2c2f3dd37d1cbbe454af6a8086e0f0cc0b95df0532b"
+   },
+   "roughness": {
+    "file": "baizao-roughness.jpg",
+    "bytes": 52486,
+    "sha256": "28721ff2065af843f713f328f42ea9ab81342fe464e62e6b985e423a4bc82cee"
+   }
+  },
+  "qingci": {
+   "color": {
+    "file": "qingci-color.webp",
+    "bytes": 132916,
+    "sha256": "1f207660164eff20516a8622a6ce96dc0eabeb3541e722e2002c8342c8210f70"
+   },
+   "normal": {
+    "file": "qingci-normal.jpg",
+    "bytes": 42400,
+    "sha256": "ec9a981d1c0a51566349aa09d2d51f83a21a0a0291943bc2ba2afa14c3a324a6"
+   },
+   "roughness": {
+    "file": "qingci-roughness.jpg",
+    "bytes": 45454,
+    "sha256": "ab7847666e9b11cfec16778999535188b0d18a04c29769bf2d393ca193450723"
+   }
+  },
+  "qingpao": {
+   "color": {
+    "file": "qingpao-color.webp",
+    "bytes": 186866,
+    "sha256": "8f24d835832c2f43f2781a14694131264ba82f837b1b7577c82ff0de2da3d6a7"
+   },
+   "normal": {
+    "file": "qingpao-normal.jpg",
+    "bytes": 76829,
+    "sha256": "9858e84bb765f97bb5c99d2a540d428252aafb2768f271347023c11e39d82b0f"
+   },
+   "roughness": {
+    "file": "qingpao-roughness.jpg",
+    "bytes": 54987,
+    "sha256": "205c4d5adedabdccf4f4c96809541369fa02438cf5ece530881477a28776d92e"
+   }
+  },
+  "zheshi": {
+   "color": {
+    "file": "zheshi-color.webp",
+    "bytes": 225218,
+    "sha256": "bced7f48aa137b41dff93839918c31cb504a8236fcef0eec3d94c1b0d391ecc5"
+   },
+   "normal": {
+    "file": "zheshi-normal.jpg",
+    "bytes": 65098,
+    "sha256": "a059d370358bd71ed6112f53e704197ebff9ab6edd23cf201609d6e312807e53"
+   },
+   "roughness": {
+    "file": "zheshi-roughness.jpg",
+    "bytes": 47212,
+    "sha256": "2ba0e2fcd72db7189656b3e849cd597dbf80d2ac1a9795828f94789f650834ba"
+   }
+  },
+  "shuangye": {
+   "color": {
+    "file": "shuangye-color.webp",
+    "bytes": 193226,
+    "sha256": "5fe7dfebedbb0be6b01070622556b21b2ee2ff54d1f443c32f34109f8c79aef8"
+   },
+   "normal": {
+    "file": "shuangye-normal.jpg",
+    "bytes": 59105,
+    "sha256": "d6bb4cfe419f482470a04deaf67f3bc39ddfe5d5e28803a1c704f431257542a0"
+   },
+   "roughness": {
+    "file": "shuangye-roughness.jpg",
+    "bytes": 59099,
+    "sha256": "f4f9b3e6d989b7afcc52b5b5090ce260719210475ddc065dc3c87ec353670453"
+   }
+  },
+  "mochuan": {
+   "color": {
+    "file": "mochuan-color.webp",
+    "bytes": 152372,
+    "sha256": "3bccb9532f0a6867eb37360d2cbd32311ce7bd8e5cbcdadfdb22afb2914bb20e"
+   },
+   "normal": {
+    "file": "mochuan-normal.jpg",
+    "bytes": 73318,
+    "sha256": "899e98124bedc82bbae1fefc9f1a18e927355b4702f7ebac2bbe344b310b5c1a"
+   },
+   "roughness": {
+    "file": "mochuan-roughness.jpg",
+    "bytes": 48669,
+    "sha256": "bf0f357037c18389f123927844ee9a79850341d8ac01f062c8511200647d0370"
+   }
+  },
+  "shanhu": {
+   "color": {
+    "file": "shanhu-color.webp",
+    "bytes": 182826,
+    "sha256": "3dc0dcfa86cc554d495d98c203fdcfdb4b837aafb933fe6cf542e88a150c8522"
+   },
+   "normal": {
+    "file": "shanhu-normal.jpg",
+    "bytes": 46494,
+    "sha256": "18e3a984fa0a5948533e4e1fa753e14fc0c3d6e653de16c4971ca20af473b443"
+   },
+   "roughness": {
+    "file": "shanhu-roughness.jpg",
+    "bytes": 44981,
+    "sha256": "9d7e3c4cd15ead97e5acef460b54ac14a9c9775746e883d00839ef0bbf3e207c"
+   }
+  },
+  "xiaoman": {
+   "color": {
+    "file": "xiaoman-color.webp",
+    "bytes": 207738,
+    "sha256": "c3c9bc6e6166648dac60e628c715a7f385614f1ae6354de8ecb0e5925c608ca9"
+   },
+   "normal": {
+    "file": "xiaoman-normal.jpg",
+    "bytes": 90674,
+    "sha256": "92998746d5b653a34aedab73438d52b9a4b81dbc2c6cc1a681436573ba89748a"
+   },
+   "roughness": {
+    "file": "xiaoman-roughness.jpg",
+    "bytes": 64389,
+    "sha256": "6c23973a3eea33ed6af0e21537e7699ed1942cdbf4d8ba6916e083ccd34bd479"
+   }
+  }
+ }
+}
