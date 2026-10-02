@@ -20,6 +20,40 @@ test("floating names keep self and selection, then the nearest guests without co
   assert.equal(chosen.includes("off"), false);
   assert.equal(chosen.includes("beyond"), false);
   assert.ok(chosen.length <= 4);
+  const framed = { x0: 560, x1: 680, y0: 250, y1: 700 };
+  const clear = chooseLabels(entries, { selfId: "self", selectedId: "sel", budget: 4, width: 1000, clear: [framed] }).map(e => e.id);
+  assert.equal(clear.includes("near"), false, "no tag is drawn over a framed guest's body");
+  assert.ok(clear.includes("far"), "tags elsewhere still fill the budget");
+});
+
+test("festoon poles stay on the court's edges, clear of furniture", async () => {
+  const { planFestoon } = await import("../src/scenes/CourtDressing.js");
+  const bounds = { minX: 155, maxX: 188, minZ: 78, maxZ: 94 };
+  const colliders = [{ x: 167.4, z: 77.4, r: 0.6 }];
+  const plan = planFestoon(bounds, colliders);
+  assert.equal(plan.poles.length, plan.north.length + 2);
+  for (const pole of plan.north) assert.ok(pole.z < bounds.minZ, "back row sits behind the court");
+  for (const pole of plan.corners) assert.ok(pole.z > bounds.maxZ && (pole.x < bounds.minX + 2 || pole.x > bounds.maxX - 2), "front anchors sit at the outer corners");
+  for (const pole of plan.poles) for (const c of colliders) assert.ok(Math.hypot(pole.x - c.x, pole.z - c.z) > c.r + 0.45, "pole nudged off a planter");
+  const ends = plan.strands.flat();
+  for (const pole of plan.poles) assert.ok(ends.includes(pole), "every pole carries a strand");
+  assert.deepEqual(planFestoon(bounds, colliders), plan, "deterministic");
+});
+
+test("close-up textures exist for every persona and match the manifest", async () => {
+  const { createHash } = await import("node:crypto");
+  const manifest = JSON.parse(readFileSync(new URL("../public/assets/personas/hd/manifest.json", import.meta.url), "utf8"));
+  assert.equal(manifest.schema, "echo-persona-hd.v1");
+  for (const persona of PERSONAS) {
+    const entry = manifest.personas[persona.id];
+    assert.ok(entry?.color && entry?.normal, persona.id + " has color and normal");
+    for (const item of Object.values(entry)) {
+      const bytes = readFileSync(new URL(`../public/assets/personas/hd/${item.file}`, import.meta.url));
+      assert.equal(bytes.length, item.bytes, item.file);
+      assert.equal(createHash("sha256").update(bytes).digest("hex"), item.sha256, item.file + " hash");
+      assert.ok(bytes.length < 600 * 1024, item.file + " stays phone-sized");
+    }
+  }
 });
 
 test("phone guests get the courtyard crop, with a full-campus fallback", async () => {
@@ -64,6 +98,39 @@ test("phone sheet framing lifts the subject into the visible strip above the she
   assert.ok(Math.abs(project(desktop, 16 / 9).y) < 0.45);
   const face = project(phone, 390 / 844);
   assert.ok(face.y > 0.5 && face.y < 1, `face sits above the sheet (ndc y ${face.y.toFixed(2)})`);
+});
+
+test("the social floor never stacks two guests and agrees across devices", async () => {
+  const { planSocialFloor, socialSlotFor } = await import("../src/runtime/SocialFloor.js");
+  const { planEventGarden } = await import("../src/scenes/EventGarden.js");
+  const { demoSocialPose } = await import("../src/scenes/SocialEnsemble.js");
+  const manifest = JSON.parse(readFileSync(new URL("../public/scenes/venue/venue-campus.json", import.meta.url), "utf8"));
+  const garden = planEventGarden(manifest, { venueId: "venue-campus", quality: "high" });
+  const colliders = garden.items.map(p => ({ x: p.x, z: p.z, r: p.r }));
+  const reserved = DEMO_SOCIAL_PAIRS.flat().map(id => demoSocialPose(id, "venue-campus", 0));
+  const make = () => planSocialFloor({ bounds: manifest.bounds, focus: manifest.spawn, colliders, reserved });
+  const plan = make();
+  assert.deepEqual(make(), plan, "deterministic: every device computes the same slots");
+  assert.ok(plan.slots.length >= 40, `capacity ${plan.slots.length}`);
+  const b = manifest.bounds;
+  for (const s of plan.slots) {
+    assert.ok(s.x > b.minX && s.x < b.maxX && s.z > b.minZ && s.z < b.maxZ);
+    for (const c of colliders) assert.ok(Math.hypot(s.x - c.x, s.z - c.z) >= c.r + 0.34, "clear of garden furniture");
+    for (const r of reserved) assert.ok(Math.hypot(s.x - r.x, s.z - r.z) >= 1.1, "clear of the talking demo pairs");
+  }
+  const seeds = seedAttendees().filter(p => !DEMO_SOCIAL_PAIRS.flat().includes(p.id));
+  const guests = Array.from({ length: 30 }, (_, i) => ({ id: "g" + i, serial: 16 + i, source: "demo-join" }));
+  const placed = [];
+  for (const person of [...seeds, ...guests]) {
+    const slot = socialSlotFor(plan, person, placed);
+    assert.ok(slot, person.id + " gets a slot");
+    placed.push(slot);
+  }
+  for (let i = 0; i < placed.length; i++) for (let j = i + 1; j < placed.length; j++) assert.ok(Math.hypot(placed[i].x - placed[j].x, placed[i].z - placed[j].z) >= 0.95, "no two avatars overlap");
+  const first = socialSlotFor(plan, guests[0], []);
+  const spawn = manifest.spawn;
+  assert.ok(Math.hypot(first.x - spawn.x, first.z - spawn.z) < 4, "the first real guest stands at the heart of the court");
+  assert.equal(socialSlotFor({ slots: [{ x: 0, y: 0, z: 0 }] }, guests[1], [{ x: 0, z: 0 }]), null, "a full floor returns no slot instead of stacking");
 });
 
 test("every persona has a model and portraits shipped with the build", () => {

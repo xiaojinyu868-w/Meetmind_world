@@ -11,8 +11,10 @@ import {loadCharacterLibrary,PREMIUM_CHARACTER_ASSETS} from "./scenes/PremiumCha
 import {createArrivalEffects} from "./runtime/ArrivalEffects.js";
 import {createWorldLabels} from "./runtime/WorldLabels.js";
 import {personaById} from "./shared/personas.mjs";
-import {visibleSocialAttendees,demoSocialPose,stablePersonSeed,conversationIntent} from "./scenes/SocialEnsemble.js";
-import {createEventGarden} from "./scenes/EventGarden.js";
+import {visibleSocialAttendees,demoSocialPose,stablePersonSeed,conversationIntent,DEMO_SOCIAL_PAIRS} from "./scenes/SocialEnsemble.js";
+import {createEventGarden,planEventGarden} from "./scenes/EventGarden.js";
+import {planSocialFloor,socialSlotFor} from "./runtime/SocialFloor.js";
+import {createCourtDressing} from "./scenes/CourtDressing.js";
 import {socialPeopleLayout} from "./runtime/SocialPeopleLayout.js";
 import {createLandscapeSite} from "./runtime/LandscapeSite.js";
 import {createContextLandscape} from "./runtime/ContextLandscape.js";
@@ -95,7 +97,8 @@ let premiumLibrary=null,premiumLoadPromise=null;
 const people=new Map(),keys=new Set(),raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
 const hoverRoot=new THREE.Group();hoverRoot.name="Interaction hover";scene.add(hoverRoot);
 let hoveredId=null,hoveredMarker=null;
-let fpsFrames=0,fpsStart=performance.now(),fps=0,lastSnapshotVersion=-1,hasConnected=false;
+let fpsFrames=0,fpsStart=performance.now(),fps=0,hasConnected=false,knownAttendees=null;
+const pendingArrivals=new Set();
 let audioContext=null,soundEnabled=false,activeVenue=null,venueView="event",venueEventReady=false,venuePresentationBounds=null;
 const arrivals=createArrivalEffects(scene,{reducedMotion:reduced});
 const labels=createWorldLabels({budget:mobile?7:params.get("mode")==="stage"?18:12});
@@ -138,14 +141,15 @@ function fitPreset(preset,id){
  return activeVenue&&bounds&&innerWidth<720&&(region||["hero","aerial"].includes(id))?fitBuildingPreset(result,bounds,camera.aspect):result;
 }
 function goCamera(id,duration=1700){if(!currentScene)return;const presets=venueView==="event"?{...currentScene.cameras,...currentScene.eventCameras}:currentScene.cameras,actual=presets[id]?id:"hero",preset=fitPreset(presets[actual],actual);if(activeVenue&&venuePresentationBounds){const distance=new THREE.Vector3(...preset.position).distanceTo(new THREE.Vector3(...preset.target)),reach=distance+venuePresentationBounds.radius;controls.maxDistance=Math.max(controls.maxDistance,distance*1.1);camera.far=Math.max(camera.far,reach*2);if(venueView!=="event"){scene.fog.near=Math.max(scene.fog.near,reach*1.05);scene.fog.far=Math.max(scene.fog.far,reach*1.7);}}cameraTo(preset.position,preset.target,preset.fov||43,duration);UI.setCameraSelection(actual);if(activeVenue){const url=new URL(location.href);url.searchParams.set("camera",actual);history.replaceState(null,"",url);}}
+// Everyone, including the viewer, stands on the shared social floor plan, so
+// a guest is in the same spot on every phone and on the big screen.
 function personPosition(index,isSelf=false,person=null){
- if(isSelf)return {...currentScene.spawn};
  const demo=person?.source==="curated-demo"&&demoSocialPose(person.id,activeVenue?.id,currentScene.spawn.y||0);if(demo)return demo;
- const points=currentScene.eventPeople||currentScene.anchors.people;
  const occupied=[...people.values()].filter(value=>value.person.id!==person?.id).map(value=>value.root.position);
- const reserved=["seed-01","seed-02","seed-03","seed-04","seed-10","seed-12"].map(id=>demoSocialPose(id,activeVenue?.id,currentScene.spawn.y||0)).filter(Boolean);
- const available=points.filter(point=>[...occupied,...reserved].every(other=>Math.hypot(other.x-point.x,other.z-point.z)>1));
- return {...(available[0]||points[index%points.length])};
+ if(currentScene.socialFloor?.slots.length)return socialSlotFor(currentScene.socialFloor,person,occupied);
+ const points=currentScene.eventPeople||currentScene.anchors.people||[];
+ const available=points.find(point=>occupied.every(other=>Math.hypot(other.x-point.x,other.z-point.z)>1));
+ return available?{...available}:null;
 }
 // Persona models stream in on demand (self and the selected guest first); a
 // guest appears the moment their own look is ready, never in a stand-in body.
@@ -179,13 +183,25 @@ function addPerson(person,index,animate=false){
  character.root.userData.personId=person.id;
  character.root.traverse(o=>{o.userData.personId=person.id;});
  const self=person.id===client.me?.attendee?.id;
- const pos=personPosition(index,self,person);character.root.position.set(pos.x,pos.y||0,pos.z);character.root.rotation.y=pos.yaw||0;
+ const pos=personPosition(index,self,person);
+ // A full floor never stacks two avatars; the extra guest simply waits off-screen.
+ if(!pos){character.dispose?.();return null;}
+ character.root.position.set(pos.x,pos.y||0,pos.z);character.root.rotation.y=pos.yaw||0;
  actors.add(character.root);adaptPolygonOffsetMaterials(character.root,reversedDepth);
- people.set(person.id,{...character,person,index,pos,arrival:animate?time:null,reaction:null,labelColor:persona?.color||person.avatarColor,assetId:character.assetId,selfPlaced:self});
+ people.set(person.id,{...character,person,index,pos,arrival:animate?time:null,reaction:null,labelColor:persona?.color||person.avatarColor,assetId:character.assetId});
  if(animate){character.root.scale.setScalar(.02);chime();arrivals.spawn(character.root.position,persona?.color||"#ffcf8f",{scale:self?1.3:1});}
  return character;
 }
+// Only guests missing from the previous snapshot are arriving; a guest whose
+// model finished streaming later was already here and appears quietly.
+function noteArrivals(snapshot){
+ const ids=new Set((snapshot?.attendees||[]).map(a=>a.id));
+ if(knownAttendees)for(const id of ids)if(!knownAttendees.has(id))pendingArrivals.add(id);
+ for(const id of pendingArrivals)if(!ids.has(id))pendingArrivals.delete(id);
+ knownAttendees=ids;
+}
 function syncPeople(snapshot){
+ if(snapshot)noteArrivals(snapshot);
  if(!currentScene||!snapshot||(activeVenue&&!venueEventReady))return;
  const selfId=client.me?.attendee?.id;
  const visibleAttendees=visibleSocialAttendees(snapshot.attendees,{selectedId,selfId,maxRendered:mobile?20:36,ambientCurated:UI.stage?9:mobile?4:9});
@@ -198,17 +214,17 @@ function syncPeople(snapshot){
    const upgrade=premiumLibrary?.hasPersona(person.persona)&&old.assetId!==person.persona;
    if(old.person.persona!==person.persona||old.person.avatarColor!==person.avatarColor||upgrade){
     if(!personaReady(person))return;
-    const position=old.root.position.clone(),yaw=old.root.rotation.y,placed=old.selfPlaced;actors.remove(old.root);old.dispose?.();people.delete(person.id);
-    const replacement=addPerson(person,index,false);replacement.root.position.copy(position);replacement.root.rotation.y=yaw;people.get(person.id).selfPlaced=placed;
-    arrivals.spawn(position,personaById(person.persona)?.color||"#ffcf8f",{scale:.8,duration:1.8});
+    const position=old.root.position.clone(),yaw=old.root.rotation.y;actors.remove(old.root);old.dispose?.();people.delete(person.id);
+    const replacement=addPerson(person,index,false);if(!replacement)return;replacement.root.position.copy(position);replacement.root.rotation.y=yaw;
+    // Model upgrades land in bursts while the persona library streams in; only mark the ones the guest is watching.
+    if(person.id===selfId||person.id===selectedId)arrivals.spawn(position,personaById(person.persona)?.color||"#ffcf8f",{scale:.8,duration:1.8});
    }else old.person=person;
    return;
   }
   if(!personaReady(person))return;
-  addPerson(person,index,lastSnapshotVersion>=0||person.id===selfId);
+  addPerson(person,index,pendingArrivals.delete(person.id)||person.id===selfId);
  });
  syncLinks(snapshot);
- lastSnapshotVersion=snapshot.version;
 }
 function disposeLinks(){for(const o of [...linkRoot.children]){o.geometry.dispose();o.material.dispose();linkRoot.remove(o);}}
 function linkVisible(line){const self=client.me?.attendee?.id;return UI.stage||(!!selectedId&&line.userData.attendees.includes(selectedId))||(!!self&&line.userData.attendees.includes(self));}
@@ -240,7 +256,11 @@ async function setVenueView(view,{updateUrl=true,moveCamera=true,reloadAsset=tru
  if(activeVenue&&next==="source"){showcaseTimers.forEach(clearTimeout);showcaseTimers=[];showcaseStarted=false;tour=null;cameraMove=null;}
  keys.clear();clearSelection();
  setEventLayersVisible([actors,linkRoot,markerRoot,hoverRoot,activityMarkerRoot,...(currentScene?.eventGarden?[currentScene.eventGarden.root]:[]),...(currentScene?.landscapeSite?[currentScene.landscapeSite.root]:[]),...(currentScene?.contextLandscape?[currentScene.contextLandscape.root]:[])],venueView==="event");
- currentScene?.eventLook?.setEnabled(venueView==="event");refreshDepthMaterials();
+ // The court grade sits on top of EventLook: lift it first, lay it last.
+ if(venueView!=="event")currentScene?.courtDressing?.setEnabled(false);
+ currentScene?.eventLook?.setEnabled(venueView==="event");
+ if(venueView==="event")currentScene?.courtDressing?.setEnabled(true);
+ refreshDepthMaterials();
  renderFinish.setEnabled(venueView==="event");
  currentScene?.eventEntourage?.setEvent(venueView==="event");
  currentScene?.architectureShadows?.setEnabled(venueView==="event");
@@ -302,6 +322,16 @@ async function switchScene(id,options={}){
    backdrop.raycast=()=>{};backdrop.userData.noCollision=true;result.eventGarden.root.add(backdrop);
    result.backdrop=backdrop;
    result.eventPeople=socialPeopleLayout(manifest,result.eventGarden.colliders);
+   // Planned from the full-quality garden so phones and the big screen agree.
+   const plannedGarden=planEventGarden(manifest,{venueId:id,quality:"high"});
+   const signposts=Object.values(calibratedCheckpoints(manifest.anchors)).map(([x,,z])=>({x,z,r:.55}));
+   result.socialFloor=planSocialFloor({bounds:manifest.bounds,focus:manifest.spawn,groundY:manifest.groundY??0,
+    colliders:[...(manifest.colliders||[]),...plannedGarden.items.map(p=>({x:p.x,z:p.z,r:p.r})),...signposts],
+    reserved:DEMO_SOCIAL_PAIRS.flat().map(pid=>demoSocialPose(pid,id,manifest.groundY??0)).filter(Boolean)});
+   result.courtDressing=createCourtDressing({bounds:manifest.bounds,groundY:manifest.groundY??0,event:client.snapshot?.event||{},theme:client.snapshot?.event?.theme||{},
+    colliders:[...(manifest.colliders||[]),...plannedGarden.items.map(p=>({x:p.x,z:p.z,r:p.r})),...signposts],quality,sun,hemi,fill,renderer,scene,reversedDepth,
+    replaces:[result.eventGarden.root.getObjectByName("event paving surface")].filter(Boolean)});
+   result.eventGarden.root.add(result.courtDressing.root);
    const a=manifest.anchors.arrival,y=manifest.groundY;
    result.eventCameras=id==="venue-campus"?{
     hero:manifest.cameras.hero,
@@ -317,13 +347,14 @@ async function switchScene(id,options={}){
    if(pairA&&pairB){const cx=(pairA.x+pairB.x)/2,cz=(pairA.z+pairB.z)/2;result.eventCameras.garden=["venue-ab-canopy","venue-campus"].includes(id)?{position:[cx+4.2,y+2.05,cz+5.3],target:[cx-.7,y+1.12,cz-.7],fov:38}:{position:[cx+.7,y+1.85,cz+6],target:[cx,y+1,cz],fov:34};}
    if(id==="venue-campus")result.eventCameras.hero=manifest.cameras.hero;
    const originalDispose=result.dispose;
-   result.dispose=()=>{result.eventLook?.dispose();result.eventEntourage?.dispose();result.backdrop?.geometry.dispose();result.backdrop?.material.dispose();result.eventGarden?.dispose();result.architectureShadows?.dispose();result.landscapeSite?.dispose();result.contextLandscape?.dispose();originalDispose?.();};
+   result.dispose=()=>{result.courtDressing?.dispose();result.eventLook?.dispose();result.eventEntourage?.dispose();result.backdrop?.geometry.dispose();result.backdrop?.material.dispose();result.eventGarden?.dispose();result.architectureShadows?.dispose();result.landscapeSite?.dispose();result.contextLandscape?.dispose();originalDispose?.();};
   }
   if(eventReady&&options.view==="event"){result.eventLook=await createEventLook({renderer,scene,modelRoot:result.modelRoot,config:manifest,sun,hemi,fill,baseUrl:new URL("./",document.baseURI).href,quality});result.eventEntourage?.setEvent(true);}
   if(serial!==switchSerial){result.dispose?.();return;}
   if(premiumLoadPromise)await premiumLoadPromise;
   if(serial!==switchSerial){result.dispose?.();return;}
   const previous=currentScene;
+  previous?.courtDressing?.setEnabled(false);
   previous?.eventLook?.dispose();
   showcaseTimers.forEach(clearTimeout);showcaseTimers=[];showcaseStarted=false;tour=null;cameraMove=null;keys.clear();
   clearPeople();clearSelection();UI.closePanel();if(previous)scene.remove(previous.root);
@@ -416,6 +447,7 @@ function focusPerson(id,{openCard=true,duration=1200}={}){
  // Their look may still be streaming in: the card never waits for the model.
  if(!p){if(openCard)UI.setSelectedPerson(known);return;}
  selectedId=id;p.reaction={state:"wave",until:time+(p.greetingDuration||5.8)};
+ premiumLibrary?.upgradePersona(p.person.persona);
  linkRoot.children.forEach(o=>o.visible=linkVisible(o));
  if(openCard)UI.setSelectedPerson(p.person);
  for(const o of [...markerRoot.children]){o.geometry.dispose();o.material.dispose();markerRoot.remove(o);}
@@ -429,7 +461,7 @@ function welcomeArrival(attendee){
  if(!currentScene||(activeVenue&&!venueEventReady)){pendingArrival=attendee;return;}
  pendingArrival=null;
  if(activeVenue&&venueView!=="event")setVenueView("event");
- requestPersona(attendee.persona,true);
+ requestPersona(attendee.persona,true);premiumLibrary?.upgradePersona(attendee.persona,{pin:true});
  const spawn=currentScene.spawn,center=new THREE.Vector3(spawn.x,spawn.y||0,spawn.z);
  cameraTo([center.x+9,center.y+22,center.z+18],[center.x,center.y+1,center.z],52,0);
  if(client.snapshot)syncPeople(client.snapshot);
@@ -502,8 +534,9 @@ function moveView(dt){
  movement.normalize().multiplyScalar(dt*THREE.MathUtils.clamp(camera.position.distanceTo(controls.target)*.3,2,12));
  controls.target.add(movement);camera.position.add(movement);
 }
-client.addEventListener("snapshot",e=>{hasConnected=true;UI.setSnapshot(e.detail);syncPeople(e.detail);});
-client.addEventListener("me",e=>{UI.setMe(e.detail);const me=e.detail?.attendee;if(me)requestPersona(me.persona,true);if(me&&currentScene){const p=people.get(me.id);if(p&&!p.selfPlaced){p.root.position.set(currentScene.spawn.x,currentScene.spawn.y,currentScene.spawn.z);p.selfPlaced=true;syncLinks(client.snapshot);}}});
+client.addEventListener("snapshot",e=>{hasConnected=true;UI.setSnapshot(e.detail);currentScene?.courtDressing?.setEvent(e.detail.event||{});syncPeople(e.detail);});
+document.body.classList.toggle("court-graded",quality!=="low");
+client.addEventListener("me",e=>{UI.setMe(e.detail);const me=e.detail?.attendee;if(!me)return;requestPersona(me.persona,true);premiumLoadPromise?.then(()=>premiumLibrary?.upgradePersona(me.persona,{pin:true}));});
 client.addEventListener("status",e=>{UI.setOnline(e.detail.online);if(!e.detail.online&&e.detail.message)UI.toast("活动连接暂不可用，场景仍可浏览");});
 function resize(){renderer.setSize(innerWidth,innerHeight,false);renderFinish.resize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
 window.addEventListener("resize",resize);resize();
@@ -532,7 +565,7 @@ function tick(now){
  if(!paused){
   moveView(dt);
   currentScene?.update(dt,time);currentScene?.eventLook?.update?.(dt,camera,controls.target);
-  currentScene?.eventGarden?.update?.(dt,time);currentScene?.landscapeSite?.update?.(dt,time);currentScene?.architectureShadows?.update();
+  currentScene?.eventGarden?.update?.(dt,time);currentScene?.landscapeSite?.update?.(dt,time);currentScene?.architectureShadows?.update();currentScene?.courtDressing?.update(dt,time);
   for(const ring of hoverRoot.children){
    ring.scale.setScalar(reduced?1:1+Math.sin(time*4.2)*.04);
   }
@@ -563,12 +596,15 @@ function diagnostics(){
 window.__THREE_GAME_DIAGNOSTICS__=diagnostics;
 installCanvasRecorder(canvas, diagnostics);
 if(params.has("capture")||params.has("debug")){
- window.__ECHO_CAMPUS__={renderer,scene,camera,controls,client,UI,get currentScene(){return currentScene;},switchScene,goCamera,focusPerson,runShowcase,diagnostics,setVenueView,setPaused(value){paused=value;},setCamera(p,t,fov=43){cameraTo(p,t,fov,0);},setChromeHidden(value){UI.hideChrome(value);}};
+ window.__ECHO_CAMPUS__={renderer,scene,camera,controls,client,UI,get currentScene(){return currentScene;},get premiumLibrary(){return premiumLibrary;},switchScene,goCamera,focusPerson,runShowcase,diagnostics,setVenueView,setPaused(value){paused=value;},setCamera(p,t,fov=43){cameraTo(p,t,fov,0);},setChromeHidden(value){UI.hideChrome(value);}};
  window.__THREE_GAME_TEST_HOOKS__={setState:async name=>{if(!currentScene)throw new Error("not ready");if(name==="active-play"||name==="hero"){UI.closePanel();goCamera("hero",0);}else if(name==="arrival"){UI.closePanel();goCamera("arrival",0);}else if(name==="garden"){UI.closePanel();goCamera("garden",0);}else if(name==="gallery"){await switchScene("gallery");}else if(name==="profile"){focusPerson(client.snapshot.attendees[0].id);}else throw new Error("unknown state: "+name);return {state:name};},setPausedForScreenshot(value){paused=value;},setSeed(){return 868;}};
 }
 (async()=>{
  try{
-  premiumLoadPromise=loadCharacterLibrary({baseUrl:document.baseURI,assets:[],allowEmpty:true}).then(library=>{premiumLibrary=library;pumpPersonas();}).catch(error=>{premiumLoadPromise=null;console.warn("Premium characters unavailable",error.message);});
+  premiumLoadPromise=loadCharacterLibrary({baseUrl:document.baseURI,assets:[],allowEmpty:true}).then(library=>{
+   premiumLibrary=library;library.hdBudget=mobile?3:6;library.textureAnisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
+   pumpPersonas();
+  }).catch(error=>{premiumLoadPromise=null;console.warn("Premium characters unavailable",error.message);});
   // The event connection never waits for architecture: an NFC guest can
   // claim a persona while the campus is still streaming in.
   clientReady=client.start().then(()=>UI.handleTap());

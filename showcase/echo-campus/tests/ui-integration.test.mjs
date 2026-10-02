@@ -148,6 +148,24 @@ test("fresh persona links stay reusable and preserve private badge path compatib
   assert.equal(badge.ui.root.querySelector('[name="badgeId"]').value,"demo-visitor-01");
 });
 
+test("demo panel lists every scene tag as a tap link the server recognizes",async t=>{
+  const {session}=await fixture(t);const a=await session("?capture=1");
+  activate(a.win);a.ui.openDemoPanel();
+  const rows=[...a.ui.root.querySelectorAll(".ec-tag-sheet li")];
+  const tags=rows.map(row=>row.querySelector("code").textContent);
+  assert.ok(tags.includes("GATE"));
+  assert.ok(tags.some(tag=>/^WB-[a-z0-9]+-0001$/.test(tag)),"a wristband per category");
+  assert.ok(tags.some(tag=>tag.startsWith("CP-")),"every checkpoint");
+  for(const row of rows){
+    const url=new URL(row.querySelector('[data-action="copy-link"]').dataset.url);
+    assert.equal(url.searchParams.get("entry"),"nfc");
+    const tag=url.searchParams.get("tag");
+    assert.equal((await a.client.tap(tag,{})).tag.id,tag,tag+" resolves");
+  }
+  rows.at(-1).querySelector('[data-action="tag-qr"]').click();
+  assert.equal(a.ui.root.querySelector("[data-demo-qr-title]").textContent,rows.at(-1).querySelector("strong").textContent);
+});
+
 test("late recommendation failure cannot overwrite a newer successful panel",async t=>{
   const {session}=await fixture(t);const a=await session();await submitJoin(a,A);activate(a.win);
   let rejectOld;let calls=0;

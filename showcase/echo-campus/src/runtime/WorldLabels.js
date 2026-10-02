@@ -5,8 +5,9 @@ const toCamera = new THREE.Vector3();
 
 /** Pick which people get a floating name: self and the selected person always,
  * then the nearest on-screen guests whose tag would not collide with one
- * already placed, up to the budget. Pure for testing. */
-export function chooseLabels(entries, { selfId = null, selectedId = null, budget = 10, maxDistance = 34, width = Infinity } = {}) {
+ * already placed, nor cover a `clear` screen rect (a framed person), up to
+ * the budget. Pure for testing. */
+export function chooseLabels(entries, { selfId = null, selectedId = null, budget = 10, maxDistance = 34, width = Infinity, clear = [] } = {}) {
   const pinned = [], rest = [];
   for (const entry of entries) {
     if (!entry.onScreen) continue;
@@ -16,11 +17,11 @@ export function chooseLabels(entries, { selfId = null, selectedId = null, budget
   rest.sort((a, b) => a.distance - b.distance);
   const placed = [], boxes = [];
   const box = entry => { const w = entry.width || 90, x = Math.min(Math.max(entry.x, w / 2 + 6), width - w / 2 - 6); return { x0: x - w / 2, x1: x + w / 2, y0: entry.y - 30, y1: entry.y }; };
-  const overlaps = b => boxes.some(o => b.x0 < o.x1 && b.x1 > o.x0 && b.y0 < o.y1 && b.y1 > o.y0);
+  const hits = (b, list) => list.some(o => b.x0 < o.x1 && b.x1 > o.x0 && b.y0 < o.y1 && b.y1 > o.y0);
   for (const entry of [...pinned, ...rest]) {
     if (placed.length >= Math.max(budget, pinned.length)) break;
     const b = box(entry);
-    if (!pinned.includes(entry) && overlaps(b)) continue;
+    if (!pinned.includes(entry) && (hits(b, boxes) || hits(b, clear))) continue;
     placed.push(entry); boxes.push(b);
   }
   return placed;
@@ -61,8 +62,20 @@ export function createWorldLabels({ container = document.body, budget = 10 } = {
       const text = id === selfId ? `你 · ${value.person?.name || ""}` : value.person?.name || "";
       entries.push({ id, value, distance, onScreen, x: (projected.x + 1) / 2 * width, y: (1 - projected.y) / 2 * height, width: 34 + [...text].reduce((sum, char) => sum + (char.charCodeAt(0) > 255 ? 12.5 : 7), 0) });
     }
+    // Keep a framed guest's body free of other people's tags.
+    const clear = [];
+    for (const id of new Set([selectedId, selfId])) {
+      const value = id && people.get(id);
+      if (!value?.root.visible) continue;
+      projected.copy(value.root.position).project(camera);
+      const foot = (1 - projected.y) / 2 * height, center = (projected.x + 1) / 2 * width;
+      projected.copy(value.root.position); projected.y += (value.height || 1.75) * value.root.scale.y;
+      projected.project(camera);
+      const top = (1 - projected.y) / 2 * height, tall = foot - top;
+      if (projected.z < 1 && tall > 140) clear.push({ x0: center - tall * 0.24, x1: center + tall * 0.24, y0: top - 12, y1: foot });
+    }
     const visible = new Set();
-    for (const entry of chooseLabels(entries, { selfId, selectedId, budget, width })) {
+    for (const entry of chooseLabels(entries, { selfId, selectedId, budget, width, clear })) {
       entry.x = Math.min(Math.max(entry.x, entry.width / 2 + 6), width - entry.width / 2 - 6);
       const element = node(entry.id);
       const person = entry.value.person;

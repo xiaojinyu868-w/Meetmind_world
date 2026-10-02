@@ -14,6 +14,22 @@ export const PREMIUM_CHARACTER_ASSETS = Object.freeze([
   Object.freeze({ id: "host-male", path: "assets/premium/host-male.glb?v=social-20260919", height: 1.78, forwardYaw: -Math.PI / 2 }),
 ]);
 export const PERSONA_ASSET_VERSION = "20261002";
+// Close-up textures (scripts/personas/build-hd-textures.mjs), content-hashed.
+export const PERSONA_HD_PATH = "assets/personas/hd/";
+
+function loadTexture(url) {
+  if (typeof createImageBitmap === "function") {
+    // Decoded off the main thread; raw bytes, color management left to three.
+    const loader = new THREE.ImageBitmapLoader().setOptions({ imageOrientation: "none", premultiplyAlpha: "none", colorSpaceConversion: "none" });
+    return loader.loadAsync(url).then(bitmap => { const texture = new THREE.Texture(bitmap); texture.flipY = false; texture.needsUpdate = true; return texture; });
+  }
+  return new THREE.TextureLoader().loadAsync(url).then(texture => { texture.flipY = false; return texture; });
+}
+
+function disposeTextures(textures) {
+  for (const texture of textures) { texture.dispose(); texture.image?.close?.(); }
+}
+
 /** One rigged Tripo GLB per preset persona, loaded on demand. */
 export function personaAssetDefinition(personaId) {
   const persona = personaById(personaId);
@@ -33,6 +49,8 @@ const CLIP_ALIASES = Object.freeze({
 });
 // A full Tripo clap take runs ~17 s; a celebration reads in its first beats.
 const CELEBRATE_SECONDS = 3.6;
+// Upper-arm swing toward the torso while idling, in radians.
+const ARM_SETTLE = 0.11;
 let defaultLibrary = null;
 const WARDROBE_COLORS = Object.freeze({
   "host-female": Object.freeze([0x667e70, 0x617987, 0x897985, 0xa48d73, 0xa6ac9f]),
@@ -317,6 +335,9 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
 
   const chest = findBone(model, /chest|spine2|spine_?03|spine_?3|upperchest/i) || findBone(model, /spine/i);
   const head = findBone(model, /(?:^|[_:.])head$|mixamorighead$|^head$/i);
+  // Side from the bone's actual position (root +Z is the facing direction).
+  const upperArms = [findBone(model, /^l_upperarm$|leftarm$/i), findBone(model, /^r_upperarm$|rightarm$/i)].filter(Boolean)
+    .map(bone => ({ bone, side: Math.sign(root.worldToLocal(bone.getWorldPosition(new THREE.Vector3())).x) || 1 }));
   // Recent Tripo v1 FBX outputs put locomotion on Hip while Root remains
   // static. Counter-translate a visual-only parent in world-horizontal axes;
   // do not destroy Hip tracks (their source-space axes carry height as well).
@@ -388,6 +409,17 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
     modified.push({ bone, before: bone.quaternion.clone() });
     turn.setFromAxisAngle(axis, angle); bone.quaternion.multiply(turn);
   }
+  const facing = new THREE.Vector3(), parentTurn = new THREE.Quaternion(), worldTurn = new THREE.Quaternion();
+  // Rotates a bone about the character's facing axis in world space.
+  function swingBone(bone, angle) {
+    modified.push({ bone, before: bone.quaternion.clone() });
+    bone.parent.updateWorldMatrix(true, false);
+    bone.parent.getWorldQuaternion(parentTurn);
+    root.getWorldDirection(facing);
+    worldTurn.setFromAxisAngle(facing, angle);
+    bone.quaternion.premultiply(parentTurn.clone().invert().multiply(worldTurn).multiply(parentTurn));
+  }
+  let armSettle = 1;
   library.instances++;
   const character = {
     root, model, mixer, height, assetId: template.definition.id, conversationDuration: clipByState.get("talk")?.duration || 4, greetingDuration: (clipByState.get("wave")?.duration || 1) + 0.3, celebrationDuration: Math.min(CELEBRATE_SECONDS, clipByState.get("celebrate")?.duration || 0) || 0, assetInfo: wardrobe ? Object.freeze({ ...template.info, height, wardrobe }) : template.info,
@@ -428,6 +460,12 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
         subtleBone(head, AXIS_Y, Math.sin(seconds * 0.55 + phase) * 0.025);
         subtleBone(chest, AXIS_X, Math.sin(seconds * 1.6 + phase) * 0.006);
       }
+      // Tripo's relaxed idle still hangs the arms in a mannequin A-pose; draw
+      // them in toward the body while idling, eased so every gesture starts
+      // and ends on its authored pose.
+      const idling = social ? performanceState === "idle" : nextState === "idle";
+      armSettle += ((idling ? 1 : 0) - armSettle) * Math.min(1, (Number(dt) || 0) * 3);
+      if (armSettle > 0.01) for (const { bone, side } of upperArms) swingBone(bone, -side * ARM_SETTLE * armSettle);
       updateCharacterContactShadow(contactShadow, root);
       motion.position.y = 0;
       if (hipReference && !social) {
@@ -485,10 +523,70 @@ export async function loadCharacterLibrary({ baseUrl, assets = PREMIUM_CHARACTER
     const templates = results.filter(result => result.status === "fulfilled").map(result => result.value);
     const errors = results.flatMap((result, index) => result.status === "rejected" ? [{ id: definitions[index].id, message: result.reason?.message || String(result.reason) }] : []);
     if (!templates.length && !allowEmpty) { draco?.dispose(); materialCache.forEach(material => material.dispose()); throw new Error(`角色模型暂未加载：${errors.map(error => `${error.id} ${error.message}`).join("；")}`); }
-    const pending = new Map();
+    const pending = new Map(), hd = new Map();
+    let hdManifest = null;
+    const templateMaterials = template => {
+      const materials = new Set();
+      template.scene.traverse(object => { for (const material of Array.isArray(object.material) ? object.material : [object.material]) if (material) materials.add(material); });
+      return materials;
+    };
+    function revertHd(id) {
+      const entry = hd.get(id);
+      if (!entry) return;
+      hd.delete(id);
+      for (const swap of entry.swaps || []) {
+        Object.assign(swap.material, { map: swap.map, normalMap: swap.normalMap });
+        if (swap.material.roughnessMap !== swap.roughnessMap) Object.assign(swap.material, { roughnessMap: swap.roughnessMap, roughness: swap.roughness, needsUpdate: true });
+      }
+      disposeTextures(entry.textures);
+    }
+    function trimHd() {
+      const loaded = [...hd].filter(([, entry]) => entry.swaps);
+      const evictable = loaded.filter(([id]) => id !== library.pinnedHd).sort((a, b) => a[1].used - b[1].used);
+      for (let excess = loaded.length - library.hdBudget; excess > 0 && evictable.length; excess--) revertHd(evictable.shift()[0]);
+    }
     const library = {
       templates, errors, assets: templates.map(template => template.info),
       instances: 0, disposed: false, released: false, badgeGeometries: new Map(), wardrobeMaterials: new Map(),
+      /** Close-up texture sets kept resident; the least recently framed revert to 1K. */
+      hdBudget: 4, pinnedHd: null, textureAnisotropy: 4,
+      get hdPersonas() { return [...hd].filter(([, entry]) => entry.swaps).map(([id]) => id); },
+      /**
+       * Swaps 2K color, 1K normal and 1K roughness into one persona's shared
+       * materials, so every guest wearing that look sharpens at once. Pinned
+       * (the guest's own look) is never evicted. Resolves true once applied.
+       */
+      upgradePersona(id, { pin = false } = {}) {
+        if (!personaById(id) || library.disposed) return Promise.resolve(false);
+        if (pin) library.pinnedHd = id;
+        const existing = hd.get(id);
+        if (existing) { existing.used = performance.now(); return existing.promise; }
+        const entry = { used: performance.now(), swaps: null, textures: [] };
+        hd.set(id, entry);
+        entry.promise = (async () => {
+          hdManifest ??= fetch(new URL(`${PERSONA_HD_PATH}manifest.json?v=${PERSONA_ASSET_VERSION}`, base)).then(response => (response.ok ? response.json() : null)).catch(() => null);
+          const [manifest, template] = await Promise.all([hdManifest, library.ensurePersona(id)]);
+          const files = manifest?.personas?.[id];
+          if (!files?.color || !files?.normal) { hd.delete(id); return false; }
+          const url = item => new URL(`${PERSONA_HD_PATH}${item.file}?v=${item.sha256.slice(0, 12)}`, base).href;
+          const [color, normal, roughness] = await Promise.all([loadTexture(url(files.color)), loadTexture(url(files.normal)), files.roughness ? loadTexture(url(files.roughness)) : null]);
+          entry.textures = [color, normal, roughness].filter(Boolean);
+          if (library.released || hd.get(id) !== entry) { disposeTextures(entry.textures); return false; }
+          color.colorSpace = THREE.SRGBColorSpace;
+          entry.swaps = [];
+          for (const material of templateMaterials(template)) {
+            if (!material.isMeshStandardMaterial || !material.map) continue;
+            for (const texture of entry.textures) Object.assign(texture, { wrapS: material.map.wrapS, wrapT: material.map.wrapT, channel: material.map.channel, anisotropy: library.textureAnisotropy });
+            entry.swaps.push({ material, map: material.map, normalMap: material.normalMap, roughnessMap: material.roughnessMap, roughness: material.roughness });
+            material.map = color;
+            if (material.normalMap) material.normalMap = normal;
+            if (roughness) Object.assign(material, { roughnessMap: roughness, roughness: 1, needsUpdate: true });
+          }
+          trimHd();
+          return true;
+        })().catch(error => { if (hd.get(id) === entry) hd.delete(id); disposeTextures(entry.textures); console.warn("HD textures unavailable", id, error?.message || error); return false; });
+        return entry.promise;
+      },
       contactShadowResources: createCharacterContactShadowResources(),
       badgeMaterial: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.68, metalness: 0.08 }),
       hasPersona(id) { return templates.some(item => item.definition.id === id); },
@@ -530,6 +628,7 @@ export async function loadCharacterLibrary({ baseUrl, assets = PREMIUM_CHARACTER
       releaseIfUnused() {
         if (!library.disposed || library.instances || library.released) return;
         library.released = true;
+        for (const id of [...hd.keys()]) revertHd(id);
         const geometries = new Set(), materials = new Set(), textures = new Set(), skeletons = new Set();
         templates.forEach(template => template.scene.traverse(object => {
           if (object.geometry) geometries.add(object.geometry);

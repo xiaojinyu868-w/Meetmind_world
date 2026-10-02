@@ -367,9 +367,17 @@ export class AppUI {
     if (action === "checkin") return this.checkin(id, button);
     if (action === "leave") return this.leave(button);
     if (action === "locate") { this.closePanel(); return this.run("onSelectPerson", this.selectedPerson); }
+    if (action === "tag-qr") {
+      const canvas = this.root.querySelector("[data-demo-qr]");
+      if (!canvas) return;
+      this.root.querySelector("[data-demo-qr-kicker]").textContent = "现场标签";
+      this.root.querySelector("[data-demo-qr-title]").textContent = button.dataset.label || "";
+      canvas.scrollIntoView?.({ block: "center", behavior: "smooth" });
+      return QRCode.toCanvas(canvas, button.dataset.url, { width: 156, margin: 1, color: { dark: "#1c2621ff", light: "#ffffffff" } }).catch(() => this.toast("二维码暂未生成，可复制链接"));
+    }
     if (action === "copy-contact" || action === "copy-link") {
       const value = button.dataset.value || button.dataset.url || "";
-      try { await navigator.clipboard.writeText(value); this.toast(action === "copy-link" ? "演示入口已复制" : "已复制，去微信里添加吧"); }
+      try { await navigator.clipboard.writeText(value); this.toast(action === "copy-link" ? "链接已复制" : "已复制，去微信里添加吧"); }
       catch { this.toast(action === "copy-link" ? "可长按下方入口链接复制" : "可以长按文字手动复制"); }
       return;
     }
@@ -717,6 +725,18 @@ export class AppUI {
     url.searchParams.set("demoSession", "tab");
     return url.href;
   }
+  /** Static link to write on an NFC tag or print as a QR for one tag id. */
+  tagUrl(tag) {
+    const url = new URL(this.demoUrl(null));
+    url.searchParams.set("tag", tag);
+    return url.href;
+  }
+  sceneTags() {
+    const checkpoints = this.activity?.checkpoints || this.snapshot?.activity?.checkpoints || [];
+    return [["入场闸口", "GATE"],
+      ...this.categories().map(item => [`${item.label} · 手环`, `WB-${item.id}-0001`]),
+      ...checkpoints.map(item => [`打卡 · ${item.label}`, `CP-${item.id}`])];
+  }
   async renderStageQr() {
     const entry = new URL(this.demoUrl(null));
     const canvas = this.root.querySelector("[data-stage-qr]");
@@ -726,11 +746,14 @@ export class AppUI {
     this.openPanel("demo");
     const first = this.demoUrl("01"), second = this.demoUrl("02"), stage = this.demoUrl("01", true), tabDemo = this.tabDemoUrl();
     this.render(this.panelHeader("FROM A TAP TO A WORLD", "碰一下，进入同一个世界", "手机负责入场，大屏见证每一位来宾的出现。") +
-      `<div class="ec-demo-qr"><canvas data-demo-qr></canvas><div><span class="ec-tag">第一设备入口</span><h2>手机扫码<br>领取你的分身</h2><p>也可将同一入口写入 NFC 标签。</p></div></div>
+      `<div class="ec-demo-qr"><canvas data-demo-qr></canvas><div><span class="ec-tag" data-demo-qr-kicker>第一设备入口</span><h2 data-demo-qr-title>手机扫码<br>领取你的分身</h2><p>也可将同一入口写入 NFC 标签。</p></div></div>
       <ol class="ec-demo-steps"><li><span>01</span><div><strong>手机领取</strong><p>碰一下或扫码，一键以预设分身进入，不用填写资料。</p></div></li><li><span>02</span><div><strong>另一台设备加入</strong><p>打开第二设备入口，点选对方打个招呼。</p></div></li><li><span>03</span><div><strong>双方确认，点亮连接</strong><p>回到第一台设备接受招呼，大屏同步点亮，名片里的微信对彼此可见。</p></div></li></ol>
       <div class="ec-demo-links"><a href="${esc(first)}" target="_blank" rel="noopener">打开第一设备入口${icon("external")}</a><a href="${esc(second)}" target="_blank" rel="noopener">打开第二设备入口${icon("external")}</a><a href="${esc(stage)}" target="_blank" rel="noopener">打开大屏展示模式${icon("external")}</a><a href="${esc(tabDemo)}" target="_blank" rel="noopener">同机演示：独立访客窗口${icon("external")}</a></div>
       <button class="ec-secondary ec-full" data-action="copy-link" data-url="${esc(first)}">复制演示入口${icon("link")}</button>
-      <div class="ec-notice">${icon("nfc")}<span>真实双端体验可用两部手机；只有一台电脑时，请用「独立访客窗口」领取第二位来宾，身份仅保存在该窗口，关闭后需重新领取。普通标签页仍共享当前身份。演示入口允许创建虚构身份，仅用于体验，不证明持卡人身份。真实 NFC 硬件读写、现场网络与身份领取需在活动前实机联调。</span></div>`);
+      <div class="ec-notice">${icon("nfc")}<span>真实双端体验可用两部手机；只有一台电脑时，请用「独立访客窗口」领取第二位来宾，身份仅保存在该窗口，关闭后需重新领取。普通标签页仍共享当前身份。演示入口允许创建虚构身份，仅用于体验，不证明持卡人身份。真实 NFC 硬件读写、现场网络与身份领取需在活动前实机联调。</span></div>
+      <section class="ec-tag-sheet"><header><span class="ec-tag">现场标签</span><p>写入 NFC 标签或打印成二维码；手环编号按 0001、0002… 续写。</p></header>
+      <ul>${this.sceneTags().map(([label, tag]) => { const url = this.tagUrl(tag); return `<li><div><strong>${esc(label)}</strong><code>${esc(tag)}</code></div><button type="button" data-action="tag-qr" data-url="${esc(url)}" data-label="${esc(label)}">二维码</button><button type="button" data-action="copy-link" data-url="${esc(url)}">复制</button></li>`; }).join("")}</ul>
+      <p>正式活动开启签名后，静态链接只用于彩排；碰一下由支付宝侧或适配层附加 ts / nonce / sig（docs/TAP-ADAPTER.md）。</p></section>`);
     const canvas = this.root.querySelector("[data-demo-qr]");
     QRCode.toCanvas(canvas, first, { width: 156, margin: 1, color: { dark: "#1c2621ff", light: "#ffffffff" } }).catch(() => this.toast("二维码暂未生成，可使用下方入口链接"));
   }

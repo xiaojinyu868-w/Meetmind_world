@@ -31,6 +31,7 @@ window.__renderPortrait = async () => {
   if (!persona) throw new Error("unknown persona");
   const library = await loadCharacterLibrary({ baseUrl: new URL("../", location.href).href, assets: [], allowEmpty: true });
   await library.ensurePersona(persona.id);
+  await library.upgradePersona(persona.id);
   const character = library.createPremiumCharacter({ persona: persona.id, color: persona.color, seed: 7, name: persona.codename, presentation: "social" });
   character.root.traverse(object => { if (object.name === "attendee-nfc-badge" || object.name.includes("contact shadow")) object.visible = false; });
   scene.add(character.root);

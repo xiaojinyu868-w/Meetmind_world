@@ -58,7 +58,7 @@ export function eventLightFrame(config = {}) {
 function cloneEventMaterial(original, profile, time, hideDuplicateSite = false) {
   const material = original.clone();
   material.name = original.name;
-  material.userData = { ...original.userData, eventLook: true, sourceMaterialName: original.name };
+  material.userData = { ...original.userData, eventLook: true, sourceMaterialName: original.name, eventProfile: profile };
   if (profile === "billboard") {
     material.visible = false;
     return material;

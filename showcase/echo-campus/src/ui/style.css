@@ -189,6 +189,15 @@
 .ec-demo-links{display:flex;flex-direction:column;border-top:1px solid #e1e8d8;margin-bottom:18px}
 .ec-demo-links a{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid #e1e8d8;color:#68815b;text-decoration:none;font-size:10px}
 .ec-demo-links a svg{width:13px!important;height:13px!important;color:#a3b495}
+.ec-tag-sheet{margin:22px 0 8px;padding-top:18px;border-top:1px solid #e1e8d8}
+.ec-tag-sheet header p,.ec-tag-sheet>p{font-size:9px;line-height:1.8;color:#98a48d;margin:8px 0 12px}
+.ec-tag-sheet ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.ec-tag-sheet li{display:flex;align-items:center;gap:8px;padding:9px 10px;border:1px solid #e0e8d8;border-radius:10px;background:#fff}
+.ec-tag-sheet li>div{flex:1;min-width:0}
+.ec-tag-sheet strong{display:block;font-size:11px;font-weight:500;color:#5f7a55}
+.ec-tag-sheet code{display:block;margin-top:3px;font:10px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;color:#8f9d86;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ec-tag-sheet li button{flex-shrink:0;min-height:30px;padding:0 10px;border:1px solid #d7e2cd;border-radius:999px;background:#f3f7ee;color:#5f7a55;font-size:10px;cursor:pointer}
+.ec-tag-sheet li button:hover{background:#e8f0df}
 .ec-scene-cards{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:26px}
 .ec-scene-card{padding:0 0 13px;overflow:hidden;border:1px solid #e1e7d8;background:#fff;text-align:left;border-radius:10px;position:relative}
 .ec-scene-card.is-selected{border-color:#8faa7e;box-shadow:0 0 0 1px #8faa7e33}
