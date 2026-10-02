@@ -2,7 +2,39 @@
 
 **文档版本**：v1.2 · 2026-10-02（v1.0 / v1.1 同日）\
 **用途**：把 Echo Campus 的合作方 / To B 展示线迁移到另一台服务器，继续开发场景、活动流程与 NFC/支付宝联调。\
-**当前状态**：代码已推送到独立 Git 分支；本分支尚未部署，也没有替换现有线上 Showcase 服务。
+**当前状态**：v1.2 已于 2026-10-02 部署到 `https://capture.meetmind.online/echo-campus/`，替换了原线上 Showcase 服务（见下方「部署状态」）。
+
+## 部署状态（2026-10-02）
+
+| 项 | 当前值 |
+| --- | --- |
+| 地址 | `https://capture.meetmind.online/echo-campus/`（沿用原 Showcase 地址，旧链接和二维码不变；大屏 `?mode=stage`） |
+| 版本 | 本分支 `d2d36dd`；已提交的 `dist/` 就是生产构建，服务器上不执行 `npm run build` |
+| 服务 | `echo-campus-b2b.service`（用户 `echocampus`，`Restart=always`，`127.0.0.1:5191`）；全站只保留这一个 echo-campus 服务 |
+| 代码 | `/srv/meetmind/Meetmind_world`：浅克隆 + 稀疏检出 `showcase/echo-campus`，`npm ci --omit=dev --ignore-scripts` |
+| 数据 | `/var/lib/echo-campus-b2b/event.json`，全新数据；未设 `ECHO_EVENT_CONFIG`，使用内置演示配置（`demoMode:true`） |
+| 密钥 | `/etc/echo-campus-b2b/secrets.env`（root 600，经 `EnvironmentFile=` 加载）。已生成 `ECHO_TAP_SECRET`，但当前保持注释：演示模式下未签名的标签链接要继续可用；正式活动的启用步骤写在该文件里 |
+| 代理 | `ECHO_TRUST_PROXY=1`；Nginx `location ^~ /echo-campus/` 只新增 `proxy_set_header X-Real-IP $remote_addr;`，原配置备份在 `/etc/nginx/conf.d/capture.meetmind.online.conf.bak-20261002-151737-echo-campus-v1.2` |
+| 旧版 | `echo-campus-showcase.service` 已停止并禁用，unit 文件保留；5189 / 5190 / 5192 的 QA 预览进程已停止。旧数据归档在 `/root/backups/echo-campus-20261002/`（root 700），原文件仍在 `/var/lib/echo-campus/` |
+
+旧检出 `/root/meetmind_wt_main` 暂未删除：EchoWorld 的 `echoworld-backend.service` 仍指向其中的 `backend/`（该 unit 早已持续启动失败）。等 EchoWorld 侧处理掉这个 unit 后再删除。
+
+在服务器上更新：
+
+```bash
+cd /srv/meetmind/Meetmind_world
+git rev-parse HEAD   # 记下当前版本，回滚时用
+git pull --ff-only origin codex/echo-campus-b2b-partner-20261002
+cd showcase/echo-campus
+npm ci --omit=dev --ignore-scripts   # 仅当 package-lock.json 有变化
+systemctl restart echo-campus-b2b
+curl -s http://127.0.0.1:5191/api/health
+```
+
+回滚：
+
+- 回到上一个版本：在 `/srv/meetmind/Meetmind_world` 执行 `git checkout --detach <上一个版本 sha>`（本地没有时先 `git fetch --depth=1 origin <sha>`），按需重新 `npm ci --omit=dev --ignore-scripts`，再 `systemctl restart echo-campus-b2b`；数据目录不动。
+- 回到旧 Showcase（仅当 `/root/meetmind_wt_main` 仍在）：`systemctl disable --now echo-campus-b2b && systemctl enable --now echo-campus-showcase`，旧数据仍在 `/var/lib/echo-campus/`。
 
 ## v1.2 更新：画面与人物再提一档（先读这一节）
 
