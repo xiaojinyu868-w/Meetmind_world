@@ -1,8 +1,8 @@
 /* 相遇之庭 · guest experience. Event themes override the five color tokens. */
 :root{
-  --court-ink:#1c2621;--court-paper:#f6f1e6;--court-accent:#d2643c;--court-glow:#ffcf8f;--court-sage:#4a6a5b;
+  --court-ink:#3a2e28;--court-paper:#fbf6ee;--court-accent:#d2643c;--court-glow:#ffcf8f;--court-sage:#2f5d62;
   /* Static fallbacks for in-app webviews without color-mix(); upgraded below. */
-  --court-ink-2:#4a5650;--court-muted:#8a8f86;--court-line:rgba(28,38,33,.11);--court-soft:rgba(28,38,33,.06);--court-card:#fbf8f2;--court-glass:rgba(246,241,230,.82);
+  --court-ink-2:#655c57;--court-muted:#978e87;--court-line:rgba(58,46,40,.11);--court-soft:rgba(58,46,40,.06);--court-card:#fdfaf6;--court-glass:rgba(251,246,238,.82);
   --court-serif:"Songti SC","STSong","Noto Serif SC","Source Han Serif SC","Source Han Serif CN","SimSun",serif;
   --court-sans:-apple-system,BlinkMacSystemFont,"PingFang SC","HarmonyOS Sans SC","MiSans","Microsoft YaHei","Noto Sans SC","Segoe UI",sans-serif;
   --court-ease:cubic-bezier(.2,.8,.2,1);--court-spring:cubic-bezier(.34,1.4,.64,1);
@@ -83,7 +83,7 @@
 @keyframes court-stamp{0%{transform:scale(2.4);opacity:0}60%{transform:scale(.9);opacity:1}100%{transform:scale(1)}}
 
 /* ── Arrival: the first second after a tap ── */
-.court-arrival{position:fixed;inset:0;z-index:70;pointer-events:auto;overflow:auto;-webkit-overflow-scrolling:touch;color:var(--court-paper);background:#121a16;background:radial-gradient(110% 62% at 50% 40%,color-mix(in srgb,var(--persona,#4a6a5b) 40%,#17201b) 0%,#121a16 58%,#0b100d 100%);transition:opacity .7s var(--court-ease),transform .7s var(--court-ease),filter .7s;animation:court-fade-in .5s var(--court-ease)}
+.court-arrival{position:fixed;inset:0;z-index:70;pointer-events:auto;overflow:auto;-webkit-overflow-scrolling:touch;color:var(--court-paper);background:#1d1924;background:radial-gradient(110% 62% at 50% 40%,color-mix(in srgb,var(--persona,#2f5d62) 40%,#241f2c) 0%,#1d1924 58%,#141118 100%);transition:opacity .7s var(--court-ease),transform .7s var(--court-ease),filter .7s;animation:court-fade-in .5s var(--court-ease)}
 .court-arrival::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.5;background:radial-gradient(1px 1px at 20% 30%,rgba(255,255,255,.5),transparent),radial-gradient(1px 1px at 70% 20%,rgba(255,255,255,.4),transparent),radial-gradient(1.5px 1.5px at 85% 60%,rgba(255,220,170,.5),transparent),radial-gradient(1px 1px at 35% 80%,rgba(255,255,255,.35),transparent),radial-gradient(1px 1px at 55% 50%,rgba(255,255,255,.3),transparent);animation:court-drift 14s ease-in-out infinite alternate}
 .court-arrival.is-leaving{opacity:0;transform:scale(1.05);filter:blur(8px);pointer-events:none}
 .court-arrival-inner{position:relative;min-height:100%;max-width:440px;margin:0 auto;display:flex;flex-direction:column;align-items:center;padding:calc(18px + var(--safe-top)) 24px calc(22px + var(--safe-bottom));text-align:center}

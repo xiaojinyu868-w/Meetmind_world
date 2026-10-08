@@ -1,0 +1,22 @@
+/* The tape stamp: printed over the picture as a VHS deck would — warm white,
+   a soft glow, red and blue a pixel apart — clear of the brand pill above and
+   the action bar below. One tracking band runs down the screen, then it goes. */
+.tape-stamp { position: fixed; inset: 0; z-index: 30; pointer-events: none !important; opacity: 0; transition: opacity .6s ease;
+  font: 600 22px/1.3 ui-monospace, "SF Mono", "Roboto Mono", Menlo, Consolas, "Courier New", monospace; letter-spacing: .08em;
+  color: #FFF6E6; text-shadow: -1px 0 rgba(255, 70, 70, .55), 1px 0 rgba(70, 120, 255, .55), 0 0 6px rgba(255, 214, 160, .55); }
+.tape-stamp.on { opacity: 1; transition: opacity .08s linear; }
+.tape-stamp b { position: absolute; font-weight: inherit; white-space: pre; }
+.tape-play { left: calc(28px + env(safe-area-inset-left)); top: calc(96px + env(safe-area-inset-top)); }
+.tape-date { left: calc(28px + env(safe-area-inset-left)); bottom: calc(132px + env(safe-area-inset-bottom)); }
+.tape-band { position: absolute; left: 0; right: 0; top: -12px; height: 9px; opacity: 0;
+  background: repeating-linear-gradient(180deg, rgba(255, 246, 230, .34) 0 3px, rgba(42, 36, 51, .12) 3px 6px, rgba(255, 246, 230, .2) 6px 9px);
+  box-shadow: 0 0 10px rgba(255, 246, 230, .25); mix-blend-mode: screen; }
+.tape-stamp.on .tape-band { animation: tape-track .4s linear forwards; }
+@keyframes tape-track { 0% { opacity: 1; transform: translateY(0); } 92% { opacity: 1; } 100% { opacity: 0; transform: translateY(calc(100vh + 24px)); } }
+/* On a phone the top belongs to the brand pill and the toasts: one block above the action bar. */
+@media (max-width: 640px), (pointer: coarse) {
+  .tape-stamp { font-size: 17px; }
+  .tape-play { left: calc(20px + env(safe-area-inset-left)); top: auto; bottom: calc(170px + env(safe-area-inset-bottom)); }
+  .tape-date { left: calc(20px + env(safe-area-inset-left)); bottom: calc(118px + env(safe-area-inset-bottom)); }
+}
+@media (prefers-reduced-motion: reduce) { .tape-stamp.on .tape-band { animation: none; } }

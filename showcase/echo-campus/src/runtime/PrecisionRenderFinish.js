@@ -2,8 +2,8 @@ import * as THREE from "three";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { GTAOPass } from "three/addons/postprocessing/GTAOPass.js";
-import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { createFloatDepthTarget } from "./RenderPrecision.js";
+import { addCourtFinish } from "./CourtLook.js";
 
 // Candidate replacement for RenderFinish when a float depth target was probed.
 // Even with AO disabled, the scene must pass through the float-depth attachment;
@@ -11,7 +11,7 @@ import { createFloatDepthTarget } from "./RenderPrecision.js";
 export function createPrecisionRenderFinish(renderer, scene, camera, quality, { samples = 4 } = {}) {
   const target = createFloatDepthTarget(1, 1, { samples });
   const composer = new EffectComposer(renderer, target);
-  const render = new RenderPass(scene, camera), output = new OutputPass();
+  const render = new RenderPass(scene, camera);
   composer.addPass(render);
   let ao = null;
   if (quality === "cinema") {
@@ -32,14 +32,15 @@ export function createPrecisionRenderFinish(renderer, scene, camera, quality, { 
     };
     composer.addPass(ao);
   }
-  composer.addPass(output);
+  const look = addCourtFinish(composer, { quality, fxaa: samples === 0, width: innerWidth, height: innerHeight });
   renderer.info.autoReset = false;
   return {
+    look,
     render() { renderer.info.reset(); composer.render(); },
-    resize(width, height) { composer.setSize(width, height); },
+    resize(width, height) { composer.setSize(width, height); look.resize(width, height, renderer.getPixelRatio()); },
     setEnabled(enabled) { if (ao) ao.enabled = !!enabled; },
-    get passes() { return ao?.enabled ? 3 : 2; },
+    get passes() { return 1 + (ao?.enabled ? 1 : 0) + look.passes; },
     diagnostics: { depthFormat: "DEPTH_COMPONENT32F", colorFormat: "RGBA16F", samples, reversed: !!renderer.capabilities.reversedDepthBuffer },
-    dispose() { ao?.dispose(); render.dispose(); output.dispose(); composer.dispose(); },
+    dispose() { ao?.dispose(); render.dispose(); look.dispose(); composer.dispose(); },
   };
 }

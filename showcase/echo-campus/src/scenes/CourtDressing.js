@@ -1,10 +1,11 @@
 import * as THREE from "three";
+import { COURT_LIGHT, fillPosition } from "../runtime/CourtLook.js";
 
 // Event dressing for the guest court, built from the calibrated activity
 // bounds only: warm stone paving under the guests, an inlaid 相遇之庭 emblem,
 // a festoon canopy over the court and two banners facing the guests.
-// Purely visual (no colliders, no picking); a warmer, higher-contrast grade is
-// layered on top of EventLook while the event view is shown.
+// Purely visual (no colliders, no picking). While the event view is shown the
+// court's light and film (CourtLook) are laid over EventLook.
 
 const SERIF = '"Songti SC","STSong","Noto Serif SC","Source Han Serif SC","SimSun",serif';
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -163,7 +164,7 @@ export function planFestoon(bounds, colliders = [], { spacing = 8.5, offset = 0.
 // polygon offset against a coplanar duplicate layer.
 const GROUND_PROFILES = new Set(["site", "site-dark"]);
 
-export function createCourtDressing({ bounds, groundY = 0, event = {}, theme = {}, colliders = [], quality = "balanced", sun = null, hemi = null, fill = null, renderer = null, scene = null, reversedDepth = false, replaces = [] } = {}) {
+export function createCourtDressing({ bounds, groundY = 0, event = {}, theme = {}, colliders = [], quality = "balanced", sun = null, hemi = null, fill = null, renderer = null, scene = null, reversedDepth = false, replaces = [], look = null } = {}) {
   const root = new THREE.Group();
   root.name = "Court dressing · 相遇之庭";
   const resources = [];
@@ -249,16 +250,25 @@ export function createCourtDressing({ bounds, groundY = 0, event = {}, theme = {
   let graded = null, floorState = null;
   function setEnabled(on) {
     if (on && !graded && sun && hemi) {
-      graded = { sun: [sun.color.clone(), sun.intensity], hemi: [hemi.color.clone(), hemi.groundColor.clone(), hemi.intensity], fill: fill ? [fill.color.clone(), fill.intensity] : null, exposure: renderer?.toneMappingExposure, environment: scene?.environmentIntensity };
-      sun.color.set(0xffc98c); sun.intensity = graded.sun[1] * 1.12;
-      hemi.color.set(0xe4dccd); hemi.groundColor.set(0xc9ab86); hemi.intensity = graded.hemi[2] * 0.85;
-      if (fill) { fill.color.set(0xb9c4e0); fill.intensity = graded.fill[1] * 0.8; }
-      if (renderer) renderer.toneMappingExposure = (graded.exposure ?? 1) * 0.97;
-      if (scene) scene.environmentIntensity = (graded.environment ?? 0.6) * 0.75;
+      graded = { sun: [sun.color.clone(), sun.intensity, sun.shadow.intensity], hemi: [hemi.color.clone(), hemi.groundColor.clone(), hemi.intensity], fill: fill ? [fill.color.clone(), fill.intensity, fill.position.clone(), fill.target.position.clone()] : null, exposure: renderer?.toneMappingExposure, environment: scene?.environmentIntensity };
+      sun.color.set(COURT_LIGHT.sun.color); sun.intensity = COURT_LIGHT.sun.intensity; sun.shadow.intensity = COURT_LIGHT.sun.shadowIntensity;
+      hemi.color.set(COURT_LIGHT.sky.sky); hemi.groundColor.set(COURT_LIGHT.sky.ground); hemi.intensity = COURT_LIGHT.sky.intensity;
+      if (fill) {
+        fill.color.set(COURT_LIGHT.fill.color); fill.intensity = COURT_LIGHT.fill.intensity;
+        // The fill's target is not in the scene graph: its matrix is updated by hand.
+        const center = sun.target.position;
+        fill.position.copy(fillPosition(center, sun.position.clone().sub(center)));
+        fill.target.position.copy(center); fill.target.updateMatrixWorld();
+      }
+      if (renderer) renderer.toneMappingExposure = COURT_LIGHT.exposure;
+      if (scene) scene.environmentIntensity = COURT_LIGHT.environment;
     } else if (!on && graded) {
-      sun.color.copy(graded.sun[0]); sun.intensity = graded.sun[1];
+      sun.color.copy(graded.sun[0]); sun.intensity = graded.sun[1]; sun.shadow.intensity = graded.sun[2];
       hemi.color.copy(graded.hemi[0]); hemi.groundColor.copy(graded.hemi[1]); hemi.intensity = graded.hemi[2];
-      if (fill && graded.fill) { fill.color.copy(graded.fill[0]); fill.intensity = graded.fill[1]; }
+      if (fill && graded.fill) {
+        fill.color.copy(graded.fill[0]); fill.intensity = graded.fill[1];
+        fill.position.copy(graded.fill[2]); fill.target.position.copy(graded.fill[3]); fill.target.updateMatrixWorld();
+      }
       if (renderer && graded.exposure !== undefined) renderer.toneMappingExposure = graded.exposure;
       if (scene && graded.environment !== undefined) scene.environmentIntensity = graded.environment;
       graded = null;
@@ -278,6 +288,7 @@ export function createCourtDressing({ bounds, groundY = 0, event = {}, theme = {
       for (const [object, visible] of floorState.replaced) object.visible = visible;
       floorState = null;
     }
+    look?.use(on ? "day" : "neutral");
     root.visible = !!on;
   }
 

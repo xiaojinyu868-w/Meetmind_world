@@ -90,6 +90,14 @@ export function validateManifest(input) {
     return result;
   });
   if (colliders.some(c => Math.hypot(spawn.x - c.x, spawn.z - c.z) < c.r + 0.28)) throw new Error("出生点不能位于碰撞壳内");
+  let eventLook;
+  if (input.eventLook?.sun !== undefined) {
+    const sun = input.eventLook.sun;
+    if (!isObject(sun)) throw new Error("太阳方向需要 {azimuth, elevation}");
+    const azimuth = finite(sun.azimuth, "太阳方位角", 360), elevation = finite(sun.elevation, "太阳仰角", 90);
+    if (elevation <= 0) throw new Error("太阳仰角必须大于 0");
+    eventLook = { sun: { azimuth, elevation } };
+  }
   return {
     schema: SCENE_SCHEMA, name: String(input.name || "我的场景").slice(0,60),
     type: input.type, url: modelUrl(input.url), scale, position, rotation,
@@ -97,6 +105,7 @@ export function validateManifest(input) {
     ...(framingBounds ? { framingBounds } : {}),
     ...(input.siteMode === "campus" ? { siteMode: "campus" } : {}),
     ...(Object.keys(regionBounds).length ? { regionBounds } : {}),
+    ...(eventLook ? { eventLook } : {}),
   };
 }
 export function defaultManifest(type = "glb") {

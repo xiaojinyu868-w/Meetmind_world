@@ -35,7 +35,7 @@ export const DEMO_EVENT = Object.freeze({
   startsAt: "2026-10-01T09:00:00+08:00",
   location: "HUB 中庭南入口",
   entry: Object.freeze({ label: "碰一下手环或立牌", hint: "也可以扫码进入" }),
-  theme: Object.freeze({ ink: "#1c2621", paper: "#f6f1e6", accent: "#d2643c", glow: "#ffcf8f", sage: "#4a6a5b" }),
+  theme: Object.freeze({ ink: "#3a2e28", paper: "#fbf6ee", accent: "#d2643c", glow: "#ffcf8f", sage: "#2f5d62" }),
   personas: PERSONA_IDS,
   schema: "echo-campus-event.v1",
 });

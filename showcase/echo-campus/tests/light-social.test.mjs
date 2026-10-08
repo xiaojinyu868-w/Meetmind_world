@@ -163,7 +163,7 @@ test("partner event profile overrides branding, roster and points while keeping 
   const snapshot = store.snapshot();
   assert.equal(snapshot.event.name, "江苏投资人之夜");
   assert.equal(snapshot.event.theme.accent, "#1677ff");
-  assert.equal(snapshot.event.theme.ink, "#1c2621", "unspecified theme keys keep defaults");
+  assert.equal(snapshot.event.theme.ink, "#3a2e28", "unspecified theme keys keep defaults");
   assert.deepEqual(snapshot.event.personas, ["zhusha", "songshi"]);
   assert.equal("tags" in snapshot.event, false);
   assert.equal(JSON.stringify(snapshot).includes("ALIPAY-STAGE-01"), false);

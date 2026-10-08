@@ -3,6 +3,8 @@ import {loadVenueAsset} from "./runtime/VenueAsset.js";
 import {pickSocialPerson} from "./runtime/SocialPicking.js";
 import * as THREE from "three";
 import "./ui/world.css";
+import "./ui/tape-stamp.css";
+import {showStamp,stampDate} from "./ui/TapeStamp.js";
 import {OrbitControls} from "three/addons/controls/OrbitControls.js";
 import {RoomEnvironment} from "three/addons/environments/RoomEnvironment.js";
 import {getSceneDefinition} from "./runtime/SceneRegistry.js";
@@ -10,7 +12,7 @@ import {createCharacter} from "./scenes/Characters.js";
 import {loadCharacterLibrary,PREMIUM_CHARACTER_ASSETS} from "./scenes/PremiumCharacters.js";
 import {createArrivalEffects} from "./runtime/ArrivalEffects.js";
 import {createWorldLabels} from "./runtime/WorldLabels.js";
-import {personaById} from "./shared/personas.mjs";
+import {personaById,serialLabel} from "./shared/personas.mjs";
 import {visibleSocialAttendees,demoSocialPose,stablePersonSeed,conversationIntent,DEMO_SOCIAL_PAIRS} from "./scenes/SocialEnsemble.js";
 import {createEventGarden,planEventGarden} from "./scenes/EventGarden.js";
 import {planSocialFloor,socialSlotFor} from "./runtime/SocialFloor.js";
@@ -63,6 +65,12 @@ const renderFinish=reversedDepth?createPrecisionRenderFinish(renderer,scene,came
 let precisionBounds=[];
 const precisionDirection=new THREE.Vector3();
 function refreshDepthMaterials(){adaptPolygonOffsetMaterials(scene,reversedDepth);}
+// ?debug&sun=azimuth,elevation tries another sun without editing the venue file.
+function debugSun(manifest){
+ const value=params.has("debug")&&params.get("sun");if(!value)return manifest;
+ const [azimuth,elevation]=value.split(",").map(Number);
+ return [azimuth,elevation].every(Number.isFinite)?{...manifest,eventLook:{...manifest.eventLook,sun:{azimuth,elevation}}}:manifest;
+}
 function updateDepthRange(){
  if(!currentScene)return;
  if(currentScene.config?.type==="splat"){if(camera.near!==.12){camera.near=.12;camera.updateProjectionMatrix();}return;}
@@ -135,12 +143,13 @@ function cameraTo(position,target,fov=43,duration=1800){
 }
 function fitPreset(preset,id){
  const result={...preset,position:[...preset.position],target:[...preset.target]};
+ if(innerWidth<720&&preset.portrait)return {...preset.portrait,position:[...preset.portrait.position],target:[...preset.portrait.target]};
  if(innerWidth<720){const p=new THREE.Vector3(...result.position),t=new THREE.Vector3(...result.target);p.sub(t).multiplyScalar(1.3).add(t);result.position=p.toArray();result.fov=Math.min(58,(result.fov||43)+8);}
  const region=currentScene?.config?.regionBounds?.[id];
  const bounds=region?{box:new THREE.Box3(new THREE.Vector3(region.minX,region.minY,region.minZ),new THREE.Vector3(region.maxX,region.maxY,region.maxZ))}:venuePresentationBounds;
  return activeVenue&&bounds&&innerWidth<720&&(region||["hero","aerial"].includes(id))?fitBuildingPreset(result,bounds,camera.aspect):result;
 }
-function goCamera(id,duration=1700){if(!currentScene)return;const presets=venueView==="event"?{...currentScene.cameras,...currentScene.eventCameras}:currentScene.cameras,actual=presets[id]?id:"hero",preset=fitPreset(presets[actual],actual);if(activeVenue&&venuePresentationBounds){const distance=new THREE.Vector3(...preset.position).distanceTo(new THREE.Vector3(...preset.target)),reach=distance+venuePresentationBounds.radius;controls.maxDistance=Math.max(controls.maxDistance,distance*1.1);camera.far=Math.max(camera.far,reach*2);if(venueView!=="event"){scene.fog.near=Math.max(scene.fog.near,reach*1.05);scene.fog.far=Math.max(scene.fog.far,reach*1.7);}}cameraTo(preset.position,preset.target,preset.fov||43,duration);UI.setCameraSelection(actual);if(activeVenue){const url=new URL(location.href);url.searchParams.set("camera",actual);history.replaceState(null,"",url);}}
+function goCamera(id,duration=1700){if(!currentScene)return;const presets=venueView==="event"?{...currentScene.cameras,...currentScene.eventCameras}:currentScene.cameras,actual=presets[id]?id:"hero",preset=fitPreset(presets[actual],actual);if(activeVenue&&venuePresentationBounds){const distance=new THREE.Vector3(...preset.position).distanceTo(new THREE.Vector3(...preset.target)),reach=distance+venuePresentationBounds.radius;controls.maxDistance=Math.max(controls.maxDistance,distance*1.1);camera.far=Math.max(camera.far,reach*2);if(venueView!=="event"){scene.fog.near=Math.max(scene.fog.near,reach*1.05);scene.fog.far=Math.max(scene.fog.far,reach*1.7);}}cameraTo(preset.position,preset.target,preset.fov||43,duration);renderFinish.look.setShot(UI.stage?"stage":"walk");UI.setCameraSelection(actual);if(activeVenue){const url=new URL(location.href);url.searchParams.set("camera",actual);history.replaceState(null,"",url);}}
 // Everyone, including the viewer, stands on the shared social floor plan, so
 // a guest is in the same spot on every phone and on the big screen.
 function personPosition(index,isSelf=false,person=null){
@@ -242,7 +251,9 @@ function syncLinks(snapshot){
  const isNew=fresh.includes(connection.id);
  const material=new THREE.ShaderMaterial({uniforms:{color:{value:new THREE.Color(0xffc977)},time:linkTime,strength:{value:connection.synthetic&&!isNew?.6:1},burst:{value:isNew?0:-1}},vertexShader:LINK_VERTEX,fragmentShader:LINK_FRAGMENT,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending});
  const line=new THREE.Mesh(geometry,material);line.name="confirmed-"+connection.id;line.raycast=()=>{};line.renderOrder=3;line.userData.attendees=[a.person.id,b.person.id];line.userData.burstStart=isNew?time:null;line.visible=linkVisible(line);linkRoot.add(line);
- if(isNew){for(const p of [a,b]){p.reaction={state:"celebrate",until:time+(p.celebrationDuration||3.2)};arrivals.spawn(p.root.position,"#ffcf8f",{scale:.7,duration:2});}chime("connection");}
+ if(isNew){for(const p of [a,b]){p.reaction={state:"celebrate",until:time+(p.celebrationDuration||3.2)};arrivals.spawn(p.root.position,"#ffcf8f",{scale:.7,duration:2});}chime("connection");
+  const self=client.me?.attendee;
+  if(!UI.stage&&self&&[a.person.id,b.person.id].includes(self.id))showStamp({play:"REC ●",date:`${stampDate()}\n${self.name||"你"} × ${(a.person.id===self.id?b:a).person.name}`});}
  }
 }
 function clearPeople(){for(const person of people.values()){actors.remove(person.root);person.dispose?.();}people.clear();disposeLinks();}
@@ -330,13 +341,14 @@ async function switchScene(id,options={}){
     reserved:DEMO_SOCIAL_PAIRS.flat().map(pid=>demoSocialPose(pid,id,manifest.groundY??0)).filter(Boolean)});
    result.courtDressing=createCourtDressing({bounds:manifest.bounds,groundY:manifest.groundY??0,event:client.snapshot?.event||{},theme:client.snapshot?.event?.theme||{},
     colliders:[...(manifest.colliders||[]),...plannedGarden.items.map(p=>({x:p.x,z:p.z,r:p.r})),...signposts],quality,sun,hemi,fill,renderer,scene,reversedDepth,
-    replaces:[result.eventGarden.root.getObjectByName("event paving surface")].filter(Boolean)});
+    replaces:[result.eventGarden.root.getObjectByName("event paving surface")].filter(Boolean),look:renderFinish.look});
    result.eventGarden.root.add(result.courtDressing.root);
    const a=manifest.anchors.arrival,y=manifest.groundY;
    result.eventCameras=id==="venue-campus"?{
     hero:manifest.cameras.hero,
     // The courtyard where guests stand, with the HUB stair and canopy behind.
-    arrival:{position:[171.34,7.4,108.5],target:[171.34,.9,86.5],fov:46},
+    // Upright phones look down ~25° instead, or the canopy fills a third of the screen.
+    arrival:{position:[171.34,7.4,108.5],target:[171.34,.9,86.5],fov:46,portrait:{position:[171.34,13.5,113],target:[171.34,.7,86],fov:54}},
     garden:{position:[185,4.3,94],target:[171.34,3.5,73],fov:43}
    }:id==="venue-ab-canopy"?{
     hero:{position:[190,65,330],target:[87,37,164],fov:38},
@@ -349,7 +361,7 @@ async function switchScene(id,options={}){
    const originalDispose=result.dispose;
    result.dispose=()=>{result.courtDressing?.dispose();result.eventLook?.dispose();result.eventEntourage?.dispose();result.backdrop?.geometry.dispose();result.backdrop?.material.dispose();result.eventGarden?.dispose();result.architectureShadows?.dispose();result.landscapeSite?.dispose();result.contextLandscape?.dispose();originalDispose?.();};
   }
-  if(eventReady&&options.view==="event"){result.eventLook=await createEventLook({renderer,scene,modelRoot:result.modelRoot,config:manifest,sun,hemi,fill,baseUrl:new URL("./",document.baseURI).href,quality});result.eventEntourage?.setEvent(true);}
+  if(eventReady&&options.view==="event"){result.eventLook=await createEventLook({renderer,scene,modelRoot:result.modelRoot,config:debugSun(manifest),sun,hemi,fill,baseUrl:new URL("./",document.baseURI).href,quality});result.eventEntourage?.setEvent(true);}
   if(serial!==switchSerial){result.dispose?.();return;}
   if(premiumLoadPromise)await premiumLoadPromise;
   if(serial!==switchSerial){result.dispose?.();return;}
@@ -379,6 +391,7 @@ async function switchScene(id,options={}){
  }catch(error){if(result&&result!==currentScene)result.dispose?.();if(serial===switchSerial){UI.setBusy(null);UI.toast("场景加载失败："+error.message);if(!currentScene)document.getElementById("loading-detail").textContent=error.message;}throw error;}
 }
 function clearSelection(){
+ renderFinish.look.setShot(UI.stage?"stage":"walk");
  selectedId=null;linkRoot.children.forEach(o=>o.visible=false);for(const o of [...markerRoot.children]){o.geometry.dispose();o.material.dispose();markerRoot.remove(o);}
  hoveredId=null;hoveredMarker=null;hoverRoot.traverse(o=>{o.geometry?.dispose?.();const m=o.material;if(m){(Array.isArray(m)?m:[m]).forEach(x=>x?.dispose?.());}});hoverRoot.clear();UI.setHoverTarget?.(null);
 }
@@ -438,6 +451,7 @@ function framePerson(position,yaw,{exclude=null,duration=1200,sheet=true}={}){
  const sheetFraction=innerWidth<=760&&sheet?Math.min(.68,(Math.min(innerHeight*.66,620)+10)/innerHeight):0;
  const preset=profileCameraPreset({position,yaw,aspect:camera.aspect,panelFraction:panelWidth/innerWidth,sheetFraction,neighbors:[...people.values()].filter(other=>other!==exclude).map(other=>other.root.position)});
  cameraTo(preset.position,preset.target,preset.fov,duration);
+ renderFinish.look.setShot("close",{focus:sheetFraction+(1-sheetFraction)*.5});
 }
 function focusPerson(id,{openCard=true,duration=1200}={}){
  if(activeVenue&&venueView!=="event")return;
@@ -471,6 +485,7 @@ function welcomeArrival(attendee){
   if(current){current.reaction={state:"wave",until:time+(current.greetingDuration||5)};selectedId=attendee.id;}
   framePerson(current?.root.position||center,current?.root.rotation.y??0,{exclude:current,duration:2600,sheet:false});
   if(p&&!p.arrival)arrivals.spawn(p.root.position,personaById(attendee.persona)?.color,{scale:1.3,duration:3});
+  showStamp({date:`${stampDate()}\n${client.snapshot?.event?.name||"相遇之庭"}  NO.${serialLabel(attendee.serial)}`});
  },180);
 }
 // Big screen: a slow orbit over the courtyard so every arrival and lit
@@ -480,6 +495,7 @@ function welcomeArrival(attendee){
 const stageOrbit={phase:0};
 function updateStageCamera(dt){
  if(!UI.stage||!currentScene||cameraMove||tour||controlsActive)return;
+ if(renderFinish.look.shot!=="stage")renderFinish.look.setShot("stage");
  const b=currentScene.config?.bounds,y=currentScene.spawn?.y||0;
  const center=b?new THREE.Vector3((b.minX+b.maxX)/2,y,(b.minZ+b.maxZ)/2):controls.target.clone();
  const radius=b?Math.max(15,Math.hypot(b.maxX-b.minX,b.maxZ-b.minZ)*.5):24;
@@ -535,7 +551,6 @@ function moveView(dt){
  controls.target.add(movement);camera.position.add(movement);
 }
 client.addEventListener("snapshot",e=>{hasConnected=true;UI.setSnapshot(e.detail);currentScene?.courtDressing?.setEvent(e.detail.event||{});syncPeople(e.detail);});
-document.body.classList.toggle("court-graded",quality!=="low");
 client.addEventListener("me",e=>{UI.setMe(e.detail);const me=e.detail?.attendee;if(!me)return;requestPersona(me.persona,true);premiumLoadPromise?.then(()=>premiumLibrary?.upgradePersona(me.persona,{pin:true}));});
 client.addEventListener("status",e=>{UI.setOnline(e.detail.online);if(!e.detail.online&&e.detail.message)UI.toast("活动连接暂不可用，场景仍可浏览");});
 function resize(){renderer.setSize(innerWidth,innerHeight,false);renderFinish.resize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
@@ -565,7 +580,7 @@ function tick(now){
  if(!paused){
   moveView(dt);
   currentScene?.update(dt,time);currentScene?.eventLook?.update?.(dt,camera,controls.target);
-  currentScene?.eventGarden?.update?.(dt,time);currentScene?.landscapeSite?.update?.(dt,time);currentScene?.architectureShadows?.update();currentScene?.courtDressing?.update(dt,time);
+  currentScene?.eventGarden?.update?.(dt,time);currentScene?.landscapeSite?.update?.(dt,time);currentScene?.architectureShadows?.update();currentScene?.courtDressing?.update(dt,time);renderFinish.look.update(dt,time);
   for(const ring of hoverRoot.children){
    ring.scale.setScalar(reduced?1:1+Math.sin(time*4.2)*.04);
   }
@@ -596,7 +611,7 @@ function diagnostics(){
 window.__THREE_GAME_DIAGNOSTICS__=diagnostics;
 installCanvasRecorder(canvas, diagnostics);
 if(params.has("capture")||params.has("debug")){
- window.__ECHO_CAMPUS__={renderer,scene,camera,controls,client,UI,get currentScene(){return currentScene;},get premiumLibrary(){return premiumLibrary;},switchScene,goCamera,focusPerson,runShowcase,diagnostics,setVenueView,setPaused(value){paused=value;},setCamera(p,t,fov=43){cameraTo(p,t,fov,0);},setChromeHidden(value){UI.hideChrome(value);}};
+ window.__ECHO_CAMPUS__={renderer,scene,camera,controls,client,UI,look:renderFinish.look,lights:{sun,hemi,fill},get currentScene(){return currentScene;},get premiumLibrary(){return premiumLibrary;},switchScene,goCamera,focusPerson,runShowcase,diagnostics,setVenueView,setPaused(value){paused=value;},setCamera(p,t,fov=43){cameraTo(p,t,fov,0);},setChromeHidden(value){UI.hideChrome(value);}};
  window.__THREE_GAME_TEST_HOOKS__={setState:async name=>{if(!currentScene)throw new Error("not ready");if(name==="active-play"||name==="hero"){UI.closePanel();goCamera("hero",0);}else if(name==="arrival"){UI.closePanel();goCamera("arrival",0);}else if(name==="garden"){UI.closePanel();goCamera("garden",0);}else if(name==="gallery"){await switchScene("gallery");}else if(name==="profile"){focusPerson(client.snapshot.attendees[0].id);}else throw new Error("unknown state: "+name);return {state:name};},setPausedForScreenshot(value){paused=value;},setSeed(){return 868;}};
 }
 (async()=>{

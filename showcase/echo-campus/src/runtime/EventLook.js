@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { finishArchitecturalMaterial } from "./ArchitecturalMaterials.js";
 import { eventShadowTuning } from "./EventShadowTuning.js";
+import { sunDirection } from "./CourtLook.js";
 
 // Overrides are keyed to material names inspected in the three delivered GLBs.
 // Never infer that arbitrary green/blue geometry is vegetation/glass.
@@ -50,8 +51,13 @@ export function eventLightFrame(config = {}) {
   const center = new THREE.Vector3((b.minX + b.maxX) / 2, groundY + 1.2, (b.minZ + b.maxZ) / 2);
   // Tighten shadow texels around people instead of the entire survey model.
   const span = Math.max(18, Math.min(48, Math.hypot(b.maxX - b.minX, b.maxZ - b.minZ) / 2 + 6));
-  // Low sun ahead-left gives the garden warm edge light and long natural shadows.
-  const offset = new THREE.Vector3(-38, 14, 28).normalize().multiplyScalar(Math.max(68, span * 2.8));
+  // A venue may place its sun (degrees, azimuth from +z toward +x); otherwise a
+  // low sun ahead-left gives warm edge light and long natural shadows.
+  const sun = config.eventLook?.sun;
+  const direction = sun && [sun.azimuth, sun.elevation].every(Number.isFinite) && sun.elevation > 0
+    ? sunDirection(sun.azimuth, sun.elevation)
+    : new THREE.Vector3(-38, 14, 28).normalize();
+  const offset = direction.multiplyScalar(Math.max(68, span * 2.8));
   return { center, sunPosition: center.clone().add(offset), span, near: .5, far: offset.length() + span * 3, groundY };
 }
 
