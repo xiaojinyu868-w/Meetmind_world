@@ -74,7 +74,12 @@ test("finishing chain: phones skip the bloom; the look starts neutral", () => {
   assert.equal(look.bloom.enabled, false);
   assert.equal(look.uniforms.uSat.value, 1);
   assert.equal(look.uniforms.uLift.value, 0);
-  look.dispose(); phoneLook.dispose();
+  // A device without half-float colour buffers gets no bloom at any quality.
+  const plain = fakeComposer(), plainLook = addCourtFinish(plain, { quality: "cinema", bloom: false });
+  assert.equal(plain.passes.length, 2);
+  assert.equal(plainLook.bloom, null);
+  assert.equal(plainLook.use("day"), "day");
+  look.dispose(); phoneLook.dispose(); plainLook.dispose();
 });
 
 test("look presets and shots ease the film without leaking into neutral", () => {

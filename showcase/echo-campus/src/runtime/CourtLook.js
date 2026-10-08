@@ -140,13 +140,13 @@ const ScrubShader = {
 
 /**
  * Appends the court's finishing chain to a composer that already renders the
- * scene: (scrub + bloom unless `quality` is low) → OutputPass → finish.
- * `fxaa` is for targets without multisampling. Starts neutral.
+ * scene: (scrub + bloom, by default unless `quality` is low) → OutputPass →
+ * finish. `fxaa` is for targets without multisampling. Starts neutral.
  */
-export function addCourtFinish(composer, { quality = "balanced", fxaa = false, width = 1, height = 1 } = {}) {
+export function addCourtFinish(composer, { quality = "balanced", bloom: withBloom = quality !== "low", fxaa = false, width = 1, height = 1 } = {}) {
   let bloom = null;
   const passes = [];
-  if (quality !== "low") {
+  if (withBloom) {
     const scrub = new ShaderPass(ScrubShader);
     bloom = new UnrealBloomPass(new THREE.Vector2(width, height), 0, COURT_LOOK.day.bloom.radius, COURT_LOOK.day.bloom.threshold);
     bloom.enabled = false;
