@@ -6,6 +6,7 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { createCharacterContactShadowResources, updateCharacterContactShadow } from "./CharacterContactShadow.js";
 import { personaById } from "../shared/personas.mjs";
+import { FACE_SUPPORT, detectModelFace, createBodyFace, seededRandom } from "../runtime/CharacterFace.js";
 
 // Keep source textures and geometry shared; only skeletons, mixers and name badges
 // belong to an individual attendee. Coordinates exposed to the world are meters.
@@ -196,7 +197,10 @@ function inspectAsset(gltf, definition, materialCache) {
   if (!skinnedMeshes) warnings.push("模型无骨骼，保持真实静态姿态，不伪造行走动作");
   if (!clipByState.has("walk")) warnings.push("尚无经验证的 Walk 动画");
   if (!clipByState.has("idle")) warnings.push("尚无 Idle 动画，仅可使用轻微骨骼待机");
-  return { definition, scene, clips, clipByState, info: Object.freeze({
+  let faceMesh = null;
+  scene.traverse(object => { if (!faceMesh && object.isSkinnedMesh && object.skeleton.bones.some(bone => /^head$/i.test(bone.name))) faceMesh = object; });
+  const faceHead = faceMesh?.skeleton.bones.find(bone => /^head$/i.test(bone.name)) || null;
+  return { definition, scene, clips, clipByState, faceMesh, faceHead, face: null, facePromise: null, faceBodies: new Set(), info: Object.freeze({
     id: definition.id, url: definition.url, height: definition.height,
     forwardYaw: definition.forwardYaw || 0, meshes, skinnedMeshes, triangles,
     textures: textures.size, boneNames: Object.freeze(boneNames),
@@ -313,12 +317,16 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
   });
   // SkinnedMesh raycasting otherwise caches only the first pose's sphere;
   // a raised hand can then become unclickable outside its idle bounds.
+  let faceMesh = null;
   model.traverse(object => {
     if (!object.isSkinnedMesh) return;
     object.computeBoundingSphere();
     object.boundingSphere.radius *= 2;
     object.boundingBox = null;
+    if (!faceMesh && !Array.isArray(object.material) && object.skeleton.bones.some(bone => /^head$/i.test(bone.name))) faceMesh = object;
   });
+  const face = faceMesh && FACE_SUPPORT[template.definition.id] ? createBodyFace({ mesh: faceMesh, random: seededRandom((Number(seed) || 1) * 7919 + 13) }) : null;
+  if (face) { template.faceBodies.add(face); face.install(template.face); }
   motion.name = "in-place-motion-compensation";
   visual.name = "normalized-character";
   visual.rotation.y = template.definition.forwardYaw || 0;
@@ -488,10 +496,16 @@ function makeCharacter(library, template, { color = 0x607c71, seed = 1, name = "
         motion.position.y = THREE.MathUtils.clamp(-lowest, -0.12, 0.12);
         root.updateMatrixWorld(true);
       }
+      if (face) {
+        const act = social ? performanceState : nextState;
+        face.update(dt, { pose: act === "celebrate" ? "laugh" : act === "wave" ? "wave" : "stand", talking: requestedState === "talk" });
+      }
     },
+    face,
     dispose() {
       if (disposed) return;
       disposed = true;
+      if (face) { template.faceBodies.delete(face); face.dispose(); }
       mixer?.removeEventListener("finished", onFinished);
       mixer?.stopAllAction(); mixer?.uncacheRoot(model);
       const skeletons = new Set();
@@ -559,6 +573,7 @@ export async function loadCharacterLibrary({ baseUrl, assets = PREMIUM_CHARACTER
       upgradePersona(id, { pin = false } = {}) {
         if (!personaById(id) || library.disposed) return Promise.resolve(false);
         if (pin) library.pinnedHd = id;
+        library.ensurePersona(id).then(() => library.ensureFace(id)).catch(() => {});
         const existing = hd.get(id);
         if (existing) { existing.used = performance.now(); return existing.promise; }
         const entry = { used: performance.now(), swaps: null, textures: [] };
@@ -587,6 +602,41 @@ export async function loadCharacterLibrary({ baseUrl, assets = PREMIUM_CHARACTER
         })().catch(error => { if (hd.get(id) === entry) hd.delete(id); disposeTextures(entry.textures); console.warn("HD textures unavailable", id, error?.message || error); return false; });
         return entry.promise;
       },
+      /** Optional (material, mesh) → Promise: compiles the face program off the frame before a body wears it. */
+      compileFace: null,
+      /** Find each persona's face as soon as its model loads (otherwise only on a close-up, through upgradePersona). */
+      autoFaces: false,
+      faceQueue: Promise.resolve(),
+      /**
+       * Finds one persona's painted face between frames, once (CharacterFace.js); every body wearing it blinks and
+       * talks from then on. A persona not in FACE_SUPPORT, or whose face is not found, keeps a still face.
+       */
+      ensureFace(id) {
+        const template = templates.find(item => item.definition.id === id);
+        if (!template || library.disposed) return Promise.resolve(null);
+        if (template.facePromise) return template.facePromise;
+        // One model at a time (each holds its atlas pixels while it is being read); a failure ends only its own turn.
+        const turn = library.faceQueue.then(() => detectModelFace({ mesh: template.faceMesh, headBone: template.faceHead, map: template.faceMesh?.material?.map, support: FACE_SUPPORT[id], compile: library.compileFace }));
+        library.faceQueue = turn.catch(() => null);
+        template.facePromise = turn
+          .catch(error => ({ status: "none", reason: `error: ${error?.message || error}` }))
+          .then(face => {
+            if (library.released) { face.textures?.dispose(); return face; }
+            template.face = face;
+            for (const body of template.faceBodies) body.install(face);
+            return face;
+          });
+        return template.facePromise;
+      },
+      /** Every loaded persona's face, one after another in idle time. */
+      async wakeFaces() {
+        for (const template of [...templates]) if (!library.disposed && FACE_SUPPORT[template.definition.id]) await library.ensureFace(template.definition.id);
+      },
+      faceDiagnostics() {
+        return Object.fromEntries(templates.filter(item => item.facePromise).map(item => [item.definition.id, item.face
+          ? { status: item.face.status, reason: item.face.reason, confidence: item.face.confidence || null, ms: item.face.ms || null, bodies: [...item.faceBodies].filter(body => body.installed).length }
+          : { status: "pending" }]));
+      },
       contactShadowResources: createCharacterContactShadowResources(),
       badgeMaterial: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.68, metalness: 0.08 }),
       hasPersona(id) { return templates.some(item => item.definition.id === id); },
@@ -602,6 +652,7 @@ export async function loadCharacterLibrary({ baseUrl, assets = PREMIUM_CHARACTER
           if (library.released) throw new Error("角色库已释放");
           const template = inspectAsset(gltf, { ...definition, url }, materialCache);
           templates.push(template); library.assets.push(template.info);
+          if (library.autoFaces) library.ensureFace(id);
           return template;
         }).catch(error => { errors.push({ id, message: error?.message || String(error) }); throw error; }).finally(() => pending.delete(id));
         pending.set(id, request);
@@ -629,6 +680,7 @@ export async function loadCharacterLibrary({ baseUrl, assets = PREMIUM_CHARACTER
         if (!library.disposed || library.instances || library.released) return;
         library.released = true;
         for (const id of [...hd.keys()]) revertHd(id);
+        templates.forEach(template => template.face?.textures?.dispose());
         const geometries = new Set(), materials = new Set(), textures = new Set(), skeletons = new Set();
         templates.forEach(template => template.scene.traverse(object => {
           if (object.geometry) geometries.add(object.geometry);
