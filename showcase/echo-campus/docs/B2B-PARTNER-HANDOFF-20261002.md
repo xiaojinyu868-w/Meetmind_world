@@ -9,7 +9,7 @@
 | 项 | 当前值 |
 | --- | --- |
 | 地址 | `https://capture.meetmind.online/echo-campus/`（沿用原 Showcase 地址，旧链接和二维码不变；大屏 `?mode=stage`） |
-| 版本 | 本分支 `0f8df0d`（2026-10-08 美术底座，见 `EXPERIENCE-DESIGN.md` 5.2；上一版 `d2d36dd`，更新前的数据备份在 `/root/backups/echo-campus-b2b-event-20261008-192149.json`）；已提交的 `dist/` 就是生产构建，服务器上不执行 `npm run build` |
+| 版本 | 本分支 `fc11757`（2026-10-08 分身的脸：眨眼、表情、口型，见 `EXPERIENCE-DESIGN.md` 6.1；上一版 `0f8df0d` 美术底座，更新前的数据备份在 `/root/backups/echo-campus-b2b-event-20261008-205938.json`）；已提交的 `dist/` 就是生产构建，服务器上不执行 `npm run build` |
 | 服务 | `echo-campus-b2b.service`（用户 `echocampus`，`Restart=always`，`127.0.0.1:5191`）；全站只保留这一个 echo-campus 服务 |
 | 代码 | `/srv/meetmind/Meetmind_world`：浅克隆 + 稀疏检出 `showcase/echo-campus`，`npm ci --omit=dev --ignore-scripts` |
 | 数据 | `/var/lib/echo-campus-b2b/event.json`，全新数据；未设 `ECHO_EVENT_CONFIG`，使用内置演示配置（`demoMode:true`） |
