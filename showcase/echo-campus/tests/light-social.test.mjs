@@ -197,6 +197,21 @@ test("existing demo stores migrate to personas, arrival numbers and explicit con
   assert.equal(store.join({ consent: true }).attendee.serial, 17);
 });
 
+test("stores holding the old default colours adopt the paper theme; chosen colours stay", t => {
+  const dir = mkdtempSync(join(tmpdir(), "echo-theme-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const file = join(dir, "event.json");
+  const legacy = new EventStore({ file });
+  legacy.state.event.theme = { ink: "#1c2621", paper: "#f6f1e6", accent: "#1677ff", glow: "#ffcf8f", sage: "#4a6a5b" };
+  legacy.persist();
+  const theme = new EventStore({ file }).snapshot().event.theme;
+  assert.deepEqual(theme, { ink: "#3a2e28", paper: "#fbf6ee", accent: "#1677ff", glow: "#ffcf8f", sage: "#2f5d62" });
+  const custom = new EventStore({ file });
+  custom.state.event.theme = { ...custom.state.event.theme, ink: "#102030" };
+  custom.persist();
+  assert.equal(new EventStore({ file }).snapshot().event.theme.ink, "#102030");
+});
+
 test("shared topic vocabulary powers chips and matching with the same names", () => {
   for (const name of TOPIC_NAMES) assert.ok(topicsIn(name).has(name), name + " chip must match its own topic");
   assert.deepEqual(splitChips("品牌设计、种子用户, 融资 / 出海"), ["品牌设计", "种子用户", "融资", "出海"]);

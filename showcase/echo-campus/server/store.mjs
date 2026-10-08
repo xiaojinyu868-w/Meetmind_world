@@ -48,6 +48,7 @@ function publicConnection(c) {
   return { id, fromId, toId, attendeeIds: [fromId, toId], status, createdAt, confirmedAt, synthetic: !!synthetic };
 }
 function common(a, b) { return [...a].filter(tag => b.has(tag)); }
+const LEGACY_THEME = Object.freeze({ ink: "#1c2621", paper: "#f6f1e6", sage: "#4a6a5b" });
 
 export class EventStore {
   constructor({ file = null, now = () => Date.now(), onChange = () => {}, eventConfig = {}, maxAttendees = 1200 } = {}) {
@@ -81,7 +82,10 @@ export class EventStore {
     event.categories = config.categories || persisted.categories || DEMO_EVENT.categories;
     event.checkpoints = config.checkpoints || persisted.checkpoints || DEMO_EVENT.checkpoints;
     event.personas = config.personas || DEMO_EVENT.personas;
-    event.theme = { ...DEMO_EVENT.theme, ...(persisted.theme || {}), ...(config.theme || {}) };
+    // Older stores wrote the then-default colours in full; those were never a
+    // choice, so they follow today's defaults. Any other stored colour stays.
+    const chosen = Object.fromEntries(Object.entries(persisted.theme || {}).filter(([key, value]) => LEGACY_THEME[key] !== value));
+    event.theme = { ...DEMO_EVENT.theme, ...chosen, ...(config.theme || {}) };
     return event;
   }
   migrate() {
