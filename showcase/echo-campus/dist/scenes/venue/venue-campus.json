@@ -239,6 +239,12 @@
     }
   },
   "colliders": [],
+  "eventLook": {
+    "sun": {
+      "azimuth": 135,
+      "elevation": 30
+    }
+  },
   "siteMode": "campus",
   "regionBounds": {
     "towers": {
