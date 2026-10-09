@@ -18,12 +18,28 @@ const HANDOFF_SECONDS = 1;
 const REST_SECONDS = 8;
 const CYCLE_SECONDS = TALK_SECONDS * 2 + HANDOFF_SECONDS + REST_SECONDS;
 
+/** How often a crowd larger than the budget shows a new batch. */
+export const ROTATE_MS = 10 * 60 * 1000;
+/** Arrivals this recent are shown first, so everyone sees who just came in. */
+const FRESH_MS = 3 * 60 * 1000;
+
+function rotationRank(id, turn) {
+  let h = 2166136261 ^ turn;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
+  h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d);
+  return ((h ^ (h >>> 12)) >>> 0) / 4294967296;
+}
+
 /** Actual device attendees can also have synthetic:true. Only curated-demo is
- * a fictional fixture. Budget is mesh LOD only, never a data/deletion policy.
- * Selected and self always fit, even when they exceed a very small budget.
+ * a fictional fixture; `remote` people are a partner's members on the map.
+ * Budget is mesh LOD only, never a data/deletion policy. Selected and self
+ * always fit, even when they exceed a very small budget. With `now`, on-site
+ * guests and then partner members beyond the budget take turns every
+ * ROTATE_MS: the order depends only on the time and the ids, so every phone
+ * and the big screen show the same batch (a phone the first of it).
  * Returns the original DTO references in snapshot order, without mutation.
  */
-export function visibleSocialAttendees(snapshotAttendees, { selectedId = null, selfId = null, maxRendered = 36, ambientCurated = 0 } = {}) {
+export function visibleSocialAttendees(snapshotAttendees, { selectedId = null, selfId = null, maxRendered = 36, ambientCurated = 0, now = 0, rotateMs = ROTATE_MS } = {}) {
   const input = Array.isArray(snapshotAttendees) ? snapshotAttendees : [];
   const unique = new Map();
   for (const person of input) if (person && typeof person.id === "string" && person.id && !unique.has(person.id)) unique.set(person.id, person);
@@ -31,12 +47,22 @@ export function visibleSocialAttendees(snapshotAttendees, { selectedId = null, s
   const requested = Number(maxRendered);
   const limit = requested === Infinity ? Infinity : Number.isFinite(requested) ? Math.max(0, Math.floor(requested)) : 36;
   const chosen = new Set([selfId, selectedId].filter(id => unique.has(id)));
+  const curated = person => person.source === "curated-demo";
+  const turn = now > 0 && rotateMs > 0 ? Math.floor(now / rotateMs) : null;
+  const inTurns = list => (turn === null ? list : list.map(person => [rotationRank(person.id, turn), person]).sort((a, b) => a[0] - b[0]).map(entry => entry[1]));
+  const onsite = people.filter(person => !curated(person) && !person.remote);
+  const fresh = now > 0 ? onsite.filter(person => now - Date.parse(person.joinedAt) < FRESH_MS).sort((a, b) => Date.parse(b.joinedAt) - Date.parse(a.joinedAt)) : [];
+  const freshIds = new Set(fresh.map(person => person.id));
+  const remote = people.filter(person => person.remote);
   // Ambient curated guests fill an otherwise empty courtyard; real arrivals
   // always outrank them within the mesh budget.
-  const ambient = people.filter(person => person.source === "curated-demo" && !DEMO_IDS.has(person.id)).slice(0, Math.max(0, Math.floor(Number(ambientCurated) || 0)));
+  const ambient = people.filter(person => curated(person) && !DEMO_IDS.has(person.id)).slice(0, Math.max(0, Math.floor(Number(ambientCurated) || 0)));
   const candidates = [
-    ...people.filter(person => person.source !== "curated-demo"),
-    ...people.filter(person => person.source === "curated-demo" && DEMO_IDS.has(person.id)),
+    ...fresh,
+    ...inTurns(onsite.filter(person => !freshIds.has(person.id))),
+    ...people.filter(person => curated(person) && DEMO_IDS.has(person.id)),
+    ...inTurns(remote.filter(person => person.active)),
+    ...inTurns(remote.filter(person => !person.active)),
     ...ambient,
   ];
   for (const person of candidates) {

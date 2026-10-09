@@ -1,3 +1,5 @@
+import { applyChanges } from "../shared/changes.mjs";
+
 export class EventClient extends EventTarget {
   static storageFor(search, owner = globalThis) {
     try { return new URLSearchParams(search).get("demoSession") === "tab" ? owner.sessionStorage : owner.localStorage; }
@@ -62,9 +64,25 @@ export class EventClient extends EventTarget {
   setSnapshot(data) {
     if (!data || !data.event || !Number.isSafeInteger(data.version) || data.version < 1 || !Array.isArray(data.attendees) || !Array.isArray(data.connections)) return false;
     if (this.snapshot && data.event.id === this.snapshot.event.id && data.version <= this.snapshot.version) return false;
-    this.snapshot = { event: data.event, version: data.version, attendees: data.attendees, connections: data.connections, activity: data.activity || null };
+    this.snapshot = { event: data.event, version: data.version, attendees: data.attendees, connections: data.connections, activity: data.activity || null, remote: data.remote ?? null };
     this.emit("snapshot", this.snapshot);
     return true;
+  }
+  /** The live changes after our snapshot; a missed version fetches the whole snapshot again. */
+  async applyEntries(entries) {
+    if (!this.snapshot) { await this.reload(); return; }
+    const result = applyChanges(this.snapshot, entries);
+    if (result.changed) { this.snapshot = result.snapshot; this.emit("snapshot", this.snapshot); }
+    if (result.gap) await this.reload();
+  }
+  async reload() {
+    try { this.setSnapshot(await this.request("event")); }
+    catch (error) { this.emit("status", { online: false, message: error.message }); }
+  }
+  /** Names our session on the live socket, so the server can say when our inbox changed. */
+  authSocket() {
+    if (!this.token || this.ws?.readyState !== 1) return;
+    try { this.ws.send(JSON.stringify({ type: "auth", token: this.token })); } catch {}
   }
   async refreshMe() {
     if (!this.token || this.closed) return null;
@@ -96,6 +114,7 @@ export class EventClient extends EventTarget {
     try { this.storage?.setItem("echo-campus-token", data.token); } catch {
       this.emit("status", { online: true, message: "此浏览器无法保存会话，刷新后需要重新入场" });
     }
+    this.authSocket();
     this.me = { attendee: data.attendee, version: data.snapshot?.version || 0, encounters: this.me?.attendee?.id === data.attendee.id ? this.me.encounters : [] };
     this.emit("me", this.me);
     this.setSnapshot(data.snapshot);
@@ -145,9 +164,13 @@ export class EventClient extends EventTarget {
       if (this.closed) return;
       if (!this.ws || this.ws.readyState !== 1) {
         try {
-          const changed = this.setSnapshot(await this.request("event"));
+          // Without the socket: only what changed since our version, and our inbox (no pings reach a poller).
+          const since = this.snapshot?.version;
+          const data = since ? await this.request("changes?since=" + since) : null;
+          if (!data || data.reset) this.setSnapshot(await this.request("event"));
+          else if (data.entries?.length) await this.applyEntries(data.entries);
           this.emit("status", { online: true, transport: "poll" });
-          if (this.token && (changed || !this.me)) await this.refreshMe();
+          if (this.token) await this.refreshMe();
         } catch (error) { this.emit("status", { online: false, message: error.message }); }
       }
       this.startPolling();
@@ -162,14 +185,17 @@ export class EventClient extends EventTarget {
     ws.onopen = () => {
       if (this.closed || this.ws !== ws) return;
       this.retry = 0; this.emit("status", { online: true, transport: "websocket" });
+      this.authSocket();
     };
     ws.onmessage = event => {
       if (this.closed || this.ws !== ws) return;
-      try {
-        const data = JSON.parse(event.data);
-        const changed = this.setSnapshot(data.snapshot || data);
-        if (changed && this.token) this.refreshMe();
-      } catch {}
+      let data;
+      try { data = JSON.parse(event.data); } catch { return; }
+      // After the first full snapshot the socket carries changes, and "me" when our own inbox or passport changed.
+      if (data?.type === "changes") { this.applyEntries(data.entries || []); return; }
+      if (data?.type === "me") { if (this.token) this.refreshMe(); return; }
+      const changed = this.setSnapshot(data?.snapshot || data);
+      if (changed && this.token) this.refreshMe();
     };
     ws.onerror = () => {};
     ws.onclose = () => {

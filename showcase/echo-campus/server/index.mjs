@@ -1,10 +1,12 @@
 import { createServer } from "node:http";
-import { createReadStream, existsSync, statSync } from "node:fs";
-import { resolve, dirname, extname, sep } from "node:path";
+import { createHash } from "node:crypto";
+import { copyFileSync, createReadStream, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from "node:fs";
+import { resolve, dirname, extname, join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import { EventStore, HttpError, fail } from "./store.mjs";
 import { readEventConfig } from "./event-config.mjs";
+import { startPartnerFeed } from "./partner-feed.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_ORIGINS = [
@@ -26,6 +28,19 @@ const MIME = {
 function token(req) {
   const auth = req.headers.authorization || "";
   return auth.startsWith("Bearer ") ? auth.slice(7) : "";
+}
+const TOKEN_SHAPE = /^[A-Za-z0-9_-]{40,100}$/;
+// Content-hashed build output or a ?v= cache-busted asset never changes under its URL.
+const VERSIONED = /\/assets\/(?:.+\/)?[^/]+-[A-Za-z0-9_-]{8,}\.[a-z0-9]+$/i;
+function cacheControl(pathname, url, extension) {
+  if (extension === ".html") return "no-cache";
+  return VERSIONED.test(pathname) || url.searchParams.has("v") ? "public, max-age=31536000, immutable" : "public, max-age=3600";
+}
+function notModified(req, etag, mtime) {
+  const match = req.headers["if-none-match"];
+  if (match) return match.split(",").some(value => value.trim() === etag || value.trim() === "*");
+  const since = Date.parse(req.headers["if-modified-since"] || "");
+  return Number.isFinite(since) && Math.floor(mtime / 1000) * 1000 <= since;
 }
 async function readBody(req) {
   if (!String(req.headers["content-type"] || "").toLowerCase().startsWith("application/json")) fail(415, "JSON_REQUIRED", "请使用 JSON 提交资料");
@@ -66,22 +81,66 @@ export function createEventServer({
   tapSecret = "",
   trustProxy = false,
   maxAttendees = 1200,
+  // Live phones and screens at once; beyond it a phone reads /api/changes every 10 s.
+  maxSockets = 2000,
+  // Changes within this window go out as one message (0: each at once).
+  broadcastMs = 0,
+  // Disk writes coalesced over this window (0: every change written at once).
+  persistDelayMs = 0,
+  // { url, token, label, source, intervalMs }: partner members on the map (server/partner-feed.mjs).
+  partnerFeed = null,
+  // { dir, intervalMs, keep }: rolling copies of the data file during the event.
+  backup = null,
+  log = message => console.warn(message),
 } = {}) {
   const origins = new Set([...DEFAULT_ORIGINS, ...allowedOrigins]);
-  const sockets = new WebSocketServer({ noServer: true, maxPayload: 1024, perMessageDeflate: false });
+  // Only the first full snapshot is large enough to compress; per-change messages stay small and plain.
+  const sockets = new WebSocketServer({
+    noServer: true, maxPayload: 1024,
+    perMessageDeflate: { threshold: 4096, serverNoContextTakeover: true, clientNoContextTakeover: true, zlibDeflateOptions: { level: 5 }, concurrencyLimit: 8 },
+  });
   const limitBuckets = new Map();
-  const store = new EventStore({
-    file: dataFile, now, eventConfig, maxAttendees,
-    onChange(snapshot) {
-      const message = JSON.stringify({ type: "snapshot", ...snapshot });
+  let pending = [], touchedIds = new Set(), flushTimer = null, lastFlush = 0;
+  function flush() {
+    flushTimer = null; lastFlush = Date.now();
+    const entries = pending, touched = touchedIds;
+    pending = []; touchedIds = new Set();
+    if (entries.length) {
+      const message = JSON.stringify({ type: "changes", version: store.state.version, entries });
       for (const client of sockets.clients) {
-        if (client.readyState === WebSocket.OPEN) {
-          if (client.bufferedAmount > 1024 * 1024) client.close(1013, "Slow consumer");
-          else client.send(message);
-        }
+        if (client.readyState !== WebSocket.OPEN) continue;
+        // A phone that cannot keep up reconnects and starts from a fresh snapshot.
+        if (client.bufferedAmount > 1024 * 1024) client.close(1013, "Slow consumer");
+        else client.send(message);
       }
+    }
+    if (touched.size) for (const client of sockets.clients) if (client.readyState === WebSocket.OPEN && touched.has(client.attendeeId)) client.send('{"type":"me"}');
+  }
+  const store = new EventStore({
+    file: dataFile, now, eventConfig, maxAttendees, persistDelayMs,
+    onChange(entry, touched) {
+      pending.push(entry);
+      for (const id of touched) touchedIds.add(id);
+      if (flushTimer) return;
+      const wait = broadcastMs - (Date.now() - lastFlush);
+      if (wait <= 0) flush(); else flushTimer = setTimeout(flush, wait);
     },
   });
+  const feed = partnerFeed?.url ? startPartnerFeed({ store, log, ...partnerFeed }) : null;
+  let backupTimer = null;
+  if (backup?.dir && dataFile) {
+    backupTimer = setInterval(() => {
+      try {
+        store.flush();
+        if (!existsSync(dataFile)) return;
+        mkdirSync(backup.dir, { recursive: true, mode: 0o700 });
+        copyFileSync(dataFile, join(backup.dir, "event-" + new Date().toISOString().replace(/[:.]/g, "-") + ".json"));
+        const copies = readdirSync(backup.dir).filter(name => /^event-.+\.json$/.test(name)).sort();
+        for (const name of copies.slice(0, Math.max(0, copies.length - (backup.keep || 96)))) unlinkSync(join(backup.dir, name));
+      } catch (error) { log("[echo-campus] backup failed: " + error.message); }
+    }, backup.intervalMs || 300000);
+    backupTimer.unref();
+  }
   function allowedOrigin(origin) { return !origin || origins.has(origin); }
   function clientAddress(req) {
     // Only a trusted reverse proxy may name the client; otherwise every guest
@@ -92,18 +151,23 @@ export function createEventServer({
     }
     return req.socket.remoteAddress || "unknown";
   }
+  // A signed-in phone counts against its own session; anonymous requests share
+  // their address, which at a venue is the whole Wi-Fi, so they get ipFactor
+  // times the allowance. Join is always per address (it is how sessions start).
   function rate(req, kind) {
-    const key = clientAddress(req) + ":" + kind;
+    const session = kind !== "join" && TOKEN_SHAPE.test(token(req)) ? createHash("sha256").update(token(req)).digest("base64url").slice(0, 22) : "";
+    const key = (session ? "s:" + session : clientAddress(req)) + ":" + kind;
+    const allowance = session || kind === "join" ? rateLimit[kind] : rateLimit[kind] * (rateLimit.ipFactor ?? 5);
     const moment = now();
     let bucket = limitBuckets.get(key);
     if (!bucket || moment >= bucket.until) {
       bucket = { count: 0, until: moment + rateLimit.windowMs };
       limitBuckets.set(key, bucket);
     }
-    if (++bucket.count > rateLimit[kind]) fail(429, "RATE_LIMITED", "操作较频繁，请稍后重试");
-    if (limitBuckets.size > 5000) {
+    if (++bucket.count > allowance) fail(429, "RATE_LIMITED", "操作较频繁，请稍后重试");
+    if (limitBuckets.size > 20000) {
       for (const [k,v] of limitBuckets) if (moment >= v.until) limitBuckets.delete(k);
-      if (limitBuckets.size > 5000) limitBuckets.delete(limitBuckets.keys().next().value);
+      if (limitBuckets.size > 20000) limitBuckets.delete(limitBuckets.keys().next().value);
     }
   }
   const server = createServer(async (req, res) => {
@@ -120,8 +184,17 @@ export function createEventServer({
           return res.end();
         }
         rate(req, req.method === "GET" ? "read" : url.pathname === "/api/join" ? "join" : "write");
-        if (req.method === "GET" && url.pathname === "/api/health") return json(res, 200, { ok: true, service: "echo-campus-event", mode: "demo", version: store.state.version });
-        if (req.method === "GET" && url.pathname === "/api/event") return json(res, 200, store.snapshot());
+        if (req.method === "GET" && url.pathname === "/api/health") return json(res, 200, {
+          ok: true, service: "echo-campus-event", mode: store.state.event.demoMode ? "demo" : "event", version: store.state.version,
+          attendees: store.state.attendees.length, live: sockets.clients.size, remote: feed ? { ...feed.status } : null,
+          uptime: Math.round(process.uptime()), memoryMb: Math.round(process.memoryUsage().rss / 1048576),
+          cpuMs: Math.round((process.cpuUsage().user + process.cpuUsage().system) / 1000),
+        });
+        if (req.method === "GET" && url.pathname === "/api/event") {
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
+          return res.end(store.snapshotJson());
+        }
+        if (req.method === "GET" && url.pathname === "/api/changes") return json(res, 200, store.changesSince(url.searchParams.get("since")));
         if (req.method === "GET" && url.pathname === "/api/me") return json(res, 200, store.me(token(req)));
         if (req.method === "GET" && url.pathname === "/api/matches") return json(res, 200, store.matches(token(req)));
         if (req.method === "GET" && url.pathname === "/api/activity") return json(res, 200, store.activitySnapshot());
@@ -169,13 +242,20 @@ export function createEventServer({
       const compressed = extension === ".glb" && !req.headers.range && acceptsGzip && existsSync(file + ".gz") && statSync(file + ".gz").isFile();
       if (compressed) file += ".gz";
       const stat = statSync(file);
+      // A validator per served file (the gzip sibling has its own), so a reopened page costs a 304, not the venue again.
+      const etag = `W/"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}"`;
       const headers = {
         "Content-Type": type, "X-Content-Type-Options": "nosniff",
-        "Cache-Control": extension === ".html" ? "no-cache" : "public, max-age=3600",
+        "Cache-Control": cacheControl(pathname, url, extension),
+        ETag: etag, "Last-Modified": stat.mtime.toUTCString(),
         ...(extension === ".glb" ? {"Vary":"Accept-Encoding"} : {}),
         ...(compressed ? {"Content-Encoding":"gzip"} : {}),
         "Accept-Ranges": "bytes", "Referrer-Policy": "same-origin",
       };
+      if (!req.headers.range && notModified(req, etag, stat.mtimeMs)) {
+        res.writeHead(304, { ETag: etag, "Last-Modified": headers["Last-Modified"], "Cache-Control": headers["Cache-Control"], ...(headers.Vary ? { Vary: headers.Vary } : {}) });
+        return res.end();
+      }
       let start = 0, end = stat.size - 1, status = 200;
       if (req.headers.range) {
         const match = String(req.headers.range).match(/^bytes=(\d*)-(\d*)$/);
@@ -214,7 +294,7 @@ export function createEventServer({
         socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n"); socket.destroy(); return;
       }
       rate(req, "read");
-      if (sockets.clients.size >= 100) {
+      if (sockets.clients.size >= maxSockets) {
         socket.write("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n"); socket.destroy(); return;
       }
       sockets.handleUpgrade(req, socket, head, ws => sockets.emit("connection", ws, req));
@@ -224,11 +304,19 @@ export function createEventServer({
   });
   sockets.on("connection", ws => {
     ws.isAlive = true;
+    ws.attendeeId = null;
+    let auths = 0;
     ws.on("pong", () => { ws.isAlive = true; });
     ws.on("error", () => {});
-    // Client has no mutation channel; authenticated mutations use HTTP only.
-    ws.on("message", () => ws.close(1008, "Read-only event stream"));
-    ws.send(JSON.stringify({ type: "snapshot", ...store.snapshot() }));
+    // Read-only: the only message a phone may send names its session, so the
+    // server can tell it when its own inbox or passport changed. Mutations use HTTP.
+    ws.on("message", raw => {
+      let message = null;
+      try { message = JSON.parse(raw.toString()); } catch {}
+      if (message?.type !== "auth" || typeof message.token !== "string" || ++auths > 5) return ws.close(1008, "Read-only event stream");
+      ws.attendeeId = store.authenticate(message.token, false)?.id || null;
+    });
+    ws.send('{"type":"snapshot",' + store.snapshotJson().slice(1));
   });
   const heartbeat = setInterval(() => {
     for (const ws of sockets.clients) {
@@ -246,8 +334,13 @@ export function createEventServer({
       });
       return server.address();
     },
+    feed, flush,
     async close() {
       clearInterval(heartbeat);
+      clearInterval(backupTimer);
+      feed?.stop();
+      if (flushTimer) { clearTimeout(flushTimer); flush(); }
+      store.flush();
       for (const ws of sockets.clients) ws.terminate();
       await new Promise(resolvePromise => sockets.close(resolvePromise));
       if (server.listening) await new Promise(resolvePromise => server.close(resolvePromise));
@@ -257,14 +350,25 @@ export function createEventServer({
 const entry = process.argv[1] && pathToFileURL(resolve(process.argv[1])).href;
 if (entry === import.meta.url) {
   const limit = (name, fallback) => { const value = Number(process.env[name]); return Number.isInteger(value) && value > 0 ? value : fallback; };
+  const env = process.env;
+  const dataFile = env.ECHO_EVENT_DATA ? resolve(env.ECHO_EVENT_DATA) : resolve(HERE, "data/event.json");
   const app = createEventServer({
-    dataFile: process.env.ECHO_EVENT_DATA ? resolve(process.env.ECHO_EVENT_DATA) : resolve(HERE, "data/event.json"),
-    distDir: process.env.ECHO_DIST_DIR ? resolve(process.env.ECHO_DIST_DIR) : resolve(HERE, "../dist"),
-    eventConfig: readEventConfig(process.env.ECHO_EVENT_CONFIG ? resolve(process.env.ECHO_EVENT_CONFIG) : ""),
-    tapSecret: process.env.ECHO_TAP_SECRET || "",
-    trustProxy: process.env.ECHO_TRUST_PROXY === "1",
+    dataFile,
+    distDir: env.ECHO_DIST_DIR ? resolve(env.ECHO_DIST_DIR) : resolve(HERE, "../dist"),
+    eventConfig: readEventConfig(env.ECHO_EVENT_CONFIG ? resolve(env.ECHO_EVENT_CONFIG) : ""),
+    tapSecret: env.ECHO_TAP_SECRET || "",
+    trustProxy: env.ECHO_TRUST_PROXY === "1",
     maxAttendees: limit("ECHO_MAX_ATTENDEES", 1200),
-    rateLimit: { read: limit("ECHO_RATE_READ", 600), write: limit("ECHO_RATE_WRITE", 120), join: limit("ECHO_RATE_JOIN", 60), windowMs: 60000 },
+    maxSockets: limit("ECHO_MAX_SOCKETS", 2000),
+    broadcastMs: limit("ECHO_BROADCAST_MS", 1000),
+    persistDelayMs: limit("ECHO_PERSIST_DELAY_MS", 400),
+    // Venue Wi-Fi: hundreds of arrivals share one address within minutes.
+    rateLimit: { read: limit("ECHO_RATE_READ", 600), write: limit("ECHO_RATE_WRITE", 120), join: limit("ECHO_RATE_JOIN", 600), ipFactor: limit("ECHO_RATE_IP_FACTOR", 5), windowMs: 60000 },
+    partnerFeed: env.ECHO_PARTNER_FEED_URL ? {
+      url: env.ECHO_PARTNER_FEED_URL, token: env.ECHO_PARTNER_FEED_TOKEN || "", label: env.ECHO_PARTNER_FEED_LABEL || "合作伙伴",
+      source: env.ECHO_PARTNER_FEED_SOURCE || "partner", intervalMs: limit("ECHO_PARTNER_FEED_INTERVAL_MS", 60000),
+    } : null,
+    backup: env.ECHO_BACKUP_DIR ? { dir: resolve(env.ECHO_BACKUP_DIR), intervalMs: limit("ECHO_BACKUP_MS", 300000), keep: limit("ECHO_BACKUP_KEEP", 96) } : null,
   });
   const host = process.env.HOST || "127.0.0.1";
   const port = Number(process.env.PORT || 5189);

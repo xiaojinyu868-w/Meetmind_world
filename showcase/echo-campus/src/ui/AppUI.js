@@ -3,6 +3,7 @@ import { defaultManifest, validateManifest } from "../runtime/SceneManifest.js";
 import { listSceneDefinitions } from "../runtime/SceneRegistry.js";
 import { VENUE_CANDIDATES, venueById, venueUrl } from "../runtime/VenueCatalog.js";
 import { PERSONAS, personaById, serialLabel } from "../shared/personas.mjs";
+import { findPerson } from "../shared/changes.mjs";
 import { avatar, arrivalView, inboxView, matchesView, passportView, personView, personaCard, personaPickerView, profileFormView, stageView } from "./CourtViews.js";
 import "./style.css";
 import "./court.css";
@@ -163,8 +164,10 @@ export class AppUI {
     const previous = this.snapshot;
     this.snapshot = snapshot;
     if (snapshot?.event && snapshot.event !== previous?.event) this.applyTheme(snapshot.event);
+    // A real event: no partner-showcase tour, no demo-only controls.
+    this.root.classList.toggle("court-is-event", snapshot?.event?.demoMode === false);
     if (this.selectedPerson) {
-      const updated = snapshot?.attendees?.find(person => person.id === this.selectedPerson.id);
+      const updated = findPerson(snapshot, this.selectedPerson.id);
       if (updated) this.selectedPerson = updated;
     }
     this.syncChrome();
@@ -343,7 +346,7 @@ export class AppUI {
     if (action === "activity") return this.openActivity();
     if (action === "checkpoint") return this.run("onActivityCheckpoint", id);
     if (action === "select-person") {
-      const person = this.snapshot?.attendees.find(a => a.id === id) || this.me?.encounters?.find(c => c.peer?.id === id)?.peer;
+      const person = findPerson(this.snapshot, id) || this.me?.encounters?.find(c => c.peer?.id === id)?.peer;
       if (person) { this.setSelectedPerson(person); return this.run("onSelectPerson", person); }
     }
     if (action === "compose") {
@@ -681,7 +684,7 @@ export class AppUI {
     this.activity = this.snapshot?.activity || this.activity || { checkpoints: [] };
     const renderActivity = () => {
       const done = new Set((this.me?.activity?.checkins || []).map(item => item.checkpointId));
-      this.render(this.panelHeader("ENCOUNTER PASSPORT", "相遇护照", "把现场的每一站，变成一条看得见的路径。") + passportView({ checkpoints: this.activity?.checkpoints || [], done, points: this.me?.activity?.points || 0, signedIn: !!this.me?.attendee }));
+      this.render(this.panelHeader("ENCOUNTER PASSPORT", "相遇护照", "把现场的每一站，变成一条看得见的路径。") + passportView({ checkpoints: this.activity?.checkpoints || [], done, points: this.me?.activity?.points || 0, signedIn: !!this.me?.attendee, demo: this.snapshot?.event?.demoMode !== false }));
       if (this.activityFocusId) requestAnimationFrame(() => { const card = this.root.querySelector(`[data-checkpoint-id="${String(this.activityFocusId).replace(/["\\]/g, "\\$&")}"]`); if (card) { card.classList.add("is-focus"); card.scrollIntoView({ block: "center", behavior: "smooth" }); setTimeout(() => card.classList.remove("is-focus"), 1800); } });
     };
     renderActivity();

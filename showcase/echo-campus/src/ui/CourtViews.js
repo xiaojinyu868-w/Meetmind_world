@@ -98,6 +98,9 @@ export function personView({ person, me, encounter, categoryLabel, own, curated,
   let action;
   if (own) {
     action = `<div class="court-actions-row"><button type="button" class="court-btn court-btn-primary" data-action="edit-profile">${icon("edit")}<span>编辑我的名片</span></button><button type="button" class="court-btn court-btn-soft" data-action="matches">${icon("spark")}<span>认识新朋友</span></button></div>`;
+  } else if (person.remote) {
+    // A partner community's member on the map: not here in person, so no invitation from this card.
+    action = `<p class="court-muted-line">TA 是${esc(person.partner || "合作社群")}的成员，这次在线上和大家一起出现在地图里，不在现场。</p>`;
   } else if (encounter?.status === "confirmed") {
     const contact = encounter.peerContact
       ? `<div class="court-contact"><span>${icon("link")}微信 / 联系方式</span><strong>${esc(encounter.peerContact)}</strong><button type="button" class="court-btn court-btn-small" data-action="copy-contact" data-value="${esc(encounter.peerContact)}">${icon("copy")}复制</button></div>`
@@ -117,7 +120,7 @@ export function personView({ person, me, encounter, categoryLabel, own, curated,
       </form>`;
   }
   return `<div class="court-person" style="--persona:${persona.color}">
-    <div class="court-person-band"><span class="court-person-no">NO.${serialLabel(person.serial)}</span><span class="court-person-trait">${esc(persona.trait)} · ${esc(persona.signature)}</span></div>
+    <div class="court-person-band"><span class="court-person-no">${person.remote ? esc(person.partner || "线上成员") : `NO.${serialLabel(person.serial)}`}</span><span class="court-person-trait">${esc(persona.trait)} · ${esc(persona.signature)}</span></div>
     <div class="ec-person-header court-person-header">${avatar(person, { size: 84, ring: person.wristbandColor })}<div><h2>${esc(person.name)}</h2><p>${esc(person.role || "来宾")}${showCodename ? ` <span class="court-codename">· ${esc(persona.codename)}</span>` : ""}</p><span class="court-category" style="--band:${color(person.wristbandColor)}"><i></i>${esc(categoryLabel)}${curated ? " · 演示人物" : ""}</span></div></div>
     ${person.bio ? `<p class="court-bio">${esc(person.bio)}</p>` : ""}
     ${person.organization ? `<p class="court-org">${esc(person.organization)}</p>` : ""}
@@ -217,11 +220,17 @@ export function matchesView({ result, people, me, quickTopics = false }) {
     <div class="ec-notice ec-notice-soft court-notice">${icon("spark")}<span>推荐来自双方公开的供需标签，用固定词表匹配，没有使用大模型；理由可以逐条核对。</span></div>`;
 }
 
-export function passportView({ checkpoints, done, points, signedIn }) {
+/** `demo`: any stamp can be pressed; at a real event only a checkpoint marked manual has a button, the rest are stamped by touching their stand. */
+export function passportView({ checkpoints, done, points, signedIn, demo = true }) {
+  const stamp = (item, ok) => {
+    if (!signedIn) return "";
+    if (ok || demo || item.manual) return `<button type="button" class="${ok ? "ec-checkpoint-done" : "ec-small-primary"} court-btn court-btn-small ${ok ? "court-btn-soft" : "court-btn-primary"}" data-action="checkin" data-id="${esc(item.id)}" ${ok ? "disabled" : ""}>${ok ? "已盖章" : demo ? "演示盖章" : "盖章"}</button>`;
+    return `<span class="court-stamp-hint">${icon("nfc")}碰一下现场立牌</span>`;
+  };
   const total = checkpoints.reduce((sum, item) => sum + item.points, 0);
   const progress = total ? Math.round(points / total * 100) : 0;
   return `<div class="court-passport-head"><div class="court-ring" style="--p:${progress}"><strong>${points}</strong><small>/ ${total} 分</small></div><div><p>已盖章 <b>${done.size}</b> / ${checkpoints.length}</p><span>在现场用手机碰一下点位立牌即可盖章，每个点位只计一次。</span></div></div>
-    <div class="court-stamps">${checkpoints.map((item, index) => { const ok = done.has(item.id); return `<article class="ec-checkpoint-card court-stamp ${ok ? "is-done" : ""}" data-checkpoint-id="${esc(item.id)}"><span class="court-stamp-seal">${ok ? icon("check") : String(index + 1).padStart(2, "0")}</span><div><strong>${esc(item.label)}</strong><small>${esc(item.partner)} · ${item.points} 分</small><p>${esc(item.description)}</p></div>${signedIn ? `<button type="button" class="${ok ? "ec-checkpoint-done" : "ec-small-primary"} court-btn court-btn-small ${ok ? "court-btn-soft" : "court-btn-primary"}" data-action="checkin" data-id="${esc(item.id)}" ${ok ? "disabled" : ""}>${ok ? "已盖章" : "演示盖章"}</button>` : ""}</article>`; }).join("") || '<div class="ec-empty-state court-empty">活动点位将在这里出现。</div>'}</div>
+    <div class="court-stamps">${checkpoints.map((item, index) => { const ok = done.has(item.id); return `<article class="ec-checkpoint-card court-stamp ${ok ? "is-done" : ""}" data-checkpoint-id="${esc(item.id)}"><span class="court-stamp-seal">${ok ? icon("check") : String(index + 1).padStart(2, "0")}</span><div><strong>${esc(item.label)}</strong><small>${esc(item.partner)} · ${item.points} 分</small><p>${esc(item.description)}</p></div>${stamp(item, ok)}</article>`; }).join("") || '<div class="ec-empty-state court-empty">活动点位将在这里出现。</div>'}</div>
     ${signedIn ? "" : `<button type="button" class="court-btn court-btn-primary court-btn-block" data-action="join">先领取分身，再开始盖章${icon("arrow")}</button>`}`;
 }
 

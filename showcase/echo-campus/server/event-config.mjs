@@ -33,8 +33,9 @@ function checkpoints(list) {
     if (!item || !ID.test(item.id) || seen.has(item.id)) fail("checkpoint id 重复或格式不正确");
     const points = Number(item.points);
     if (!Number.isInteger(points) || points < 0 || points > 1000) fail(`${item.id} 的分值不正确`);
+    if (item.manual !== undefined && typeof item.manual !== "boolean") fail(`${item.id} 的 manual 需要布尔值`);
     seen.add(item.id);
-    return Object.freeze({ id: item.id, label: text(item.label, "checkpoint.label", 16), partner: text(item.partner, "checkpoint.partner", 32), description: text(item.description, "checkpoint.description", 80), points });
+    return Object.freeze({ id: item.id, label: text(item.label, "checkpoint.label", 16), partner: text(item.partner, "checkpoint.partner", 32), description: text(item.description, "checkpoint.description", 80), points, ...(item.manual ? { manual: true } : {}) });
   }));
 }
 
@@ -59,6 +60,16 @@ export function validateEventConfig(input) {
     if (typeof input.demoMode !== "boolean") fail("demoMode 需要布尔值");
     result.demoMode = input.demoMode;
     result.mode = input.demoMode ? "demo" : "event";
+  }
+  // A real event without activation cards: the wristband or link is the entry.
+  for (const flag of ["openJoin", "demoContent"]) {
+    if (input[flag] === undefined) continue;
+    if (typeof input[flag] !== "boolean") fail(`${flag} 需要布尔值`);
+    result[flag] = input[flag];
+  }
+  if (input.taps !== undefined) {
+    if (!["signed", "open"].includes(input.taps)) fail("taps 只能是 signed 或 open");
+    result.taps = input.taps;
   }
   if (input.theme !== undefined) {
     if (!input.theme || typeof input.theme !== "object") fail("theme 需要对象");

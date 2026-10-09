@@ -7,6 +7,7 @@ import { once } from "node:events";
 import { WebSocket } from "ws";
 import { createEventServer } from "../server/index.mjs";
 import { EventStore } from "../server/store.mjs";
+import { applyChanges } from "../src/shared/changes.mjs";
 
 const ALICE = { name: "测试甲", role: "AI 产品创始人", offer: "AI 产品研发、实时 3D", need: "品牌设计、用户访谈", avatarColor: "#778879", consent: true };
 const BOB = { name: "测试乙", role: "设计师", offer: "品牌设计、用户访谈", need: "AI 产品、实时 3D", avatarColor: "#b98878", consent: true };
@@ -142,18 +143,28 @@ test("HTTP two-participant flow and WebSocket reconnect reflect monotonic author
   const firstSocket = await connect();
   const initial = await firstSocket.next();
   assert.equal(initial.type, "snapshot");
+  // After the first snapshot the socket carries only changes; the phone applies them.
+  let view = initial;
+  const advance = async () => {
+    const message = await firstSocket.next();
+    assert.equal(message.type, "changes");
+    const result = applyChanges(view, message.entries);
+    assert.equal(result.gap, false);
+    view = result.snapshot;
+    return view;
+  };
   const a = await request("/api/join", { body: ALICE });
   assert.equal(a.status, 201);
-  const afterA = await firstSocket.next();
+  const afterA = await advance();
   assert.ok(afterA.version > initial.version);
   assert.ok(afterA.attendees.some(p => p.id === a.data.attendee.id));
   const b = await request("/api/join", { body: BOB });
   assert.equal(b.status, 201);
-  const afterB = await firstSocket.next();
+  const afterB = await advance();
   assert.ok(afterB.version > afterA.version);
   const pending = await request("/api/encounters", { token: a.data.token, body: { peerId: b.data.attendee.id } });
   assert.equal(pending.status, 201);
-  const afterPending = await firstSocket.next();
+  const afterPending = await advance();
   assert.ok(afterPending.version > afterB.version);
   assert.equal(afterPending.connections.some(c => c.id === pending.data.encounter.id), false);
   const inbox = await request("/api/me", { token: b.data.token });
@@ -162,7 +173,7 @@ test("HTTP two-participant flow and WebSocket reconnect reflect monotonic author
   assert.equal(denied.status, 403);
   const confirmed = await request("/api/encounters/" + pending.data.encounter.id + "/confirm", { token: b.data.token, method: "POST" });
   assert.equal(confirmed.status, 200);
-  const afterConfirmed = await firstSocket.next();
+  const afterConfirmed = await advance();
   assert.ok(afterConfirmed.connections.some(c => c.id === pending.data.encounter.id));
   firstSocket.ws.close();
   await once(firstSocket.ws, "close");
@@ -170,6 +181,7 @@ test("HTTP two-participant flow and WebSocket reconnect reflect monotonic author
   const fresh = await reconnected.next();
   assert.equal(fresh.version, afterConfirmed.version);
   assert.deepEqual(fresh.connections, afterConfirmed.connections);
+  assert.deepEqual(fresh.attendees, afterConfirmed.attendees, "changes applied one by one equal the authoritative snapshot");
   const publicRead = await request("/api/event");
   assert.equal(publicRead.data.version, fresh.version);
   assert.equal(JSON.stringify(fresh).includes(a.data.token), false);

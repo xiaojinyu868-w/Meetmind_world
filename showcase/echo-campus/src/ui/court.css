@@ -318,6 +318,10 @@
 .court-stamp p{margin:4px 0 0;font-size:12.5px;line-height:1.55;color:var(--court-ink-2)}
 .court-stamp-seal{display:grid;place-items:center;flex-shrink:0;width:48px;height:48px;border-radius:50%;border:1.5px dashed color-mix(in srgb,var(--court-ink) 25%,transparent);font:600 13px ui-monospace,Menlo,monospace;color:var(--court-muted);transform:rotate(-8deg)}
 .court-stamp.is-done .court-stamp-seal{border:2px solid var(--court-accent);color:var(--court-accent);background:color-mix(in srgb,var(--court-accent) 8%,transparent)}
+.court-stamp-hint{display:inline-flex;align-items:center;gap:5px;flex-shrink:0;font-size:12px;color:var(--court-muted);white-space:nowrap}
+.court-stamp-hint svg{width:15px!important;height:15px!important}
+/* A real event: the partner-showcase tour stays out of the guests' toolbar. */
+.court-is-event .ec-presentation{display:none!important}
 
 /* ── Floating names over the world ── */
 .court-labels{position:fixed;inset:0;z-index:5;pointer-events:none;overflow:hidden;contain:strict}

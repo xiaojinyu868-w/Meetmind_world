@@ -13,6 +13,7 @@ import {loadCharacterLibrary,PREMIUM_CHARACTER_ASSETS} from "./scenes/PremiumCha
 import {createArrivalEffects} from "./runtime/ArrivalEffects.js";
 import {createWorldLabels} from "./runtime/WorldLabels.js";
 import {personaById,serialLabel} from "./shared/personas.mjs";
+import {findPerson} from "./shared/changes.mjs";
 import {visibleSocialAttendees,demoSocialPose,stablePersonSeed,conversationIntent,DEMO_SOCIAL_PAIRS} from "./scenes/SocialEnsemble.js";
 import {createEventGarden,planEventGarden} from "./scenes/EventGarden.js";
 import {planSocialFloor,socialSlotFor} from "./runtime/SocialFloor.js";
@@ -213,7 +214,8 @@ function syncPeople(snapshot){
  if(snapshot)noteArrivals(snapshot);
  if(!currentScene||!snapshot||(activeVenue&&!venueEventReady))return;
  const selfId=client.me?.attendee?.id;
- const visibleAttendees=visibleSocialAttendees(snapshot.attendees,{selectedId,selfId,maxRendered:mobile?20:36,ambientCurated:UI.stage?9:mobile?4:9});
+ // Measured with 60 on the floor (docs/EVENT-OPERATIONS.md); a larger crowd takes turns.
+ const visibleAttendees=visibleSocialAttendees([...snapshot.attendees,...(snapshot.remote?.members||[])],{selectedId,selfId,maxRendered:mobile?30:50,ambientCurated:UI.stage?9:mobile?4:9,now:Date.now()});
  const ids=new Set(visibleAttendees.map(p=>p.id));
  for(const [id,value] of people)if(!ids.has(id)){if(selectedId===id)clearSelection();actors.remove(value.root);value.dispose?.();people.delete(id);}
  const self=visibleAttendees.find(p=>p.id===selfId);if(self)requestPersona(self.persona,true);
@@ -456,7 +458,7 @@ function framePerson(position,yaw,{exclude=null,duration=1200,sheet=true}={}){
 function focusPerson(id,{openCard=true,duration=1200}={}){
  if(activeVenue&&venueView!=="event")return;
  let p=people.get(id);
- const known=client.snapshot?.attendees.find(person=>person.id===id);
+ const known=findPerson(client.snapshot,id);
  if(!p){if(!known)return;selectedId=id;syncPeople(client.snapshot);p=people.get(id);}
  // Their look may still be streaming in: the card never waits for the model.
  if(!p){if(openCard)UI.setSelectedPerson(known);return;}
@@ -551,6 +553,8 @@ function moveView(dt){
  controls.target.add(movement);camera.position.add(movement);
 }
 client.addEventListener("snapshot",e=>{hasConnected=true;UI.setSnapshot(e.detail);currentScene?.courtDressing?.setEvent(e.detail.event||{});syncPeople(e.detail);});
+// A crowd beyond the budget takes turns (SocialEnsemble ROTATE_MS); look for the next batch every minute.
+setInterval(()=>{if(client.snapshot)syncPeople(client.snapshot);},60000);
 client.addEventListener("me",e=>{UI.setMe(e.detail);const me=e.detail?.attendee;if(!me)return;requestPersona(me.persona,true);premiumLoadPromise?.then(()=>premiumLibrary?.upgradePersona(me.persona,{pin:true}));});
 client.addEventListener("status",e=>{UI.setOnline(e.detail.online);if(!e.detail.online&&e.detail.message)UI.toast("活动连接暂不可用，场景仍可浏览");});
 function resize(){renderer.setSize(innerWidth,innerHeight,false);renderFinish.resize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}

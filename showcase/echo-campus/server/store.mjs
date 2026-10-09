@@ -4,9 +4,12 @@ import { dirname } from "node:path";
 import { DEMO_EVENT, SEED_PERSONAS, seedAttendees, seedConnections, demoBadges } from "./seed.mjs";
 import { assignPersona, defaultDisplayName, personaById } from "../src/shared/personas.mjs";
 import { topicsIn } from "../src/shared/topics.mjs";
+import { CHANGE } from "../src/shared/changes.mjs";
 
 const TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const TAP_WINDOW_MS = 10 * 60 * 1000;
+// Versions a reconnecting or polling phone can catch up on without a full snapshot.
+const HISTORY_LIMIT = 2000;
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const CONTACT_VISIBILITY = new Set(["hidden", "connections", "public"]);
 // Public snapshot never carries the tap registry: tag ids are not credentials,
@@ -51,12 +54,21 @@ function common(a, b) { return [...a].filter(tag => b.has(tag)); }
 const LEGACY_THEME = Object.freeze({ ink: "#1c2621", paper: "#f6f1e6", sage: "#4a6a5b" });
 
 export class EventStore {
-  constructor({ file = null, now = () => Date.now(), onChange = () => {}, eventConfig = {}, maxAttendees = 1200 } = {}) {
+  /**
+   * `onChange(entry, touched)` receives each new version's public operations
+   * ({ v, ops }) and the attendee ids whose private view (/api/me) changed.
+   * `persistDelayMs` > 0 coalesces disk writes; call flush() before exit.
+   */
+  constructor({ file = null, now = () => Date.now(), onChange = () => {}, eventConfig = {}, maxAttendees = 1200, persistDelayMs = 0 } = {}) {
     this.file = file;
     this.now = now;
     this.onChange = onChange;
     this.maxAttendees = maxAttendees;
+    this.persistDelayMs = persistDelayMs;
+    this.persistTimer = null;
     this.tapNonces = new Map();
+    this.history = [];
+    this.snapshotCache = null;
     if (file && existsSync(file)) {
       this.state = JSON.parse(readFileSync(file, "utf8"));
       if (this.state.schema !== "echo-campus-store.v1") throw new Error("Unsupported demo store schema");
@@ -65,15 +77,20 @@ export class EventStore {
       if (this.migrate() || !this.state.event.activityMode) this.persist();
     } else {
       const date = new Date(now()).toISOString();
+      const event = this.composeEvent({}, eventConfig);
+      // A real event starts empty: no fictional guests, connections or demo cards.
+      const demo = event.demoContent !== false;
       this.state = {
-        schema: "echo-campus-store.v1", version: 1, event: this.composeEvent({}, eventConfig),
-        attendees: seedAttendees(date), encounters: seedConnections(date), sessions: [], checkins: [],
-        badges: demoBadges().map(b => ({ badgeId: b.badgeId, activationHash: hashSecret(b.activationCode), attendeeId: null })),
+        schema: "echo-campus-store.v1", version: 1, event,
+        attendees: demo ? seedAttendees(date) : [], encounters: demo ? seedConnections(date) : [], sessions: [], checkins: [],
+        badges: demo ? demoBadges().map(b => ({ badgeId: b.badgeId, activationHash: hashSecret(b.activationCode), attendeeId: null })) : [],
         nextSerial: 16,
       };
       this.persist();
     }
+    this.indexSessions();
   }
+  indexSessions() { this.sessionsByHash = new Map(this.state.sessions.map(s => [s.tokenHash, s])); }
   composeEvent(persisted = {}, config = {}) {
     // Deployment config wins over persisted demo fields; persisted runtime
     // fields (e.g. a disabled demoMode) win over the built-in defaults.
@@ -181,16 +198,71 @@ export class EventStore {
     };
   }
   persist() {
+    if (this.persistTimer) { clearTimeout(this.persistTimer); this.persistTimer = null; }
     if (!this.file) return;
     mkdirSync(dirname(this.file), { recursive: true, mode: 0o700 });
     const temp = this.file + "." + process.pid + ".tmp";
     writeFileSync(temp, JSON.stringify(this.state), { mode: 0o600 });
     renameSync(temp, this.file);
   }
-  changed() {
+  schedulePersist() {
+    if (!(this.persistDelayMs > 0)) { this.persist(); return; }
+    this.persistTimer ??= setTimeout(() => this.persist(), this.persistDelayMs);
+  }
+  /** Writes a pending coalesced change now (shutdown, backups). */
+  flush() { if (this.persistTimer) this.persist(); }
+  /** One new version: `ops` turn the previous public snapshot into this one; `touched` attendees should refresh /api/me. */
+  changed(ops = [], touched = []) {
     this.state.version += 1;
-    this.persist();
-    this.onChange(this.snapshot());
+    this.snapshotCache = null;
+    const entry = { v: this.state.version, ops };
+    this.history.push(entry);
+    if (this.history.length > HISTORY_LIMIT) this.history.splice(0, this.history.length - HISTORY_LIMIT);
+    this.schedulePersist();
+    this.onChange(entry, touched);
+  }
+  /** Catch-up for a phone at `version`: the entries after it, or reset:true when they are no longer kept. */
+  changesSince(version) {
+    const current = this.state.version, since = Number(version);
+    if (!Number.isSafeInteger(since) || since > current) return { version: current, reset: true, entries: [] };
+    if (since === current) return { version: current, entries: [] };
+    const oldest = this.history[0]?.v;
+    if (!oldest || since < oldest - 1) return { version: current, reset: true, entries: [] };
+    return { version: current, entries: this.history.filter(entry => entry.v > since) };
+  }
+  /** Public operations for one attendee as everyone now sees them. */
+  attendeeOps(attendee) {
+    if (!attendee) return [];
+    if (!attendee.consent || attendee.listed === false) return [{ type: CHANGE.attendeeRemoved, id: attendee.id }];
+    const listed = this.listedIds();
+    return [
+      { type: CHANGE.attendee, attendee: this.publicAttendee(attendee) },
+      ...this.state.encounters.filter(c => c.status === "confirmed" && (c.fromId === attendee.id || c.toId === attendee.id) && listed.has(c.fromId) && listed.has(c.toId)).map(c => ({ type: CHANGE.connection, connection: publicConnection(c) })),
+    ];
+  }
+  connectionOps(encounter) {
+    const listed = this.listedIds();
+    const ops = listed.has(encounter.fromId) && listed.has(encounter.toId) ? [{ type: CHANGE.connection, connection: publicConnection(encounter) }] : [];
+    // The "connection" checkpoint is earned by confirming, not by a stand or a button.
+    const checkpoint = this.checkpoints().find(item => item.id === "connection");
+    let awarded = false;
+    if (checkpoint) for (const attendeeId of [encounter.fromId, encounter.toId]) {
+      if (this.state.checkins.some(item => item.attendeeId === attendeeId && item.checkpointId === checkpoint.id)) continue;
+      this.state.checkins.push({ id: "checkin-" + randomUUID(), attendeeId, checkpointId: checkpoint.id, points: checkpoint.points, createdAt: encounter.confirmedAt || new Date(this.now()).toISOString() });
+      awarded = true;
+    }
+    return awarded ? [...ops, { type: CHANGE.activity, activity: this.activitySnapshot() }] : ops;
+  }
+  /**
+   * Partner members shown on the map (e.g. a community's members, read every
+   * minute by server/partner-feed.mjs). Only a real change makes a version.
+   */
+  setRemote(remote) {
+    const block = remote && Array.isArray(remote.members) ? { source: remote.source, label: remote.label, members: remote.members } : null;
+    if (JSON.stringify(block) === JSON.stringify(this.state.remote ?? null)) return false;
+    this.state.remote = block;
+    this.changed([{ type: CHANGE.remote, remote: block }]);
+    return true;
   }
   listedIds() { return new Set(this.state.attendees.filter(a => a.consent && a.listed !== false).map(a => a.id)); }
   activitySnapshot() {
@@ -210,26 +282,37 @@ export class EventStore {
       checkins: items.map(item => ({ checkpointId: item.checkpointId, points: item.points, checkedInAt: item.createdAt })),
     };
   }
-  checkin(token, checkpointId) {
+  /** `viaTap`: the checkpoint's tag was touched. Outside demo mode only a tap (or a checkpoint marked manual) stamps. */
+  checkin(token, checkpointId, { viaTap = false } = {}) {
     const attendee = this.authenticate(token);
     const checkpoint = this.checkpoints().find(item => item.id === checkpointId);
     if (!checkpoint) fail(404, "CHECKPOINT_NOT_FOUND", "这个打卡点尚未开放");
     const existing = this.state.checkins.find(item => item.attendeeId === attendee.id && item.checkpointId === checkpoint.id);
     if (existing) return { checkin: { checkpointId: existing.checkpointId, points: existing.points, checkedInAt: existing.createdAt }, activity: this.meActivity(attendee.id), snapshot: this.snapshot(), idempotent: true };
+    if (!viaTap && !this.state.event.demoMode && !checkpoint.manual) fail(403, "CHECKIN_NEEDS_TAP", "请碰一下点位的立牌来盖章");
     const item = { id: "checkin-" + randomUUID(), attendeeId: attendee.id, checkpointId: checkpoint.id, points: checkpoint.points, createdAt: new Date(this.now()).toISOString() };
     this.state.checkins.push(item);
-    this.changed();
+    this.changed([{ type: CHANGE.activity, activity: this.activitySnapshot() }], [attendee.id]);
     return { checkin: { checkpointId: item.checkpointId, points: item.points, checkedInAt: item.createdAt }, activity: this.meActivity(attendee.id), snapshot: this.snapshot(), idempotent: false };
   }
+  /** The public snapshot, computed once per version (every phone and poll reads the same one). */
   snapshot() {
+    if (this.snapshotCache?.version === this.state.version) return this.snapshotCache.value;
     const listed = this.listedIds();
-    return {
+    const value = {
       event: this.publicEvent(),
       version: this.state.version,
       attendees: this.state.attendees.filter(a => listed.has(a.id)).map(a => this.publicAttendee(a)),
       connections: this.state.encounters.filter(c => c.status === "confirmed" && listed.has(c.fromId) && listed.has(c.toId)).map(publicConnection),
       activity: this.activitySnapshot(),
+      remote: this.state.remote ?? null,
     };
+    this.snapshotCache = { version: this.state.version, value, json: null };
+    return value;
+  }
+  snapshotJson() {
+    const value = this.snapshot();
+    return (this.snapshotCache.json ??= JSON.stringify(value));
   }
   authenticate(token, required = true) {
     if (typeof token !== "string" || token.length > 200 || !/^[A-Za-z0-9_-]{40,100}$/.test(token)) {
@@ -237,7 +320,8 @@ export class EventStore {
       return null;
     }
     const hash = hashSecret(token);
-    const session = this.state.sessions.find(s => s.tokenHash === hash && s.expiresAt > this.now());
+    const found = this.sessionsByHash.get(hash);
+    const session = found && found.expiresAt > this.now() ? found : null;
     if (!session) {
       if (required) fail(401, "SESSION_EXPIRED", "入场会话已过期，请重新入场");
       return null;
@@ -268,10 +352,11 @@ export class EventStore {
       const customName = !!fields.name;
       Object.assign(existing, fields, { customName, name: fields.name || defaultDisplayName(fields.persona, existing.serial) });
       if (badge && !badge.attendeeId) badge.attendeeId = existing.id;
-      this.changed();
+      this.changed(this.attendeeOps(existing), [existing.id]);
       return { token: existingToken, attendee: this.publicAttendee(existing), snapshot: this.snapshot(), resumed: true };
     }
-    if (!badgeId && !this.state.event.demoMode) fail(403, "BADGE_REQUIRED", "本活动需要入场卡");
+    // openJoin: a real event where the wristband or the link is the entry, no activation card.
+    if (!badgeId && !this.state.event.demoMode && !this.state.event.openJoin) fail(403, "BADGE_REQUIRED", "本活动需要入场卡");
     if (this.state.attendees.length >= this.maxAttendees) fail(409, "EVENT_CAPACITY", "活动已达到人数上限");
     const token = randomBytes(32).toString("base64url");
     const count = this.state.attendees.length;
@@ -287,10 +372,13 @@ export class EventStore {
       joinedAt: new Date(this.now()).toISOString(),
     };
     this.state.attendees.push(attendee);
-    this.state.sessions = this.state.sessions.filter(s => s.expiresAt > this.now());
-    this.state.sessions.push({ tokenHash: hashSecret(token), attendeeId: attendee.id, createdAt: this.now(), expiresAt: this.now() + TTL_MS });
+    const live = this.state.sessions.filter(s => s.expiresAt > this.now());
+    if (live.length !== this.state.sessions.length) { this.state.sessions = live; this.indexSessions(); }
+    const session = { tokenHash: hashSecret(token), attendeeId: attendee.id, createdAt: this.now(), expiresAt: this.now() + TTL_MS };
+    this.state.sessions.push(session);
+    this.sessionsByHash.set(session.tokenHash, session);
     if (badge) badge.attendeeId = attendee.id;
-    this.changed();
+    this.changed(this.attendeeOps(attendee), [attendee.id]);
     return { token, attendee: this.publicAttendee(attendee), snapshot: this.snapshot(), resumed: false };
   }
   me(token) {
@@ -331,7 +419,7 @@ export class EventStore {
       // The person who set a request aside now reaches out: that is a yes.
       existing.status = "confirmed";
       existing.confirmedAt = new Date(this.now()).toISOString();
-      this.changed();
+      this.changed(this.connectionOps(existing), [existing.fromId, existing.toId]);
       return { encounter: publicConnection(existing), idempotent: false, version: this.state.version };
     }
     if (existing) return { encounter: publicConnection({ ...existing, status: existing.status === "declined" ? "pending" : existing.status }), idempotent: true, version: this.state.version };
@@ -341,7 +429,8 @@ export class EventStore {
       ...(note ? { note } : {}),
     };
     this.state.encounters.push(encounter);
-    this.changed();
+    // Pending stays private: no public operation, only the two inboxes change.
+    this.changed([], [self.id, peer.id]);
     return { encounter: publicConnection(encounter), idempotent: false, version: this.state.version };
   }
   confirmEncounter(token, id) {
@@ -352,7 +441,7 @@ export class EventStore {
     if (encounter.status === "confirmed") return { encounter: publicConnection(encounter), idempotent: true, version: this.state.version };
     encounter.status = "confirmed";
     encounter.confirmedAt = new Date(this.now()).toISOString();
-    this.changed();
+    this.changed(this.connectionOps(encounter), [encounter.fromId, encounter.toId]);
     return { encounter: publicConnection(encounter), idempotent: false, version: this.state.version };
   }
   declineEncounter(token, id) {
@@ -361,18 +450,20 @@ export class EventStore {
     if (!encounter) fail(404, "ENCOUNTER_NOT_FOUND", "这次相遇不存在");
     if (encounter.toId !== self.id) fail(403, "PEER_CONFIRMATION_REQUIRED", "只有收到请求的一方可以处理");
     if (encounter.status === "confirmed") fail(409, "ALREADY_CONFIRMED", "这次相遇已经确认");
-    if (encounter.status !== "declined") { encounter.status = "declined"; this.changed(); }
+    if (encounter.status !== "declined") { encounter.status = "declined"; this.changed([], [self.id]); }
     return { declined: true, version: this.state.version };
   }
   leave(token) {
     const self = this.authenticate(token);
     if (self.source === "curated-demo") fail(403, "DEMO_PERSON", "演示人物不能删除");
+    const peers = this.state.encounters.filter(c => c.fromId === self.id || c.toId === self.id).map(c => (c.fromId === self.id ? c.toId : c.fromId));
     this.state.attendees = this.state.attendees.filter(a => a.id !== self.id);
     this.state.sessions = this.state.sessions.filter(s => s.attendeeId !== self.id);
+    this.indexSessions();
     this.state.encounters = this.state.encounters.filter(c => c.fromId !== self.id && c.toId !== self.id);
     this.state.checkins = this.state.checkins.filter(c => c.attendeeId !== self.id);
     for (const badge of this.state.badges) if (badge.attendeeId === self.id) badge.attendeeId = null;
-    this.changed();
+    this.changed([{ type: CHANGE.attendeeRemoved, id: self.id }, { type: CHANGE.activity, activity: this.activitySnapshot() }], [...new Set(peers)]);
     return { left: true, version: this.state.version };
   }
   resolveTag(tag) {
@@ -387,13 +478,17 @@ export class EventStore {
   }
   /** NFC / Alipay tap adapter. With a shared secret every tap must carry
    * HMAC-SHA256(secret, tag.ts.nonce) within ten minutes and a fresh nonce;
-   * without one, only demoMode accepts unsigned taps (verified:false). */
+   * without one, only demoMode accepts unsigned taps (verified:false).
+   * `taps: "open"` (plain NFC stickers and wristbands, which cannot sign) also
+   * accepts an unsigned tap of a known tag, still verified:false; a signed one
+   * is checked as usual. */
   tap(token, body, { secret = "" } = {}) {
     if (!body || typeof body !== "object") fail(400, "INVALID_TAP", "触碰数据无效");
     const tag = cleanText(body.tag, "标签", 2, 64);
     if (!/^[A-Za-z0-9_-]+$/.test(tag)) fail(400, "INVALID_TAP", "标签格式不正确");
     let verified = false;
-    if (secret) {
+    const unsignedOpen = this.state.event.taps === "open" && body.sig === undefined;
+    if (secret && !unsignedOpen) {
       const ts = Number(body.ts), nonce = typeof body.nonce === "string" ? body.nonce : "", sig = typeof body.sig === "string" ? body.sig.toLowerCase() : "";
       if (!Number.isSafeInteger(ts) || Math.abs(this.now() - ts * 1000) > TAP_WINDOW_MS) fail(401, "TAP_EXPIRED", "这次触碰已过期，请再碰一下");
       if (!/^[A-Za-z0-9_-]{8,64}$/.test(nonce) || !/^[0-9a-f]{64}$/.test(sig)) fail(401, "TAP_SIGNATURE_INVALID", "触碰签名无效");
@@ -404,7 +499,7 @@ export class EventStore {
       if (this.tapNonces.has(nonce)) fail(409, "TAP_REPLAYED", "这次触碰已经使用过，请再碰一下");
       this.tapNonces.set(nonce, moment + TAP_WINDOW_MS * 2);
       verified = true;
-    } else if (!this.state.event.demoMode) fail(403, "TAP_SIGNATURE_REQUIRED", "本活动需要已签名的触碰");
+    } else if (!this.state.event.demoMode && !unsignedOpen) fail(403, "TAP_SIGNATURE_REQUIRED", "本活动需要已签名的触碰");
     const resolved = this.resolveTag(tag);
     if (!resolved) fail(404, "TAG_NOT_FOUND", "没有识别这枚标签");
     const result = { tag: { id: tag, ...resolved }, verified };
@@ -412,10 +507,10 @@ export class EventStore {
     if (attendee && resolved.kind === "wristband" && attendee.category === "guest" && this.categories().some(item => item.id === resolved.category)) {
       attendee.category = resolved.category;
       attendee.wristbandColor = this.category(resolved.category).wristbandColor;
-      this.changed();
+      this.changed(this.attendeeOps(attendee), [attendee.id]);
       result.attendee = this.publicAttendee(attendee);
     }
-    if (attendee && resolved.kind === "checkpoint") result.checkin = this.checkin(token, resolved.checkpoint);
+    if (attendee && resolved.kind === "checkpoint") result.checkin = this.checkin(token, resolved.checkpoint, { viaTap: true });
     return result;
   }
   matches(token) {
