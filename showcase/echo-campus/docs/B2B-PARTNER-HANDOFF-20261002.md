@@ -9,7 +9,8 @@
 | 项 | 当前值 |
 | --- | --- |
 | 地址 | `https://capture.meetmind.online/echo-campus/`（沿用原 Showcase 地址，旧链接和二维码不变；大屏 `?mode=stage`） |
-| 版本 | 本分支 `fc11757`（2026-10-08 分身的脸：眨眼、表情、口型，见 `EXPERIENCE-DESIGN.md` 6.1；上一版 `0f8df0d` 美术底座，更新前的数据备份在 `/root/backups/echo-campus-b2b-event-20261008-205938.json`）；已提交的 `dist/` 就是生产构建，服务器上不执行 `npm run build` |
+| 版本 | 本分支 `890588a`（2026-10-09 活动级承载：增量推送、开放活动模式、呆猫成员上图，见 `EVENT-OPERATIONS.md`；上一版 `fc11757` 分身的脸，更新前的数据备份在 `/root/backups/echo-campus-b2b-event-20261009-234935.json`）；已提交的 `dist/` 就是生产构建，服务器上不执行 `npm run build` |
+| 缓存 | 2026-10-09 去掉了 Nginx `location ^~ /echo-campus/` 里强制的 `add_header Cache-Control "no-cache" always;`（原配置备份在 `/root/backups/capture.meetmind.online.conf.bak-20261009-*`），由应用自己给出缓存头：页面 `no-cache` + ETag，带哈希或 `?v=` 的资源长期缓存。实测手机再次打开从 14.5 MB 降到 0 MB |
 | 服务 | `echo-campus-b2b.service`（用户 `echocampus`，`Restart=always`，`127.0.0.1:5191`）；全站只保留这一个 echo-campus 服务 |
 | 代码 | `/srv/meetmind/Meetmind_world`：浅克隆 + 稀疏检出 `showcase/echo-campus`，`npm ci --omit=dev --ignore-scripts` |
 | 数据 | `/var/lib/echo-campus-b2b/event.json`，全新数据；未设 `ECHO_EVENT_CONFIG`，使用内置演示配置（`demoMode:true`） |
