@@ -1,6 +1,7 @@
 // Dev-only: renders persona portraits with the production character runtime.
 // Open via `npm run dev` at /tools/portrait-studio.html?persona=zhusha&kind=bust
-// window.__renderPortrait() resolves to a transparent WebP data URL.
+// window.__renderPortrait() resolves to a transparent WebP data URL; add
+// &scale=3&format=png for print-size promotional PNGs.
 import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { loadCharacterLibrary } from "../src/scenes/PremiumCharacters.js";
@@ -10,9 +11,11 @@ const params = new URLSearchParams(location.search);
 const persona = personaById(params.get("persona"));
 const kind = params.get("kind") === "full" ? "full" : "bust";
 const size = kind === "full" ? { width: 720, height: 1100 } : { width: 512, height: 512 };
+const scale = Math.min(4, Math.max(1, Number(params.get("scale")) || 1));
+const format = params.get("format") === "png" ? "png" : "webp";
 const canvas = document.getElementById("studio");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
-renderer.setPixelRatio(1);
+renderer.setPixelRatio(scale);
 renderer.setSize(size.width, size.height, false);
 renderer.setClearColor(0x000000, 0);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -53,6 +56,6 @@ window.__renderPortrait = async () => {
     camera.lookAt(0, faceY - 0.1, 0);
   }
   renderer.render(scene, camera);
-  return canvas.toDataURL("image/webp", 0.9);
+  return format === "png" ? canvas.toDataURL("image/png") : canvas.toDataURL("image/webp", 0.9);
 };
 window.__studioReady = true;
