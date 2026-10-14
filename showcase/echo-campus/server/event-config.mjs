@@ -84,7 +84,10 @@ export function validateEventConfig(input) {
   }
   if (input.entry !== undefined) {
     if (!input.entry || typeof input.entry !== "object") fail("entry 需要对象");
-    result.entry = Object.freeze({ label: text(input.entry.label ?? "碰一下手环或立牌", "entry.label", 24), hint: text(input.entry.hint ?? "也可以扫码进入", "entry.hint", 40) });
+    // qrImage: the code the big screen shows instead of our own link, e.g. a partner mini program code.
+    const qrImage = input.entry.qrImage;
+    if (qrImage !== undefined && (typeof qrImage !== "string" || qrImage.length > 300 || !/^(?:https:\/\/[^\s"'<>]+|[A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:png|jpe?g|webp|svg))$/.test(qrImage) || qrImage.includes(".."))) fail("entry.qrImage 需要 https 地址或站内图片路径");
+    result.entry = Object.freeze({ label: text(input.entry.label ?? "碰一下手环或立牌", "entry.label", 24), hint: text(input.entry.hint ?? "也可以扫码进入", "entry.hint", 40), ...(qrImage ? { qrImage } : {}) });
   }
   if (input.categories !== undefined) result.categories = categories(input.categories);
   if (input.checkpoints !== undefined) result.checkpoints = checkpoints(input.checkpoints);

@@ -629,7 +629,7 @@ if(params.has("capture")||params.has("debug")){
   }).catch(error=>{premiumLoadPromise=null;console.warn("Premium characters unavailable",error.message);});
   // The event connection never waits for architecture: an NFC guest can
   // claim a persona while the campus is still streaming in.
-  clientReady=client.start().then(()=>UI.handleTap());
+  clientReady=client.start().then(()=>UI.handleTicket()).then(()=>UI.handleTap());
   const resume=await consumeStandardDepthResume();
   const requestedVenue=startupVenueFromSearch(location.search);
   // The complete campus opens at the surveyed HUB south stair entrance; regional links retain their own framing.

@@ -24,6 +24,7 @@ node server/index.mjs
 | `openJoin` | 布尔 | `demoMode:false` 时仍允许不带入场卡入场：手环或链接本身就是入口（没有激活码的活动） |
 | `taps` | `"signed"` / `"open"` | `open`：接受普通 NFC 贴纸和手环的未签名触碰（它们写的是固定链接，签不了名），`verified:false`；带签名的触碰照常校验。默认 `signed` |
 | `entry.label` / `entry.hint` | 文本 | 入场仪式与大屏二维码卡上的引导语 |
+| `entry.qrImage` | 站内图片路径或 https 地址 | 大屏扫码卡显示这张图（如呆猫活动页的小程序码），代替我们自己的入场二维码 |
 | `theme` | `{ink,paper,accent,glow,sage}` | `#RRGGBB`；未写的键用默认值，前端运行时注入 CSS 变量 |
 | `personas` | 分身 ID 数组 | 本场开放的形象，必须是 `src/shared/personas.mjs` 已登记的 ID；入场分配和来宾自选都只在这里面 |
 | `categories` | 数组 | `{id,label,wristbandColor}`，最多 12 项，必须包含 `guest`；手环标签 `WB-<id>-*` 据此识别 |
@@ -46,6 +47,10 @@ node server/index.mjs
 | `ECHO_PERSIST_DELAY_MS` | `400` | 这段时间内的写盘合并成一次；停服务时会先写完 |
 | `ECHO_BACKUP_DIR` / `ECHO_BACKUP_MS` / `ECHO_BACKUP_KEEP` | 空 / `300000` / `96` | 活动期间每 5 分钟把数据文件复制一份，只保留最新 96 份（8 小时） |
 | `ECHO_PARTNER_FEED_URL` / `_TOKEN` / `_LABEL` / `_SOURCE` / `_INTERVAL_MS` | 空 / 空 / `合作伙伴` / `partner` / `60000` | 合作社群的成员接口（如呆猫小镇），每分钟读一次，作为线上成员出现在地图上，见 `DAIMAO-INTEGRATION-DRAFT.md` |
+| `ECHO_PARTNER_API_TOKEN` | 空 | 合作方小程序的服务端调我们时用的 token（至少 32 位）；设置后开放 `/api/partner/*`（换票、连线、导出），见 `DAIMAO-MINIPROGRAM-API.md`。写在 `secrets.env` |
+| `ECHO_PARTNER_SOURCE` / `ECHO_PARTNER_LABEL` | `daimao` / `呆猫` | 合作方的标识（地图链接里的 `from=`，导出里的 `via`）和名称 |
+| `ECHO_PUBLIC_URL` | 空 | 地图的公开地址（含 Nginx 路径前缀），换票返回的链接用它，如 `https://capture.meetmind.online/echo-campus/` |
+| `ECHO_RATE_PARTNER` | `6000` | 合作方服务端每分钟的调用次数（签到高峰同一个 token、同一个地址） |
 | `ECHO_ALLOWED_ORIGINS` | 本机 | 允许的完整 Origin，逗号分隔 |
 
 ## 换一场活动的清单

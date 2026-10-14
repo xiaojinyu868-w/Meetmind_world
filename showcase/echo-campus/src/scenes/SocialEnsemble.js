@@ -51,7 +51,9 @@ export function visibleSocialAttendees(snapshotAttendees, { selectedId = null, s
   const turn = now > 0 && rotateMs > 0 ? Math.floor(now / rotateMs) : null;
   const inTurns = list => (turn === null ? list : list.map(person => [rotationRank(person.id, turn), person]).sort((a, b) => a[0] - b[0]).map(entry => entry[1]));
   const onsite = people.filter(person => !curated(person) && !person.remote);
-  const fresh = now > 0 ? onsite.filter(person => now - Date.parse(person.joinedAt) < FRESH_MS).sort((a, b) => Date.parse(b.joinedAt) - Date.parse(a.joinedAt)) : [];
+  // A guest who registered days ago is "fresh" again the moment they check in at the venue.
+  const arrivedAt = person => Date.parse(person.onsiteAt || person.joinedAt);
+  const fresh = now > 0 ? onsite.filter(person => now - arrivedAt(person) < FRESH_MS).sort((a, b) => arrivedAt(b) - arrivedAt(a)) : [];
   const freshIds = new Set(fresh.map(person => person.id));
   const remote = people.filter(person => person.remote);
   // Ambient curated guests fill an otherwise empty courtyard; real arrivals

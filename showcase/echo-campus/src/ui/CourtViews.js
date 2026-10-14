@@ -28,11 +28,15 @@ export function portraitUrl(personaId, kind = "bust") {
 export function personaFor(person) { return personaById(person?.persona) || PERSONAS[0]; }
 const color = value => /^#[0-9a-fA-F]{6}$/.test(value || "") ? value : "#7f9a7b";
 
-/** Circular bust portrait; a tinted monogram shows until (or instead of) the image. */
-export function avatar(person, { size = 44, ring = null, label = "" } = {}) {
+/** Circular bust portrait; a tinted monogram shows until (or instead of) the image.
+ * `photo`: the partner account's own picture where there is one (the persona bust if it fails). */
+export function avatar(person, { size = 44, ring = null, label = "", photo = false } = {}) {
   const persona = personaFor(person);
   const initial = esc((person?.name || persona.codename).slice(0, 1));
-  return `<span class="court-avatar" style="--size:${size}px;--persona:${persona.color}${ring ? `;--ring:${color(ring)}` : ""}" ${label ? `aria-label="${esc(label)}"` : 'aria-hidden="true"'}><b>${initial}</b><img data-portrait src="${esc(portraitUrl(persona.id, "bust"))}" alt="" loading="lazy" decoding="async"></span>`;
+  const bust = portraitUrl(persona.id, "bust");
+  const picture = photo && /^https:\/\//.test(person?.avatarUrl || "") ? person.avatarUrl : "";
+  const image = picture ? `<img data-portrait data-photo data-fallback="${esc(bust)}" referrerpolicy="no-referrer" src="${esc(picture)}" alt="" loading="lazy" decoding="async">` : `<img data-portrait src="${esc(bust)}" alt="" loading="lazy" decoding="async">`;
+  return `<span class="court-avatar${picture ? " is-photo" : ""}" style="--size:${size}px;--persona:${persona.color}${ring ? `;--ring:${color(ring)}` : ""}" ${label ? `aria-label="${esc(label)}"` : 'aria-hidden="true"'}><b>${initial}</b>${image}</span>`;
 }
 
 /** Collectible persona card used for arrival, the persona picker and "my card". */
@@ -52,9 +56,10 @@ export function personaCard(persona, { serial = null, name = "", size = "full", 
   </article>`;
 }
 
-export function arrivalView({ event, persona, nextSerial, entry, tapInfo, busy = false, error = "" }) {
+/** `greeting`: the partner account's nickname; `serial`: an arrival number the guest already has (confirming a look). */
+export function arrivalView({ event, persona, nextSerial, entry, tapInfo, busy = false, error = "", greeting = "", serial = null }) {
   const name = esc(event?.name || "相遇之庭");
-  const label = tapInfo?.kind === "wristband" ? `已识别${esc(tapInfo.categoryLabel || "手环")}手环` : esc(entry?.label || "已感应到你的到来");
+  const label = greeting ? `${esc(greeting)}，欢迎你` : tapInfo?.kind === "wristband" ? `已识别${esc(tapInfo.categoryLabel || "手环")}手环` : esc(entry?.label || "已感应到你的到来");
   return `<div class="court-arrival-inner">
     <header class="court-arrival-top"><span>${esc(event?.brand || "ECHO CAMPUS")}</span><i></i><span>${esc(event?.location || "")}</span></header>
     <section class="court-tap" aria-hidden="true"><i></i><i></i><i></i><span>${icon("nfc")}</span></section>
@@ -63,14 +68,16 @@ export function arrivalView({ event, persona, nextSerial, entry, tapInfo, busy =
     <p class="court-arrival-sub">${esc(event?.subtitle || "碰一下，就在这里相遇")}</p>
     <div class="court-arrival-stage">
       <p class="court-arrival-intro">今天，你是</p>
-      ${personaCard(persona, { serial: null, flip: true, eyebrow: `即将成为第 ${serialLabel(nextSerial)} 位来客` })}
+      ${personaCard(persona, { serial, flip: true, eyebrow: serial ? `第 ${serialLabel(serial)} 位来客` : `即将成为第 ${serialLabel(nextSerial)} 位来客` })}
     </div>
     <div class="court-arrival-actions">
       <button type="button" class="court-btn court-btn-primary court-btn-block" data-action="arrive" ${busy ? "disabled" : ""}><span>${busy ? "正在进入庭院…" : `以「${esc(persona.codename)}」进入`}</span>${icon("arrow")}</button>
       <button type="button" class="court-btn court-btn-ghost" data-action="arrival-shuffle" ${busy ? "disabled" : ""}>${icon("shuffle")}<span>换一个形象</span></button>
     </div>
     <div class="court-form-error" role="alert" ${error ? "" : "hidden"}>${esc(error)}</div>
-    <p class="court-fineprint">进入即表示同意以这个分身出现在本活动的公共世界。不采集照片、手机号或定位；名片和微信都由你决定是否填写，可随时隐身或删除。</p>
+    <p class="court-fineprint">${greeting
+      ? "进入即表示同意以这个分身，以及你在小程序里的昵称和头像，出现在本活动的公共世界。不采集手机号或定位；名片和微信都由你决定是否填写，可随时隐身或删除。"
+      : "进入即表示同意以这个分身出现在本活动的公共世界。不采集照片、手机号或定位；名片和微信都由你决定是否填写，可随时隐身或删除。"}</p>
   </div>`;
 }
 
@@ -239,8 +246,18 @@ export function stageView({ event, attendees, connections, arrivals, meets, qrRe
   return `<div class="court-stage-title"><span>${esc(event?.brand || "ECHO CAMPUS")}</span><h1>${esc(event?.name || "相遇之庭")}</h1><p>${esc(event?.subtitle || "")}</p></div>
     <div class="court-stage-stats"><div><strong data-stage-count="people">${attendees.length}</strong><span>位来客在场</span></div><div><strong data-stage-count="links">${connections.length}</strong><span>次相遇已点亮</span></div></div>
     <aside class="court-stage-feed">
-      <section><h2>刚刚抵达</h2>${arrivals.slice(0, 5).map(p => `<div class="court-feed-row">${avatar(p, { size: 40 })}<span><strong>${esc(p.name)}</strong><small>${esc(personaFor(p).codename)} · ${esc(personaFor(p).trait)}</small></span></div>`).join("") || '<p class="court-muted-line">等待第一位来客</p>'}</section>
-      <section><h2>刚刚相遇</h2>${meets.slice(0, 4).map(c => { const a = people.get(c.fromId), b = people.get(c.toId); return a && b ? `<div class="court-feed-pair">${avatar(a, { size: 36 })}<i>${icon("heart")}</i>${avatar(b, { size: 36 })}<span>${esc(a.name)} × ${esc(b.name)}</span></div>` : ""; }).join("") || '<p class="court-muted-line">第一场相遇即将发生</p>'}</section>
+      <section><h2>刚刚抵达</h2>${arrivals.slice(0, 5).map(p => `<div class="court-feed-row">${avatar(p, { size: 40, photo: true })}<span><strong>${esc(p.name)}</strong><small>${esc(personaFor(p).codename)} · ${esc(personaFor(p).trait)}</small></span></div>`).join("") || '<p class="court-muted-line">等待第一位来客</p>'}</section>
+      <section><h2>刚刚相遇</h2>${meets.slice(0, 4).map(c => { const a = people.get(c.fromId), b = people.get(c.toId); return a && b ? `<div class="court-feed-pair">${avatar(a, { size: 36, photo: true })}<i>${icon("heart")}</i>${avatar(b, { size: 36, photo: true })}<span>${esc(a.name)} × ${esc(b.name)}</span></div>` : ""; }).join("") || '<p class="court-muted-line">第一场相遇即将发生</p>'}</section>
     </aside>
-    <div class="court-stage-join"><canvas data-stage-qr></canvas><div><strong>${esc(event?.entry?.label || "碰一下手环或立牌")}</strong><span>${esc(event?.entry?.hint || "也可以扫码进入")}</span>${qrReady ? "" : ""}</div></div>`;
+    <div class="court-stage-join">${event?.entry?.qrImage ? `<img class="court-stage-code" src="${esc(new URL(event.entry.qrImage, globalThis.document?.baseURI || "http://localhost/").href)}" alt="扫码进入">` : "<canvas data-stage-qr></canvas>"}<div><strong>${esc(event?.entry?.label || "碰一下手环或立牌")}</strong><span>${esc(event?.entry?.hint || "也可以扫码进入")}</span>${qrReady ? "" : ""}</div></div>`;
+}
+
+/** Big screen, the moment someone arrives: their name and picture, large, while they are still looking up. */
+export function stageWelcomeView(person) {
+  const persona = personaFor(person);
+  return `<div class="court-welcome-card" style="--persona:${persona.color}">
+    ${avatar(person, { size: 128, photo: true })}
+    <div class="court-welcome-copy"><small>${person.onsiteAt ? "刚刚到场" : "刚刚加入"} · 第 ${serialLabel(person.serial)} 位来客</small><strong>欢迎，${esc(person.name)}</strong><span>今天是「${esc(persona.codename)}」· ${esc(persona.signature)}</span></div>
+    <img class="court-welcome-figure" src="${esc(portraitUrl(persona.id, "full"))}" alt="" decoding="async">
+  </div>`;
 }

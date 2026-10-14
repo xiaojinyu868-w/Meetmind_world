@@ -10,11 +10,13 @@ const LIMITS = Object.freeze({ nickname: 24, role: 60, organization: 80, bio: 16
 export const MAX_PARTNER_MEMBERS = 2000;
 const MAX_PAGES = 10;
 
-function text(value, max) {
+/** Partner text is cleaned and cut to length, never refused for an odd character. */
+export function partnerText(value, max) {
   if (typeof value !== "string") return "";
   const clean = value.normalize("NFC").replace(/[<>\u0000-\u001f\u007f]/g, "").trim().replace(/\s+/g, " ");
   return [...clean].slice(0, max).join("");
 }
+const text = partnerText;
 
 /**
  * One partner member in the public attendee shape, or null when it may not be

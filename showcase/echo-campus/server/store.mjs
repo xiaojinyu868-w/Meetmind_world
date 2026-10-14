@@ -5,9 +5,16 @@ import { DEMO_EVENT, SEED_PERSONAS, seedAttendees, seedConnections, demoBadges }
 import { assignPersona, defaultDisplayName, personaById } from "../src/shared/personas.mjs";
 import { topicsIn } from "../src/shared/topics.mjs";
 import { CHANGE } from "../src/shared/changes.mjs";
+import { partnerText } from "./partner-feed.mjs";
 
 const TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const TAP_WINDOW_MS = 10 * 60 * 1000;
+// A partner app (e.g. a WeChat mini program) opens the map with a ticket its
+// server asked us for; reopening within the window needs no new one.
+const TICKET_TTL_MS = 30 * 60 * 1000;
+const MAX_TICKETS = 20000;
+const TICKET_SHAPE = /^[A-Za-z0-9_-]{20,80}$/;
+const PARTNER_UID = /^[A-Za-z0-9_-]{1,64}$/;
 // Versions a reconnecting or polling phone can catch up on without a full snapshot.
 const HISTORY_LIMIT = 2000;
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -26,6 +33,18 @@ function inferCategory(attendee) {
   return "guest";
 }
 export const hashSecret = value => createHash("sha256").update(value).digest("hex");
+function httpsUrl(value, max = 512) {
+  if (typeof value !== "string" || !value || value.length > max) return "";
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "https:" && !url.username && !url.password ? url.href : "";
+  } catch { return ""; }
+}
+function partnerUid(value, field = "uid") {
+  const uid = typeof value === "string" ? value.trim() : Number.isSafeInteger(value) ? String(value) : "";
+  if (!PARTNER_UID.test(uid)) fail(400, "INVALID_UID", field + " 需要 1–64 位字母、数字、_ 或 -");
+  return uid;
+}
 
 export class HttpError extends Error {
   constructor(status, code, message) {
@@ -67,6 +86,7 @@ export class EventStore {
     this.persistDelayMs = persistDelayMs;
     this.persistTimer = null;
     this.tapNonces = new Map();
+    this.tickets = new Map();
     this.history = [];
     this.snapshotCache = null;
     if (file && existsSync(file)) {
@@ -89,8 +109,10 @@ export class EventStore {
       this.persist();
     }
     this.indexSessions();
+    this.indexPartners();
   }
   indexSessions() { this.sessionsByHash = new Map(this.state.sessions.map(s => [s.tokenHash, s])); }
+  indexPartners() { this.partnerIndex = new Map(this.state.attendees.filter(a => a.partner?.source && a.partner?.uid).map(a => [a.partner.source + ":" + a.partner.uid, a.id])); }
   composeEvent(persisted = {}, config = {}) {
     // Deployment config wins over persisted demo fields; persisted runtime
     // fields (e.g. a disabled demoMode) win over the built-in defaults.
@@ -149,7 +171,7 @@ export class EventStore {
     return Object.fromEntries(Object.entries(this.state.event).filter(([key]) => !PRIVATE_EVENT_FIELDS.has(key)));
   }
   publicAttendee(a) {
-    const { id, name, role, offer, need, organization, contact, bio, contactVisibility, category: categoryId, wristbandColor, avatarColor, persona, serial, position, synthetic, source, joinedAt } = a;
+    const { id, name, role, offer, need, organization, contact, bio, contactVisibility, category: categoryId, wristbandColor, avatarColor, persona, serial, position, synthetic, source, joinedAt, avatarUrl, onsiteAt } = a;
     const visibility = CONTACT_VISIBILITY.has(contactVisibility) ? contactVisibility : (a.publicContact ? "public" : "hidden");
     return {
       id, name, role, offer, need, organization, bio, avatarColor, persona, serial,
@@ -158,6 +180,8 @@ export class EventStore {
       category: categoryId || "guest",
       wristbandColor: wristbandColor || this.category(categoryId).wristbandColor,
       position, synthetic, source, joinedAt,
+      // The partner's user id stays private; the photo and the on-site moment are shown.
+      ...(avatarUrl ? { avatarUrl } : {}), ...(onsiteAt ? { onsiteAt } : {}),
     };
   }
   profile(body, existing = null) {
@@ -329,6 +353,7 @@ export class EventStore {
     return this.state.attendees.find(a => a.id === session.attendeeId) || null;
   }
   join(body, existingToken) {
+    if (body && typeof body === "object" && body.ticket !== undefined) return this.joinWithTicket(body, existingToken);
     const existing = this.authenticate(existingToken, false);
     const fields = this.profile(body, existing);
     const attendeeId = existing?.id || "guest-" + randomUUID();
@@ -351,42 +376,224 @@ export class EventStore {
       }
       const customName = !!fields.name;
       Object.assign(existing, fields, { customName, name: fields.name || defaultDisplayName(fields.persona, existing.serial) });
+      if (body.persona) existing.personaPending = false;
       if (badge && !badge.attendeeId) badge.attendeeId = existing.id;
       this.changed(this.attendeeOps(existing), [existing.id]);
       return { token: existingToken, attendee: this.publicAttendee(existing), snapshot: this.snapshot(), resumed: true };
     }
     // openJoin: a real event where the wristband or the link is the entry, no activation card.
     if (!badgeId && !this.state.event.demoMode && !this.state.event.openJoin) fail(403, "BADGE_REQUIRED", "本活动需要入场卡");
+    const attendee = this.addAttendee(attendeeId, fields, { source: badgeId ? "demo-badge" : "demo-join", ownColor: !!body.avatarColor });
+    const token = this.createSession(attendee.id);
+    if (badge) badge.attendeeId = attendee.id;
+    this.changed(this.attendeeOps(attendee), [attendee.id]);
+    return { token, attendee: this.publicAttendee(attendee), snapshot: this.snapshot(), resumed: false };
+  }
+  /** A new attendee with the next arrival number and a persona (given, or the least worn one). */
+  addAttendee(attendeeId, fields, { source, ownColor = false, extra = {} }) {
     if (this.state.attendees.length >= this.maxAttendees) fail(409, "EVENT_CAPACITY", "活动已达到人数上限");
-    const token = randomBytes(32).toString("base64url");
     const count = this.state.attendees.length;
     const serial = this.state.nextSerial || count + 1;
     this.state.nextSerial = serial + 1;
     const persona = fields.persona || assignPersona(this.state.event.personas, this.personaUsage(), attendeeId);
     const attendee = {
       id: attendeeId, ...fields, persona, serial,
-      avatarColor: body.avatarColor ? fields.avatarColor : (personaById(persona)?.color || fields.avatarColor),
+      avatarColor: ownColor ? fields.avatarColor : (personaById(persona)?.color || fields.avatarColor),
       customName: !!fields.name, name: fields.name || defaultDisplayName(persona, serial),
       position: { x: -3.5 + (count % 5) * 1.8, z: 10 + Math.floor((count - 15) / 5) % 3 * 1.8 },
-      synthetic: true, source: badgeId ? "demo-badge" : "demo-join",
+      synthetic: true, source,
       joinedAt: new Date(this.now()).toISOString(),
+      ...extra,
     };
     this.state.attendees.push(attendee);
+    return attendee;
+  }
+  createSession(attendeeId) {
+    const token = randomBytes(32).toString("base64url");
     const live = this.state.sessions.filter(s => s.expiresAt > this.now());
     if (live.length !== this.state.sessions.length) { this.state.sessions = live; this.indexSessions(); }
-    const session = { tokenHash: hashSecret(token), attendeeId: attendee.id, createdAt: this.now(), expiresAt: this.now() + TTL_MS };
+    const session = { tokenHash: hashSecret(token), attendeeId, createdAt: this.now(), expiresAt: this.now() + TTL_MS };
     this.state.sessions.push(session);
     this.sessionsByHash.set(session.tokenHash, session);
-    if (badge) badge.attendeeId = attendee.id;
+    return token;
+  }
+  /** Wearing a persona the guest picked: a default name follows the look. */
+  applyPersona(attendee, persona) {
+    attendee.persona = persona;
+    attendee.avatarColor = personaById(persona)?.color || attendee.avatarColor;
+    if (!attendee.customName) attendee.name = defaultDisplayName(persona, attendee.serial);
+    attendee.personaPending = false;
+  }
+  eventPersona(value) {
+    if (value === undefined || value === null || value === "") return null;
+    if (typeof value !== "string" || !this.state.event.personas.includes(value)) fail(400, "INVALID_INPUT", "这个分身形象未在本活动开放");
+    return value;
+  }
+  /** Confirms or changes the look, e.g. one a partner check-in assigned before the guest opened the map. */
+  choosePersona(token, body) {
+    const attendee = this.authenticate(token);
+    const persona = this.eventPersona(body?.persona);
+    if (!persona) fail(400, "INVALID_INPUT", "请选择一个分身形象");
+    this.applyPersona(attendee, persona);
     this.changed(this.attendeeOps(attendee), [attendee.id]);
-    return { token, attendee: this.publicAttendee(attendee), snapshot: this.snapshot(), resumed: false };
+    return { attendee: this.publicAttendee(attendee), version: this.state.version };
+  }
+
+  // ── Partner app (docs/DAIMAO-MINIPROGRAM-API.md) ─────────────────────────
+  // The partner's server vouches for its user and asks for a ticket; the map
+  // page it opens with that ticket signs the user in as the same attendee
+  // every time. The partner's user id never reaches the public snapshot.
+  partnerAttendee(key) {
+    const id = this.partnerIndex.get(key);
+    return id ? this.state.attendees.find(a => a.id === id) || null : null;
+  }
+  partnerProfile(body) {
+    if (!body || typeof body !== "object" || Array.isArray(body)) fail(400, "INVALID_INPUT", "请提交 JSON 对象");
+    if (body.consent !== true) fail(400, "CONSENT_REQUIRED", "需要用户同意在本场活动的地图上展示昵称和头像（consent: true）");
+    const categories = new Set(this.categories().map(item => item.id));
+    return {
+      uid: partnerUid(body.uid),
+      nickname: partnerText(body.nickname ?? body.name, 24),
+      avatarUrl: httpsUrl(body.avatarUrl),
+      role: partnerText(body.role, 60), organization: partnerText(body.organization, 80), bio: partnerText(body.bio, 160),
+      offer: partnerText(body.offer, 160), need: partnerText(body.need, 160),
+      category: typeof body.category === "string" && categories.has(body.category) ? body.category : "",
+      persona: typeof body.persona === "string" && this.state.event.personas.includes(body.persona) ? body.persona : "",
+    };
+  }
+  /** Nickname and photo follow the partner account; other fields only fill what the guest left empty. */
+  syncPartnerProfile(attendee, profile) {
+    let changed = false;
+    const set = (key, value) => { if (attendee[key] !== value) { attendee[key] = value; changed = true; } };
+    if (profile.nickname) { set("name", profile.nickname); set("customName", true); }
+    if (profile.avatarUrl) set("avatarUrl", profile.avatarUrl);
+    for (const key of ["organization", "bio", "offer", "need"]) if (profile[key] && !attendee[key]) set(key, profile[key]);
+    if (profile.role && (!attendee.role || attendee.role === "来宾")) set("role", profile.role);
+    if (profile.category && (attendee.category || "guest") === "guest") { set("category", profile.category); set("wristbandColor", this.category(profile.category).wristbandColor); }
+    return changed;
+  }
+  createPartnerAttendee(source, profile, { persona = null, onsite = false, pending = false } = {}) {
+    const category = profile.category || "guest";
+    const fields = {
+      name: profile.nickname, role: profile.role || "来宾", offer: profile.offer, need: profile.need, organization: profile.organization,
+      contact: "", bio: profile.bio, contactVisibility: "hidden", publicContact: false, listed: true,
+      category, wristbandColor: this.category(category).wristbandColor, avatarColor: "#758b79",
+      persona: persona || profile.persona || null, consent: true,
+    };
+    const extra = { partner: { source, uid: profile.uid }, personaPending: pending, ...(profile.avatarUrl ? { avatarUrl: profile.avatarUrl } : {}), ...(onsite ? { onsiteAt: new Date(this.now()).toISOString() } : {}) };
+    const attendee = this.addAttendee("guest-" + randomUUID(), fields, { source: "partner", extra });
+    this.partnerIndex.set(source + ":" + profile.uid, attendee.id);
+    return attendee;
+  }
+  /**
+   * Server to server. `checkin: true` (the guest is at the venue, e.g. opened
+   * the partner app from the NFC keychain) puts them on the map at once, with
+   * a persona they may change when they open it.
+   */
+  issuePartnerTicket(source, body) {
+    const profile = this.partnerProfile(body);
+    const key = source + ":" + profile.uid;
+    let attendee = this.partnerAttendee(key);
+    let status = attendee ? "returning" : "new";
+    let changed = attendee ? this.syncPartnerProfile(attendee, profile) : false;
+    if (body.checkin === true) {
+      if (!attendee) { attendee = this.createPartnerAttendee(source, profile, { onsite: true, pending: true }); changed = true; status = "checked-in"; }
+      else if (!attendee.onsiteAt) { attendee.onsiteAt = new Date(this.now()).toISOString(); changed = true; status = "checked-in"; }
+    }
+    if (changed) this.changed(this.attendeeOps(attendee), [attendee.id]);
+    const moment = this.now();
+    for (const [hash, entry] of this.tickets) if (entry.expiresAt <= moment) this.tickets.delete(hash);
+    if (this.tickets.size >= MAX_TICKETS) this.tickets.delete(this.tickets.keys().next().value);
+    const ticket = randomBytes(24).toString("base64url");
+    this.tickets.set(hashSecret(ticket), { key, source, profile, expiresAt: moment + TICKET_TTL_MS });
+    return {
+      ticket, expiresIn: TICKET_TTL_MS / 1000, status,
+      attendee: attendee ? { serial: attendee.serial, name: attendee.name, persona: attendee.persona, personaPending: !!attendee.personaPending, onsite: !!attendee.onsiteAt } : null,
+    };
+  }
+  ticketEntry(value) {
+    if (typeof value !== "string" || !TICKET_SHAPE.test(value)) fail(400, "INVALID_TICKET", "入场链接无效，请从小程序重新进入");
+    const entry = this.tickets.get(hashSecret(value));
+    if (!entry || entry.expiresAt <= this.now()) fail(410, "TICKET_EXPIRED", "入场链接已过期，请从小程序重新进入");
+    return entry;
+  }
+  /**
+   * The map page with a ticket: signs in the partner user's attendee, or says
+   * the guest still has to pick a look (pending). A guest who first came in
+   * by a plain link keeps that avatar and its connections.
+   */
+  claimPartnerTicket(value, existingToken) {
+    const entry = this.ticketEntry(value);
+    const current = this.authenticate(existingToken, false);
+    let attendee = this.partnerAttendee(entry.key);
+    if (!attendee && current && !current.partner) {
+      attendee = current;
+      attendee.partner = { source: entry.source, uid: entry.profile.uid };
+      this.partnerIndex.set(entry.key, attendee.id);
+      this.syncPartnerProfile(attendee, entry.profile);
+      this.changed(this.attendeeOps(attendee), [attendee.id]);
+    }
+    if (!attendee) return { pending: true, profile: { name: entry.profile.nickname, avatarUrl: entry.profile.avatarUrl } };
+    let token = existingToken;
+    if (current?.id !== attendee.id) { token = this.createSession(attendee.id); this.schedulePersist(); }
+    return { token, attendee: this.publicAttendee(attendee), personaPending: !!attendee.personaPending, resumed: true };
+  }
+  joinWithTicket(body, existingToken) {
+    const entry = this.ticketEntry(body.ticket);
+    if (body.consent !== true) fail(400, "CONSENT_REQUIRED", "请确认在本活动公开展示这些资料");
+    const persona = this.eventPersona(body.persona);
+    let attendee = this.partnerAttendee(entry.key);
+    const created = !attendee;
+    if (created) attendee = this.createPartnerAttendee(entry.source, entry.profile, { persona });
+    else if (persona) this.applyPersona(attendee, persona);
+    else attendee.personaPending = false;
+    const current = this.authenticate(existingToken, false);
+    const token = current?.id === attendee.id ? existingToken : this.createSession(attendee.id);
+    this.changed(this.attendeeOps(attendee), [attendee.id]);
+    return { token, attendee: this.publicAttendee(attendee), snapshot: this.snapshot(), resumed: !created };
+  }
+  /** Two partner users who met in the partner app (e.g. tapped each other's keychain): a confirmed connection on the map. */
+  partnerConnect(source, body) {
+    const a = this.partnerAttendee(source + ":" + partnerUid(body?.uidA, "uidA"));
+    const b = this.partnerAttendee(source + ":" + partnerUid(body?.uidB, "uidB"));
+    if (!a || !b) fail(404, "MEMBER_NOT_ON_MAP", "有一方还没有进入地图");
+    if (a.id === b.id) fail(400, "SELF_ENCOUNTER", "需要两位不同的用户");
+    const existing = this.state.encounters.find(c => (c.fromId === a.id && c.toId === b.id) || (c.fromId === b.id && c.toId === a.id));
+    if (existing?.status === "confirmed") return { connection: publicConnection(existing), idempotent: true };
+    const at = new Date(this.now()).toISOString();
+    const encounter = existing || { id: "enc-" + randomUUID(), fromId: a.id, toId: b.id, createdAt: at, synthetic: false };
+    Object.assign(encounter, { status: "confirmed", confirmedAt: at, via: source });
+    if (!existing) this.state.encounters.push(encounter);
+    this.changed(this.connectionOps(encounter), [a.id, b.id]);
+    return { connection: publicConnection(encounter), idempotent: false };
+  }
+  /** What the map adds about the partner's users, for the partner's own records. Contacts stay out. */
+  partnerExport(source) {
+    const byId = new Map(this.state.attendees.map(a => [a.id, a]));
+    const members = this.state.attendees.filter(a => a.partner?.source === source).map(a => ({
+      uid: a.partner.uid, serial: a.serial, name: a.name, persona: a.persona, personaName: personaById(a.persona)?.codename || "",
+      joinedAt: a.joinedAt, onsiteAt: a.onsiteAt || null, personaPending: !!a.personaPending, listed: a.listed !== false,
+      profile: { role: a.role || "", organization: a.organization || "", bio: a.bio || "", offer: a.offer || "", need: a.need || "" },
+      connections: this.state.encounters.filter(c => c.status === "confirmed" && (c.fromId === a.id || c.toId === a.id)).map(c => {
+        const peer = byId.get(c.fromId === a.id ? c.toId : c.fromId);
+        return { ...(peer?.partner?.source === source ? { uid: peer.partner.uid } : {}), serial: peer?.serial ?? null, name: peer?.name || "", confirmedAt: c.confirmedAt, via: c.via || "map" };
+      }),
+      checkins: this.state.checkins.filter(item => item.attendeeId === a.id).map(item => ({ checkpointId: item.checkpointId, points: item.points, at: item.createdAt })),
+    }));
+    return {
+      event: { id: this.state.event.id, name: this.state.event.name }, version: this.state.version, generatedAt: new Date(this.now()).toISOString(),
+      members, otherAttendees: this.state.attendees.filter(a => a.partner?.source !== source && a.source !== "curated-demo").length,
+    };
   }
   me(token) {
     const attendee = this.authenticate(token);
     const byId = new Map(this.state.attendees.map(a => [a.id, a]));
     return {
       attendee: this.publicAttendee(attendee),
-      profile: { contact: attendee.contact || "", contactVisibility: attendee.contactVisibility || "hidden", listed: attendee.listed !== false, customName: !!attendee.customName },
+      profile: {
+        contact: attendee.contact || "", contactVisibility: attendee.contactVisibility || "hidden", listed: attendee.listed !== false, customName: !!attendee.customName,
+        personaPending: !!attendee.personaPending, boundTo: attendee.partner?.source || null,
+      },
       version: this.state.version,
       activity: this.meActivity(attendee.id),
       encounters: this.state.encounters.filter(c => (c.fromId === attendee.id || c.toId === attendee.id) && !(c.status === "declined" && c.toId === attendee.id)).map(c => {
@@ -460,6 +667,7 @@ export class EventStore {
     this.state.attendees = this.state.attendees.filter(a => a.id !== self.id);
     this.state.sessions = this.state.sessions.filter(s => s.attendeeId !== self.id);
     this.indexSessions();
+    this.indexPartners();
     this.state.encounters = this.state.encounters.filter(c => c.fromId !== self.id && c.toId !== self.id);
     this.state.checkins = this.state.checkins.filter(c => c.attendeeId !== self.id);
     for (const badge of this.state.badges) if (badge.attendeeId === self.id) badge.attendeeId = null;

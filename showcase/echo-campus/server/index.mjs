@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { copyFileSync, createReadStream, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { resolve, dirname, extname, join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -76,7 +76,7 @@ export function createEventServer({
   now = () => Date.now(),
   // Venue Wi-Fi puts many phones behind one NAT address; join allows a queue
   // of arrivals per minute without opening unbounded writes.
-  rateLimit = { read: 600, write: 120, join: 60, windowMs: 60000 },
+  rateLimit = { read: 600, write: 120, join: 60, partner: 6000, windowMs: 60000 },
   eventConfig = {},
   tapSecret = "",
   trustProxy = false,
@@ -89,10 +89,18 @@ export function createEventServer({
   persistDelayMs = 0,
   // { url, token, label, source, intervalMs }: partner members on the map (server/partner-feed.mjs).
   partnerFeed = null,
+  // { token, source, label }: a partner app's server signs its users in (docs/DAIMAO-MINIPROGRAM-API.md).
+  partnerApi = null,
+  // The map's public address (behind the proxy's path prefix), for ticket links.
+  publicUrl = "",
   // { dir, intervalMs, keep }: rolling copies of the data file during the event.
   backup = null,
   log = message => console.warn(message),
 } = {}) {
+  if (partnerApi?.token && (partnerApi.token.length < 32 || !/^[a-z][a-z0-9-]{0,23}$/.test(partnerApi.source || "partner"))) {
+    throw new Error("合作方接口需要至少 32 位的 token 和小写字母开头的 source");
+  }
+  if (publicUrl) new URL(publicUrl);
   const origins = new Set([...DEFAULT_ORIGINS, ...allowedOrigins]);
   // Only the first full snapshot is large enough to compress; per-change messages stay small and plain.
   const sockets = new WebSocketServer({
@@ -170,6 +178,22 @@ export function createEventServer({
       if (limitBuckets.size > 20000) limitBuckets.delete(limitBuckets.keys().next().value);
     }
   }
+  const partnerSource = partnerApi?.source || "partner";
+  function requirePartner(req) {
+    if (!partnerApi?.token) fail(404, "NOT_FOUND", "接口不存在");
+    const given = createHash("sha256").update(token(req)).digest(), expected = createHash("sha256").update(partnerApi.token).digest();
+    if (!token(req) || !timingSafeEqual(given, expected)) fail(401, "PARTNER_AUTH_REQUIRED", "合作方凭证无效");
+  }
+  function publicBase(req) {
+    const proto = trustProxy && req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+    return new URL(publicUrl || `${proto}://${req.headers.host || "127.0.0.1"}/`);
+  }
+  function ticketUrl(req, ticket) {
+    const url = publicBase(req);
+    url.searchParams.set("from", partnerSource);
+    url.searchParams.set("ticket", ticket);
+    return url.href;
+  }
   const server = createServer(async (req, res) => {
     try {
       const url = new URL(req.url, "http://echo.local");
@@ -183,10 +207,12 @@ export function createEventServer({
           res.writeHead(204, { "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type, Authorization" });
           return res.end();
         }
-        rate(req, req.method === "GET" ? "read" : url.pathname === "/api/join" ? "join" : "write");
+        // A partner's server signs in many guests from one address and token; it has its own allowance.
+        const partnerCall = url.pathname.startsWith("/api/partner/") && url.pathname !== "/api/partner/claim";
+        rate(req, partnerCall ? "partner" : req.method === "GET" ? "read" : url.pathname === "/api/join" || url.pathname === "/api/partner/claim" ? "join" : "write");
         if (req.method === "GET" && url.pathname === "/api/health") return json(res, 200, {
           ok: true, service: "echo-campus-event", mode: store.state.event.demoMode ? "demo" : "event", version: store.state.version,
-          attendees: store.state.attendees.length, live: sockets.clients.size, remote: feed ? { ...feed.status } : null,
+          attendees: store.state.attendees.length, live: sockets.clients.size, remote: feed ? { ...feed.status } : null, partnerApi: !!partnerApi?.token,
           uptime: Math.round(process.uptime()), memoryMb: Math.round(process.memoryUsage().rss / 1048576),
           cpuMs: Math.round((process.cpuUsage().user + process.cpuUsage().system) / 1000),
         });
@@ -217,6 +243,27 @@ export function createEventServer({
         if (req.method === "POST" && decline) return json(res, 200, store.declineEncounter(token(req), decline[1]));
         if (req.method === "POST" && url.pathname === "/api/tap") return json(res, 200, store.tap(token(req), await readBody(req), { secret: tapSecret }));
         if (req.method === "POST" && url.pathname === "/api/leave") return json(res, 200, store.leave(token(req)));
+        if (req.method === "POST" && url.pathname === "/api/persona") return json(res, 200, store.choosePersona(token(req), await readBody(req)));
+        if (req.method === "POST" && url.pathname === "/api/partner/claim") {
+          const body = await readBody(req);
+          return json(res, 200, store.claimPartnerTicket(body.ticket, token(req)));
+        }
+        if (partnerCall) {
+          requirePartner(req);
+          if (req.method === "GET" && url.pathname === "/api/partner/ping") return json(res, 200, {
+            ok: true, source: partnerSource, label: partnerApi.label || "", mapUrl: publicBase(req).href,
+            event: { id: store.state.event.id, name: store.state.event.name, mode: store.state.event.demoMode ? "demo" : "event" },
+          });
+          if (req.method === "POST" && url.pathname === "/api/partner/tickets") {
+            const result = store.issuePartnerTicket(partnerSource, await readBody(req));
+            return json(res, 200, { ...result, url: ticketUrl(req, result.ticket) });
+          }
+          if (req.method === "POST" && url.pathname === "/api/partner/connections") {
+            const result = store.partnerConnect(partnerSource, await readBody(req));
+            return json(res, result.idempotent ? 200 : 201, result);
+          }
+          if (req.method === "GET" && url.pathname === "/api/partner/export") return json(res, 200, store.partnerExport(partnerSource));
+        }
         if (url.pathname === "/api/live") fail(426, "WEBSOCKET_REQUIRED", "请使用 WebSocket 连接");
         fail(404, "NOT_FOUND", "接口不存在");
       }
@@ -363,7 +410,9 @@ if (entry === import.meta.url) {
     broadcastMs: limit("ECHO_BROADCAST_MS", 1000),
     persistDelayMs: limit("ECHO_PERSIST_DELAY_MS", 400),
     // Venue Wi-Fi: hundreds of arrivals share one address within minutes.
-    rateLimit: { read: limit("ECHO_RATE_READ", 600), write: limit("ECHO_RATE_WRITE", 120), join: limit("ECHO_RATE_JOIN", 600), ipFactor: limit("ECHO_RATE_IP_FACTOR", 5), windowMs: 60000 },
+    rateLimit: { read: limit("ECHO_RATE_READ", 600), write: limit("ECHO_RATE_WRITE", 120), join: limit("ECHO_RATE_JOIN", 600), partner: limit("ECHO_RATE_PARTNER", 6000), ipFactor: limit("ECHO_RATE_IP_FACTOR", 5), windowMs: 60000 },
+    partnerApi: env.ECHO_PARTNER_API_TOKEN ? { token: env.ECHO_PARTNER_API_TOKEN, source: env.ECHO_PARTNER_SOURCE || "daimao", label: env.ECHO_PARTNER_LABEL || "呆猫" } : null,
+    publicUrl: env.ECHO_PUBLIC_URL || "",
     partnerFeed: env.ECHO_PARTNER_FEED_URL ? {
       url: env.ECHO_PARTNER_FEED_URL, token: env.ECHO_PARTNER_FEED_TOKEN || "", label: env.ECHO_PARTNER_FEED_LABEL || "合作伙伴",
       source: env.ECHO_PARTNER_FEED_SOURCE || "partner", intervalMs: limit("ECHO_PARTNER_FEED_INTERVAL_MS", 60000),

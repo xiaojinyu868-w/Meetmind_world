@@ -4,7 +4,7 @@ import { listSceneDefinitions } from "../runtime/SceneRegistry.js";
 import { VENUE_CANDIDATES, venueById, venueUrl } from "../runtime/VenueCatalog.js";
 import { PERSONAS, personaById, serialLabel } from "../shared/personas.mjs";
 import { findPerson } from "../shared/changes.mjs";
-import { avatar, arrivalView, inboxView, matchesView, passportView, personView, personaCard, personaPickerView, profileFormView, stageView } from "./CourtViews.js";
+import { avatar, arrivalView, inboxView, matchesView, passportView, personView, personaCard, personaPickerView, profileFormView, stageView, stageWelcomeView } from "./CourtViews.js";
 import "./style.css";
 import "./court.css";
 
@@ -51,6 +51,11 @@ export class AppUI {
     this.tapTag = /^[A-Za-z0-9_-]{2,64}$/.test(query.get("tag") || "") ? query.get("tag") : null;
     this.tapSignature = this.tapTag && query.get("sig") ? { ts: Number(query.get("ts")), nonce: query.get("nonce") || "", sig: query.get("sig") || "" } : null;
     this.tapInfo = null;
+    // A partner app (the 呆猫 mini program) opens the map with a ticket for its signed-in user.
+    this.partnerTicket = /^[A-Za-z0-9_-]{20,80}$/.test(query.get("ticket") || "") ? query.get("ticket") : null;
+    this.inMiniProgram = /miniProgram/i.test(globalThis.navigator?.userAgent || "") || globalThis.__wxjs_environment === "miniprogram";
+    // new: a look to pick and join; ticket: the same, joining with the ticket; confirm: an assigned look to keep or change.
+    this.arrivalMode = "new"; this.arrivalGreeting = "";
     this.partnerOpen = !this.stage && (query.get("mode") === "partner" || query.get("view") === "source" || query.get("scope") === "building" || query.has("capture"));
     this.sceneManifest = defaultManifest("glb");
     try {
@@ -62,8 +67,14 @@ export class AppUI {
     this.root.classList.toggle("court-is-stage", this.stage);
     this.root.classList.toggle("court-is-mobile", this.mobile);
     this.root.classList.toggle("court-partner-open", this.partnerOpen);
+    this.root.classList.toggle("court-in-miniprogram", this.inMiniProgram);
     this.root.addEventListener("click", e => this.onClick(e));
     this.root.addEventListener("error", e => {
+      if (e.target.matches?.("[data-photo]")) {
+        const img = e.target;
+        img.removeAttribute("data-photo"); img.closest(".court-avatar")?.classList.remove("is-photo");
+        if (img.dataset.fallback) { img.src = img.dataset.fallback; return; }
+      }
       if (e.target.matches?.("[data-venue-thumbnail]")) { e.target.hidden = true; e.target.parentElement.classList.add("is-unavailable"); }
       if (e.target.matches?.("[data-portrait]")) e.target.closest(".court-avatar,.court-persona-card,.court-pick-art")?.classList.add("is-missing");
     }, true);
@@ -77,7 +88,7 @@ export class AppUI {
     document.addEventListener("keydown", this.keyHandler);
     this.syncChrome();
     if (this.stage) this.renderStage();
-    if (this.entryNfc && !this.client?.token && !this.stage) this.openArrival();
+    if (this.entryNfc && !this.partnerTicket && !this.client?.token && !this.stage) this.openArrival();
   }
   shell() {
     return `<div class="ec-chrome court-chrome">
@@ -120,7 +131,7 @@ export class AppUI {
       </div>
       <div class="ec-hover-card court-hover" data-hover-card hidden><span class="ec-hover-kicker" data-hover-kicker>点一下</span><strong data-hover-name></strong><small data-hover-copy>看看 TA 是谁</small></div>
       <div class="ec-hint court-hint" data-world-hint>${this.mobile ? "拖动环看 · 双指缩放 · 点一点人物" : "拖动环看 · 滚轮缩放 · 点一点人物"}</div>
-      ${this.stage ? '<div class="court-stage" data-stage></div>' : ""}
+      ${this.stage ? '<div class="court-stage" data-stage></div><div class="court-stage-welcome" data-stage-welcome hidden></div>' : ""}
     </div>
     <div class="court-arrival" data-arrival hidden></div>
     <div class="ec-panel-layer" hidden><button class="ec-panel-scrim" aria-label="关闭面板" data-action="close" tabindex="-1"></button><section class="ec-panel" role="dialog" aria-modal="true" aria-labelledby="ec-panel-title" tabindex="-1"></section></div>
@@ -438,12 +449,52 @@ export class AppUI {
     const persona = personaById(this.arrivalPersona) || PERSONAS[0];
     const tapInfo = this.tapInfo?.tag ? { ...this.tapInfo.tag, categoryLabel: this.categoryLabel(this.tapInfo.tag.category) } : null;
     layer.style.setProperty("--persona", persona.color);
-    layer.innerHTML = arrivalView({ event: this.snapshot?.event, persona, nextSerial: this.nextSerial(), entry: this.snapshot?.event?.entry, tapInfo, busy: this.arrivalBusy, error: this.arrivalError });
+    const serial = this.arrivalMode === "confirm" ? this.me?.attendee?.serial ?? null : null;
+    layer.innerHTML = arrivalView({ event: this.snapshot?.event, persona, nextSerial: this.nextSerial(), entry: this.snapshot?.event?.entry, tapInfo, busy: this.arrivalBusy, error: this.arrivalError, greeting: this.arrivalGreeting, serial });
   }
   nextSerial() { return Math.max(0, ...(this.snapshot?.attendees || []).map(p => p.serial || 0)) + 1; }
   updateArrivalCount() {
     const eyebrow = this.root.querySelector("[data-arrival] .court-persona-eyebrow");
-    if (eyebrow) eyebrow.textContent = `即将成为第 ${serialLabel(this.nextSerial())} 位来客`;
+    if (eyebrow && this.arrivalMode !== "confirm") eyebrow.textContent = `即将成为第 ${serialLabel(this.nextSerial())} 位来客`;
+  }
+  /**
+   * The partner app's ticket in the link: a returning guest is signed in and
+   * framed; a new one picks a look first; a guest the venue check-in already
+   * placed keeps or changes the assigned look. The link then forgets the ticket.
+   */
+  async handleTicket() {
+    const ticket = this.partnerTicket;
+    if (!ticket || this.stage || this.ticketHandled) return null;
+    this.ticketHandled = true;
+    try {
+      const view = this.root.ownerDocument.defaultView || globalThis;
+      const url = new URL(view.location.href);
+      url.searchParams.delete("ticket");
+      view.history.replaceState(view.history.state, "", url);
+    } catch {}
+    let result = null;
+    for (let attempt = 0; attempt < 2 && !result; attempt++) {
+      try { result = await this.client.claimTicket(ticket); }
+      catch (error) {
+        // A dropped connection gets one more try; an expired link with a session on this phone just carries on.
+        if (!error.status && attempt === 0) { await new Promise(resolve => setTimeout(resolve, 1500)); continue; }
+        if (this.client.token) return null;
+        this.toast(error.message || "入场链接无效，请从小程序重新进入");
+        this.openArrival();
+        return null;
+      }
+    }
+    if (result.pending) {
+      Object.assign(this, { arrivalMode: "ticket", arrivalGreeting: result.profile?.name || "" });
+      this.openArrival();
+    } else if (result.personaPending) {
+      Object.assign(this, { arrivalMode: "confirm", arrivalGreeting: result.attendee.name, arrivalPersona: result.attendee.persona });
+      this.openArrival();
+    } else {
+      await this.run("onArrive", result.attendee);
+      this.toast(`欢迎回来，${result.attendee.name}`);
+    }
+    return result;
   }
   shuffleArrival() {
     this.arrivalPersona = this.pickArrivalPersona(this.arrivalPersona);
@@ -456,9 +507,15 @@ export class AppUI {
     if (button) button.disabled = true;
     this.renderArrival();
     try {
-      const body = { consent: true, persona: this.arrivalPersona };
-      if (this.tapInfo?.tag?.kind === "wristband" && this.tapInfo.tag.category) body.category = this.tapInfo.tag.category;
-      const result = await this.client.join(body);
+      let result;
+      if (this.arrivalMode === "confirm") result = await this.client.choosePersona(this.arrivalPersona);
+      else {
+        const body = { consent: true, persona: this.arrivalPersona };
+        if (this.arrivalMode === "ticket") body.ticket = this.partnerTicket;
+        if (this.tapInfo?.tag?.kind === "wristband" && this.tapInfo.tag.category) body.category = this.tapInfo.tag.category;
+        result = await this.client.join(body);
+      }
+      Object.assign(this, { arrivalMode: "new", arrivalGreeting: "" });
       this.setMe(this.client.me || { attendee: result.attendee, encounters: [] });
       const layer = this.root.querySelector("[data-arrival]");
       const serial = layer.querySelector("[data-serial]");
@@ -705,13 +762,46 @@ export class AppUI {
     const host = this.root.querySelector("[data-stage]");
     if (!host || !this.snapshot) return;
     const attendees = this.snapshot.attendees || [];
-    const arrivals = [...attendees].filter(p => p.source !== "curated-demo").sort((a, b) => String(b.joinedAt).localeCompare(String(a.joinedAt)) || (b.serial || 0) - (a.serial || 0));
+    const arrivedAt = p => String(p.onsiteAt || p.joinedAt || "");
+    const arrivals = [...attendees].filter(p => p.source !== "curated-demo").sort((a, b) => arrivedAt(b).localeCompare(arrivedAt(a)) || (b.serial || 0) - (a.serial || 0));
     const meets = [...(this.snapshot.connections || [])].filter(c => !c.synthetic || c.confirmedAt).sort((a, b) => String(b.confirmedAt).localeCompare(String(a.confirmedAt)));
     const key = `${this.snapshot.version}`;
     if (host.dataset.version === key) return;
     host.dataset.version = key;
     host.innerHTML = stageView({ event: this.snapshot.event, attendees, connections: this.snapshot.connections || [], arrivals: arrivals.length ? arrivals : attendees.slice(-5).reverse(), meets });
     this.renderStageQr();
+    this.queueWelcomes(attendees, arrivedAt);
+  }
+  /**
+   * Whoever arrives while the screen runs (a new guest, or a pre-registered
+   * one checking in at the venue) gets a few seconds in large, one at a time:
+   * the moment they look up at the screen. Those already here when it opened do not.
+   */
+  queueWelcomes(attendees, arrivedAt) {
+    const real = attendees.filter(p => p.source !== "curated-demo" && !p.remote);
+    if (!this.welcomeSeen) { this.welcomeSeen = new Map(real.map(p => [p.id, arrivedAt(p)])); this.welcomeQueue = []; return; }
+    for (const person of real) {
+      if (this.welcomeSeen.get(person.id) === arrivedAt(person)) continue;
+      this.welcomeSeen.set(person.id, arrivedAt(person));
+      if (!this.welcomeQueue.includes(person.id)) this.welcomeQueue.push(person.id);
+    }
+    if (this.welcomeQueue.length > 6) this.welcomeQueue.splice(0, this.welcomeQueue.length - 6);
+    this.nextWelcome();
+  }
+  nextWelcome() {
+    const host = this.root.querySelector("[data-stage-welcome]");
+    if (!host || this.welcomeTimer) return;
+    let person = null;
+    while (!person && this.welcomeQueue.length) person = findPerson(this.snapshot, this.welcomeQueue.shift());
+    if (!person) return;
+    host.innerHTML = stageWelcomeView(person);
+    host.hidden = false;
+    host.classList.remove("is-leaving");
+    const busy = this.welcomeQueue.length > 1;
+    this.welcomeTimer = setTimeout(() => {
+      host.classList.add("is-leaving");
+      this.welcomeTimer = setTimeout(() => { this.welcomeTimer = null; host.hidden = true; this.nextWelcome(); }, 500);
+    }, busy ? 3200 : 5200);
   }
   demoUrl(serial = "01", stage = false) {
     const url = new URL(document.baseURI);

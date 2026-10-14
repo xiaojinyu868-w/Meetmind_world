@@ -31,13 +31,20 @@
    Environment=ECHO_EVENT_CONFIG=/etc/echo-campus-b2b/event.json
    Environment=ECHO_EVENT_DATA=/var/lib/echo-campus-b2b/jiangsu-investor-night.json
    Environment=ECHO_BACKUP_DIR=/var/lib/echo-campus-b2b/backups/jiangsu-investor-night
-   Environment=ECHO_PARTNER_FEED_URL=https://<呆猫接口地址>
-   Environment=ECHO_PARTNER_FEED_LABEL=呆猫小镇
-   Environment=ECHO_PARTNER_FEED_SOURCE=daimao
    ```
 
-   呆猫的 token 写进 `/etc/echo-campus-b2b/secrets.env`：`ECHO_PARTNER_FEED_TOKEN=...`（root 600）。
-3. `systemctl daemon-reload && systemctl restart echo-campus-b2b`，再 `curl -s http://127.0.0.1:5191/api/health`：`mode` 应为 `event`，`attendees` 为 0，`remote.ok` 为 `true`。
+   呆猫小程序接入（换票、到场、连线、导出，见 `DAIMAO-MINIPROGRAM-API.md`）不随活动切换，平时就开着，在另一个补充配置里：
+
+   ```ini
+   # /etc/systemd/system/echo-campus-b2b.service.d/partner.conf
+   [Service]
+   Environment=ECHO_PUBLIC_URL=https://capture.meetmind.online/echo-campus/
+   Environment=ECHO_PARTNER_SOURCE=daimao
+   Environment=ECHO_PARTNER_LABEL=呆猫
+   ```
+
+   给呆猫的 token 写进 `/etc/echo-campus-b2b/secrets.env`：`ECHO_PARTNER_API_TOKEN=...`（root 600，至少 32 位，`openssl rand -base64 36 | tr '+/' '-_' | tr -d '='` 生成）。换 token 就改这一行再重启，旧 token 立即失效。
+3. `systemctl daemon-reload && systemctl restart echo-campus-b2b`，再 `curl -s http://127.0.0.1:5191/api/health`：`mode` 应为 `event`，`attendees` 为 0，`partnerApi` 为 `true`。
 4. 演示数据仍在原来的 `/var/lib/echo-campus-b2b/event.json`。活动结束删掉 `event.conf` 再重启，就回到演示。
 5. 物料编码清单：`node scripts/nfc-tags.mjs --config /etc/echo-campus-b2b/event.json --wristbands investor:40,founder:120,guest:60 --checkpoints welcome,stage,roadshow --gates south --out nfc-tags.csv`。
 

@@ -106,10 +106,7 @@ export class EventClient extends EventTarget {
     })();
     return this.mePending;
   }
-  async join(profile) {
-    if (profile?.consent !== true) throw new Error("请先确认在本活动公开展示这些资料");
-    const data = await this.request("join", { method: "POST", body: JSON.stringify(profile) });
-    if (!data.token || !data.attendee?.id) throw new Error("活动服务未返回有效的分身，请重试");
+  adopt(data) {
     this.token = data.token;
     try { this.storage?.setItem("echo-campus-token", data.token); } catch {
       this.emit("status", { online: true, message: "此浏览器无法保存会话，刷新后需要重新入场" });
@@ -117,9 +114,30 @@ export class EventClient extends EventTarget {
     this.authSocket();
     this.me = { attendee: data.attendee, version: data.snapshot?.version || 0, encounters: this.me?.attendee?.id === data.attendee.id ? this.me.encounters : [] };
     this.emit("me", this.me);
-    this.setSnapshot(data.snapshot);
+    if (data.snapshot) this.setSnapshot(data.snapshot);
+  }
+  async join(profile) {
+    if (profile?.consent !== true) throw new Error("请先确认在本活动公开展示这些资料");
+    const data = await this.request("join", { method: "POST", body: JSON.stringify(profile) });
+    if (!data.token || !data.attendee?.id) throw new Error("活动服务未返回有效的分身，请重试");
+    this.adopt(data);
     await this.refreshMe();
     return data;
+  }
+  /** A partner app's ticket: signs its user in, or answers pending (a look still to pick, then join with the ticket). */
+  async claimTicket(ticket) {
+    const data = await this.request("partner/claim", { method: "POST", body: JSON.stringify({ ticket }) });
+    if (data.pending) return data;
+    if (!data.token || !data.attendee?.id) throw new Error("活动服务未返回有效的分身，请重试");
+    if (data.token !== this.token) this.adopt(data);
+    await this.refreshMe();
+    return data;
+  }
+  async choosePersona(persona) {
+    const result = await this.request("persona", { method: "POST", body: JSON.stringify({ persona }) });
+    this.meTargetVersion = Math.max(this.meTargetVersion, result.version || 0);
+    await this.refreshMe();
+    return result;
   }
   async matches() { return this.request("matches"); }
   async activity() { return this.request("activity"); }
