@@ -255,7 +255,8 @@ export function stageView({ event, attendees, connections, arrivals, meets, qrRe
 /** Big screen, the moment someone arrives: their name and picture, large, while they are still looking up. */
 export function stageWelcomeView(person) {
   const persona = personaFor(person);
-  return `<div class="court-welcome-card" style="--persona:${persona.color}">
+  const length = [...String(person.name || "")].length;
+  return `<div class="court-welcome-card${length > 12 ? " is-longer" : length > 8 ? " is-long" : ""}" style="--persona:${persona.color}">
     ${avatar(person, { size: 128, photo: true })}
     <div class="court-welcome-copy"><small>${person.onsiteAt ? "刚刚到场" : "刚刚加入"} · 第 ${serialLabel(person.serial)} 位来客</small><strong>欢迎，${esc(person.name)}</strong><span>今天是「${esc(persona.codename)}」· ${esc(persona.signature)}</span></div>
     <img class="court-welcome-figure" src="${esc(portraitUrl(persona.id, "full"))}" alt="" decoding="async">

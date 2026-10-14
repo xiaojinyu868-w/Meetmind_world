@@ -86,6 +86,9 @@ test("the big screen welcomes a newcomer by name and can show the partner's code
   assert.ok(welcome.includes("刚刚到场 · 第 021 位来客"));
   assert.ok(welcome.includes("今天是「朱砂」"));
   assert.ok(welcome.includes("zhusha-full.webp"));
+  assert.ok(!welcome.includes("is-long"), "a short nickname keeps the large size");
+  assert.ok(stageWelcomeView({ name: "联调测试·小王的分身", persona: "zhusha", serial: 1 }).includes("court-welcome-card is-long"));
+  assert.ok(stageWelcomeView({ name: "一二三四五六七八九十一二三", persona: "zhusha", serial: 1 }).includes("is-longer"));
   const screen = stageView({ event: { entry: { label: "碰一下挂件", hint: "或微信扫码", qrImage: "assets/event/daimao-code.png" } }, attendees: [], connections: [], arrivals: [], meets: [] });
   assert.ok(screen.includes('class="court-stage-code" src="http://localhost/assets/event/daimao-code.png"'));
   assert.ok(!screen.includes("data-stage-qr"));
