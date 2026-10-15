@@ -1,0 +1,153 @@
+{
+  "at": "2026-10-15T12:46:16.588Z",
+  "commit": "677de0c",
+  "passed": 29,
+  "total": 29,
+  "results": [
+    {
+      "step": "服务起来了，合作接口已开启",
+      "ok": true,
+      "detail": "模式 demo，场上 15 人（演示人物）"
+    },
+    {
+      "step": "不带 token 自检被拒",
+      "ok": true,
+      "detail": "401 PARTNER_AUTH_REQUIRED"
+    },
+    {
+      "step": "错误 token 被拒",
+      "ok": true,
+      "detail": "401 PARTNER_AUTH_REQUIRED"
+    },
+    {
+      "step": "正确 token 自检通过",
+      "ok": true,
+      "detail": "200 source=daimao label=呆猫"
+    },
+    {
+      "step": "缺少 consent 被拒",
+      "ok": true,
+      "detail": "400 CONSENT_REQUIRED"
+    },
+    {
+      "step": "uid 格式不对被拒（不能用手机号这类明文）",
+      "ok": true,
+      "detail": "400 INVALID_UID"
+    },
+    {
+      "step": "新用户换票",
+      "ok": true,
+      "detail": "status=new expiresIn=1800"
+    },
+    {
+      "step": "返回的地图链接带 from=daimao 和票据",
+      "ok": true,
+      "detail": "/?from=daimao&ticket=<票据>"
+    },
+    {
+      "step": "web-view 打开地图页",
+      "ok": true,
+      "detail": "200 text/html; charset=utf-8"
+    },
+    {
+      "step": "页面认领票据：新用户先挑形象",
+      "ok": true,
+      "detail": "{\"name\":\"测试小李\",\"avatarUrl\":\"https://example.com/avatar/a.png\"}"
+    },
+    {
+      "step": "带票入场，出现在地图上",
+      "ok": true,
+      "detail": "201 编号 16 名字 测试小李"
+    },
+    {
+      "step": "老用户再换票",
+      "ok": true,
+      "detail": "status=returning 编号 16"
+    },
+    {
+      "step": "老用户认领：直接登录同一个人",
+      "ok": true,
+      "detail": "resumed=true 编号 16"
+    },
+    {
+      "step": "昵称跟着呆猫更新",
+      "ok": true,
+      "detail": "小李（改名）"
+    },
+    {
+      "step": "到场换票：不用打开地图就上图",
+      "ok": true,
+      "detail": "status=checked-in 编号 17 形象待确认=true"
+    },
+    {
+      "step": "重复到场不重复建人",
+      "ok": true,
+      "detail": "第二次 status=returning，人数 16 → 17"
+    },
+    {
+      "step": "推送连线：新连线 201",
+      "ok": true,
+      "detail": "201"
+    },
+    {
+      "step": "重复推送：已存在 200",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "step": "一方没上图：404 MEMBER_NOT_ON_MAP",
+      "ok": true,
+      "detail": "404 MEMBER_NOT_ON_MAP"
+    },
+    {
+      "step": "导出包含两位呆猫用户",
+      "ok": true,
+      "detail": "members=2 otherAttendees=0"
+    },
+    {
+      "step": "导出的连线来源是 daimao",
+      "ok": true,
+      "detail": "[{\"uid\":\"dm_rehearsal_b\",\"via\":\"daimao\"}]"
+    },
+    {
+      "step": "首次带入的资料在导出里",
+      "ok": true,
+      "detail": "{\"role\":\"独立开发者\",\"organization\":\"一人公司 · 记账工具\",\"bio\":\"做了三年独立开发\",\"offer\":\"前端、小程序开发\",\"need\":\"找增长合伙人\"}"
+    },
+    {
+      "step": "到场时间记录了",
+      "ok": true,
+      "detail": "2026-10-15T12:46:16.169Z"
+    },
+    {
+      "step": "导出里没有 token、票据、手机号和邮箱",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "step": "公开的活动数据里不出现呆猫 uid",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "step": "不存在或过期的票据：410",
+      "ok": true,
+      "detail": "410 TICKET_EXPIRED"
+    },
+    {
+      "step": "格式不对的票据：400",
+      "ok": true,
+      "detail": "400 INVALID_TICKET"
+    },
+    {
+      "step": "不在白名单的来源被拒",
+      "ok": true,
+      "detail": "403 ORIGIN_NOT_ALLOWED"
+    },
+    {
+      "step": "服务日志里没有 token 和票据",
+      "ok": true,
+      "detail": "1 行日志"
+    }
+  ]
+}

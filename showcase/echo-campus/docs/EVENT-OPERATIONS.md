@@ -47,6 +47,7 @@
 3. `systemctl daemon-reload && systemctl restart echo-campus-b2b`，再 `curl -s http://127.0.0.1:5191/api/health`：`mode` 应为 `event`，`attendees` 为 0，`partnerApi` 为 `true`。
 4. 演示数据仍在原来的 `/var/lib/echo-campus-b2b/event.json`。活动结束删掉 `event.conf` 再重启，就回到演示。
 5. 物料编码清单：`node scripts/nfc-tags.mjs --config /etc/echo-campus-b2b/event.json --wristbands investor:40,founder:120,guest:60 --checkpoints welcome,stage,roadshow --gates south --out nfc-tags.csv`。
+6. 呆猫：切换前在服务器上跑 `node scripts/partner-rehearsal.mjs`，它在临时实例上把换票、入场、到场、连线、导出走一遍，不碰线上数据；切换后换 token（上面第 2 步），私下发给呆猫，请他们调一次 `ping`。业务域名校验文件不随活动切换，不用动。
 
 ## 3. 现场看什么
 
@@ -56,7 +57,7 @@
 | --- | --- | --- |
 | `attendees` | 随入场增长 | 不动：看日志里入场是否报错 |
 | `live` | 约等于在线手机数加大屏 | 远低于在场人数：手机在用 10 秒轮询，功能正常但更新慢，查现场网络 |
-| `remote.ok` / `remote.failures` | `true` / `0` | `false`：呆猫接口不可用，地图保留上一份名单，不影响现场 |
+| `remote.ok` / `remote.failures` | `true` / `0`；没配名单拉取（`ECHO_PARTNER_FEED_URL`）时为 `null`，现在的呆猫换票接入不用它 | `false`：名单接口不可用，地图保留上一份名单，不影响现场 |
 | `memoryMb` | 低于 500 | 持续上涨：重启服务（数据不丢） |
 | `cpuMs` | 每分钟增长低于 6000 | 持续偏高：查日志 |
 
@@ -69,8 +70,8 @@
 | 服务无响应 | `systemctl restart echo-campus-b2b`。最多丢最近 0.4 秒的变动；手机自动重连并补齐 |
 | 刚上线的版本有问题 | 按交接文档的回滚命令切回上一个 commit |
 | 数据文件损坏 | 停服务，用 `ls -t $ECHO_BACKUP_DIR \| head -1` 找到最新备份，复制覆盖数据文件，再启动 |
-| 碰不出 | 扫同一件物料上的二维码；大屏右下角也有入场二维码 |
-| 呆猫接口挂了 | 不影响现场；地图保留上一份名单，恢复后自动更新 |
+| 碰不出 | 扫同一件物料上的二维码；大屏左下角也有入场二维码 |
+| 呆猫后台挂了，小程序打不开地图 | 地图和大屏照常；来宾扫物料或大屏左下角的二维码直接入场（不带呆猫身份） |
 | 现场网络中断 | 页面提示连接不可用，场景仍可浏览；恢复后自动重连并补齐 |
 | 大屏越来越卡 | 刷新大屏页面（`?mode=stage`） |
 

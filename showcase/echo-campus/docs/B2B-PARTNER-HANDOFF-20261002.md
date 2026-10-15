@@ -11,6 +11,7 @@
 | 地址 | `https://capture.meetmind.online/echo-campus/`（沿用原 Showcase 地址，旧链接和二维码不变；大屏 `?mode=stage`） |
 | 版本 | 本分支 `5bae9b4`（2026-10-14 呆猫小程序接入：换票进入地图、现场到场即上大屏并弹欢迎卡、碰一碰连线、数据导出，见 `DAIMAO-MINIPROGRAM-API.md`；更新前为 `545dc95`，数据备份在 `/root/backups/echo-campus-b2b-event-20261014-210334.json`。再上一版 `890588a` 活动级承载，见 `EVENT-OPERATIONS.md`）；已提交的 `dist/` 就是生产构建，服务器上不执行 `npm run build` |
 | 呆猫接入 | 2026-10-14 开启：补充配置 `/etc/systemd/system/echo-campus-b2b.service.d/partner.conf`（`ECHO_PUBLIC_URL`、`ECHO_PARTNER_SOURCE=daimao`、`ECHO_PARTNER_LABEL=呆猫`），token 为 `secrets.env` 里的 `ECHO_PARTNER_API_TOKEN`（联调用，活动前更换；改之前的密钥文件备份在 `/root/backups/echo-campus-b2b-secrets-20261014-210320.env`）。`/api/health` 的 `partnerApi` 为 `true`。关闭：删掉 `partner.conf` 和这一行 token，`systemctl daemon-reload && systemctl restart echo-campus-b2b` |
+| 呆猫联调 | 2026-10-15，服务代码未改：`node scripts/partner-rehearsal.mjs` 在临时实例（`127.0.0.1:5391`，临时数据和 token，跑完删除）上把呆猫会调的每一步走了一遍，29/29 通过，报告 `docs/qa/daimao-rehearsal-20261015.json`；`/echo-campus/` 的访问日志不再记查询串（入场票据），见第 6 节，原配置备份 `/etc/nginx/conf.d/capture.meetmind.online.conf.bak-20261015-204342-echo-log`；业务域名校验文件收到后 `sudo bash scripts/place-verify-file.sh <文件>` 上线。进度和待办见 `DAIMAO-INTEGRATION-STATUS.md` |
 | 缓存 | 2026-10-09 去掉了 Nginx `location ^~ /echo-campus/` 里强制的 `add_header Cache-Control "no-cache" always;`（原配置备份在 `/root/backups/capture.meetmind.online.conf.bak-20261009-*`），由应用自己给出缓存头：页面 `no-cache` + ETag，带哈希或 `?v=` 的资源长期缓存。实测手机再次打开从 14.5 MB 降到 0 MB |
 | 服务 | `echo-campus-b2b.service`（用户 `echocampus`，`Restart=always`，`127.0.0.1:5191`）；全站只保留这一个 echo-campus 服务 |
 | 代码 | `/srv/meetmind/Meetmind_world`：浅克隆 + 稀疏检出 `showcase/echo-campus`，`npm ci --omit=dev --ignore-scripts` |
@@ -303,8 +304,11 @@ location ^~ /echo-campus/ {
     proxy_cache off;
     proxy_read_timeout 3600s;
     add_header Cache-Control "no-cache" always;
+    access_log /var/log/nginx/access.log echo_campus_noquery;
 }
 ```
+
+呆猫打开地图的链接带着入场票据（`?ticket=`，30 分钟内可换登录），所以这个路径的访问日志只记路径、来源页去掉查询串：`deploy/nginx-log-format.conf` 装成 `/etc/nginx/conf.d/00-echo-campus-log.conf`，文件名要排在使用它的 server 配置之前，否则 `nginx -t` 报 unknown log format。
 
 应用前检查：
 
@@ -400,7 +404,7 @@ https://b2b.example.com/echo-campus/?entry=nfc
 - [x] 用目标数量的模拟身份做读写、WebSocket、数据增长和峰值压测（2026-10-09：300 位来宾、高峰每秒 9 个动作，0 错误，写 p95 21 ms，CPU 6.5%，推送 1.7 MB/s，300 台手机状态与服务器一致；`scripts/load-event.mjs` 可重跑）；
 - [ ] 至少两种 iOS/Android 真机、目标支付宝版本和低速网络实测；
 - [ ] 大屏连续运行、浏览器内存、GPU、自动刷新和断线重连通过（开发机 20 分钟结果见 `EVENT-OPERATIONS.md` 第 6 节；仍需在现场大屏电脑上跑一次）；
-- [ ] 日志和导出文件不含 token、激活码、支付宝密钥或未授权联系方式；
+- [x] 日志和导出文件不含 token、激活码、支付宝密钥或未授权联系方式（2026-10-15：服务日志和 Nginx 日志里查不到呆猫 token；`/echo-campus/` 访问日志只记路径，入场票据和标签参数不落日志；给呆猫的导出只有呆猫用户自己的资料、连线和打卡，没有微信等联系方式，`scripts/partner-rehearsal.mjs` 每次都检查 token、票据、手机号和邮箱）；
 - [ ] 现场网络、备用网络、电源、值守人、P0/P1 降级路径和彩排完成；
 - [ ] 活动方书面确认参与类别、手环颜色、公开字段、数据留存/删除期限和导出范围。
 
