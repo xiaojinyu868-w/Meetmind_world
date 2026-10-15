@@ -6,8 +6,8 @@
  *
  *   node scripts/partner-rehearsal.mjs [--report docs/qa/daimao-rehearsal.json]
  */
-import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
@@ -119,7 +119,34 @@ async function main() {
   r = await call("POST", "/api/partner/connections", { body: { uidA: a.uid, uidB: "dm_rehearsal_nobody" } });
   check("一方没上图：404 MEMBER_NOT_ON_MAP", r.status === 404 && code(r) === "MEMBER_NOT_ON_MAP", `${r.status} ${code(r)}`);
 
-  // 7. 数据回传
+  // 7. 用户资料同步：打开过地图的补全资料，没打开过的也存一份，都不上地图
+  r = await call("POST", "/api/partner/members", { body: { members: [
+    { uid: a.uid, consent: true, realName: "李测试", phone: "13800138000", wechat: "rehearsal_li", tags: ["AI"], registeredAt: "2026-10-20T12:00:00+08:00" },
+    { uid: "dm_rehearsal_c", consent: true, nickname: "测试小陈", phone: "13900139000", registeredAt: 1792900800, extra: { city: "南京" } },
+  ] } });
+  check("同步用户资料：已有的补全，没打开过地图的新建", r.status === 200 && r.json?.created === 1 && r.json.updated === 1, JSON.stringify(r.json));
+  const people = (await call("GET", "/api/health", { auth: "" })).json.attendees;
+  check("同步的用户不上地图", people === after, `场上仍是 ${people} 人`);
+  r = await call("GET", "/api/event", { auth: "" });
+  check("同步的资料不出现在公开数据里", r.status === 200 && !/13800138000|13900139000|dm_rehearsal_c|测试小陈|李测试/.test(r.text), "");
+  r = await call("POST", "/api/partner/members", { body: { members: [{ uid: "dm_rehearsal_c", consent: true, nickname: "小陈" }] } });
+  check("再次同步：只改带了的字段", r.status === 200 && r.json?.updated === 1, JSON.stringify(r.json));
+  r = await call("POST", "/api/partner/members", { body: { members: [{ uid: "dm_rehearsal_d", nickname: "没同意" }] } });
+  check("缺少 consent 的同步被拒", r.status === 400 && code(r) === "CONSENT_REQUIRED", `${r.status} ${code(r)}`);
+  let saved = [];
+  for (let i = 0; i < 30 && !saved.some((m) => m.uid === "dm_rehearsal_c" && m.nickname === "小陈"); i++) {
+    await new Promise((done) => setTimeout(done, 100));
+    try { saved = JSON.parse(readFileSync(join(tmp, "event.json"), "utf8")).partnerMembers?.daimao || []; } catch {}
+  }
+  const c = saved.find((m) => m.uid === "dm_rehearsal_c"), sa = saved.find((m) => m.uid === a.uid);
+  check("资料存进了我们的数据文件，没带的字段保留", c?.nickname === "小陈" && c.phone === "13900139000" && c.extra?.city === "南京" && sa?.phone === "13800138000" && sa.nickname === "小李（改名）", `${saved.length} 位：${saved.map((m) => m.uid).join("、")}`);
+  const csv = execFileSync(process.execPath, ["scripts/export-partner-members.mjs", join(tmp, "event.json")], { cwd: ROOT, encoding: "utf8" });
+  const lines = csv.trim().split("\r\n");
+  check("导出成表格：表头加每人一行", lines.length === saved.length + 1 && lines[0].includes("手机号") && csv.includes("13900139000"), `${lines.length - 1} 行`);
+  r = await call("POST", "/api/partner/members", { body: { members: [{ uid: "dm_rehearsal_c", deleted: true }] } });
+  check("用户注销：推 deleted 后删掉这一位", r.status === 200 && r.json?.deleted === 1, JSON.stringify(r.json));
+
+  // 8. 数据回传
   r = await call("GET", "/api/partner/export");
   const members = r.json?.members || [];
   const ma = members.find((m) => m.uid === a.uid), mb = members.find((m) => m.uid === b.uid);
@@ -130,11 +157,11 @@ async function main() {
   const raw = JSON.stringify(r.json);
   check("导出里没有 token、票据、手机号和邮箱", !raw.includes(TOKEN) && !raw.includes(ticketA) && !/1[3-9]\d{9}/.test(raw) && !/[\w.+-]+@[\w-]+\.[\w.]+/.test(raw), "");
 
-  // 8. 公开数据里看不到呆猫 uid
+  // 9. 公开数据里看不到呆猫 uid
   r = await call("GET", "/api/event", { auth: "" });
   check("公开的活动数据里不出现呆猫 uid", r.status === 200 && !r.text.includes("dm_rehearsal_a") && !r.text.includes("dm_rehearsal_b"), "");
 
-  // 9. 票据异常
+  // 10. 票据异常
   r = await call("POST", "/api/partner/claim", { body: { ticket: randomBytes(24).toString("base64url") }, auth: "", origin: BASE });
   check("不存在或过期的票据：410", r.status === 410 && code(r) === "TICKET_EXPIRED", `${r.status} ${code(r)}`);
   r = await call("POST", "/api/partner/claim", { body: { ticket: "<script>" }, auth: "", origin: BASE });
@@ -142,8 +169,8 @@ async function main() {
   r = await call("POST", "/api/partner/claim", { body: { ticket: ticketA2 }, auth: "", origin: "https://evil.example.com" });
   check("不在白名单的来源被拒", r.status === 403 && code(r) === "ORIGIN_NOT_ALLOWED", `${r.status} ${code(r)}`);
 
-  // 10. 日志里没有 token 和票据
-  check("服务日志里没有 token 和票据", !serverLog.includes(TOKEN) && !serverLog.includes(ticketA) && !serverLog.includes(ticketA2), `${serverLog.split("\n").filter(Boolean).length} 行日志`);
+  // 11. 日志里没有 token、票据和手机号
+  check("服务日志里没有 token、票据和手机号", ![TOKEN, ticketA, ticketA2, "13800138000", "13900139000"].some((s) => serverLog.includes(s)), `${serverLog.split("\n").filter(Boolean).length} 行日志`);
 }
 
 let failed = false;

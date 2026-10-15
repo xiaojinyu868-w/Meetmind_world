@@ -78,7 +78,8 @@
 ## 5. 活动结束
 
 1. 删掉 `event.conf`，`systemctl daemon-reload && systemctl restart echo-campus-b2b`，回到演示。
-2. 按和活动方约定的期限，删除这场的数据文件和备份目录。
+2. 呆猫给到的用户资料导出成表格：`sudo node scripts/export-partner-members.mjs <这场的数据文件> --out /root/daimao-members-<日期>.csv`（含联系方式，只留在服务器上）。
+3. 按和活动方约定的期限，删除这场的数据文件和备份目录。
 
 ## 6. 大屏长时间运行（2026-10-09）
 

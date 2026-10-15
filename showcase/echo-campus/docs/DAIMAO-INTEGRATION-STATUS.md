@@ -2,7 +2,7 @@
 
 更新：2026-10-15
 
-**一句话**：我们这边能做的都做完了，接口在线上开着，呆猫会走的每一步都在同一份代码上演练通过。剩下的要等呆猫给校验文件、接后端和 web-view，以及活动方给正式活动信息。
+**一句话**：我们这边能做的都做完了，接口在线上开着，呆猫会走的每一步都在同一份代码上演练通过。剩下的要等呆猫给校验文件、接后端和 web-view、推用户资料，以及活动方给正式活动信息。
 
 ## 已完成
 
@@ -11,7 +11,8 @@
 | 10-14 | 接口需求 v1：呆猫要做的 7 件事、换票字段、返回、错误码、联调步骤 | `DAIMAO-MINIPROGRAM-API.md` |
 | 10-14 | 线上开启合作接口：换票进入地图、现场到场即上大屏并弹欢迎卡、碰一碰连线、数据导出 | `https://capture.meetmind.online/echo-campus/`，`/api/health` 的 `partnerApi` 为 `true` |
 | 10-15 | 安全检查：服务日志和 Nginx 日志里查不到 token；给呆猫的导出不含联系方式 | — |
-| 10-15 | 完整演练，29/29 通过 | `scripts/partner-rehearsal.mjs`，报告 `qa/daimao-rehearsal-20261015.json` |
+| 10-15 | 用户资料接口：呆猫把用户字段给到我们，存在我们服务端，不上地图、不公开；换票时带来的资料也记一份；可导出成表格 | `DAIMAO-MINIPROGRAM-API.md` 第 8 节，导出 `scripts/export-partner-members.mjs` |
+| 10-15 | 完整演练，37/37 通过 | `scripts/partner-rehearsal.mjs`，报告 `qa/daimao-rehearsal-20261015.json` |
 | 10-15 | `/echo-campus/` 访问日志不再记入场票据 | `deploy/nginx-log-format.conf`，线上 `/etc/nginx/conf.d/00-echo-campus-log.conf` |
 | 10-15 | 业务域名校验文件的上线脚本，已在线上试过上线、重复上线、撤掉 | `scripts/place-verify-file.sh` |
 
@@ -24,6 +25,7 @@
 - 老用户：再换票返回 `returning`，认领后直接登录同一个人；呆猫改了昵称，地图上跟着变。
 - 现场到场：`checkin: true` 不用打开地图就上图；重复到场不重复建人。
 - 碰一碰连线：新连线 201，重复推送 200，一方没上图 404。
+- 用户资料：打开过地图的补全、没打开过的新建，都不上地图、不进公开数据和给呆猫的导出；再次推送只改带了的字段；缺少 `consent` 被拒；存进数据文件，能导出成表格；推 `deleted` 后删除。
 - 数据导出：有两位用户的资料、连线（来源 `daimao`）和到场时间；没有 token、票据、手机号、邮箱；公开数据里看不到呆猫 uid。
 - 异常：过期票据 410，格式不对 400，白名单以外的来源 403；服务日志里没有 token 和票据。
 
@@ -35,6 +37,7 @@
 | --- | --- |
 | 业务域名校验文件 | `sudo bash scripts/place-verify-file.sh <文件>`，脚本核对线上内容和原文件一致后，把链接回给呆猫 |
 | 后端换票、web-view | 他们拿到 token 先调一次 `ping`；第一位真实用户进来时看 `journalctl -u echo-campus-b2b` 和地图上的状态 |
+| 用户资料推送 | 他们推一位测试用户，返回 `created: 1`；之后随时 `sudo node scripts/export-partner-members.mjs /var/lib/echo-campus-b2b/event.json --out /root/daimao-members.csv` 导出表格看（含联系方式，只留在服务器上） |
 | 活动页小程序码（PNG） | 写进正式活动配置的 `entry.qrImage`（站内路径或 https 地址，见 `EVENT-PROFILE.md`），随活动配置一起上线；演示模式下大屏继续显示我们自己的二维码 |
 | 要用哪些可选接口 | 确认是否调用到场（`checkin`）、连线、导出 |
 
@@ -50,11 +53,12 @@ token 由我们私下发，读取：`sudo grep ECHO_PARTNER_API_TOKEN /etc/echo-
 
 ## 发给呆猫的话（可直接转发；token 另外私下发）
 
-> 相遇之庭这边和呆猫小程序的对接接口已经上线，文档见附件《相遇之庭 × 呆猫小程序：接口需求 v1》。需要你们做三件事：
+> 相遇之庭这边和呆猫小程序的对接接口已经上线，文档见附件《相遇之庭 × 呆猫小程序：接口需求 v1.1》。需要你们做四件事：
 >
 > 1. 小程序后台「开发管理 → 开发设置 → 业务域名」添加 `capture.meetmind.online`，把下载的校验文件发给我，我们当天放好；
 > 2. 后端调用换票接口 `POST /api/partner/tickets`（token 我单独发你，只放在你们服务端）；
-> 3. 小程序用 web-view 打开接口返回的 `url`。
+> 3. 小程序用 web-view 打开接口返回的 `url`；
+> 4. 用户报名或资料有变化时，把用户资料推给我们（`POST /api/partner/members`，字段见文档第 8 节）。
 >
 > 建议再做两件：用户在现场时换票带上 `checkin: true`，人会直接出现在大屏上；发我们一张活动页的小程序码（PNG），放在大屏左下角。
 >

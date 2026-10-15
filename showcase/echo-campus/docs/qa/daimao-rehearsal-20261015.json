@@ -1,8 +1,8 @@
 {
-  "at": "2026-10-15T12:46:16.588Z",
-  "commit": "677de0c",
-  "passed": 29,
-  "total": 29,
+  "at": "2026-10-15T13:26:56.928Z",
+  "commit": "fcb8c5b+members",
+  "passed": 37,
+  "total": 37,
   "results": [
     {
       "step": "服务起来了，合作接口已开启",
@@ -100,6 +100,46 @@
       "detail": "404 MEMBER_NOT_ON_MAP"
     },
     {
+      "step": "同步用户资料：已有的补全，没打开过地图的新建",
+      "ok": true,
+      "detail": "{\"received\":2,\"created\":1,\"updated\":1,\"unchanged\":0,\"deleted\":0}"
+    },
+    {
+      "step": "同步的用户不上地图",
+      "ok": true,
+      "detail": "场上仍是 17 人"
+    },
+    {
+      "step": "同步的资料不出现在公开数据里",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "step": "再次同步：只改带了的字段",
+      "ok": true,
+      "detail": "{\"received\":1,\"created\":0,\"updated\":1,\"unchanged\":0,\"deleted\":0}"
+    },
+    {
+      "step": "缺少 consent 的同步被拒",
+      "ok": true,
+      "detail": "400 CONSENT_REQUIRED"
+    },
+    {
+      "step": "资料存进了我们的数据文件，没带的字段保留",
+      "ok": true,
+      "detail": "3 位：dm_rehearsal_a、dm_rehearsal_b、dm_rehearsal_c"
+    },
+    {
+      "step": "导出成表格：表头加每人一行",
+      "ok": true,
+      "detail": "3 行"
+    },
+    {
+      "step": "用户注销：推 deleted 后删掉这一位",
+      "ok": true,
+      "detail": "{\"received\":1,\"created\":0,\"updated\":0,\"unchanged\":0,\"deleted\":1}"
+    },
+    {
       "step": "导出包含两位呆猫用户",
       "ok": true,
       "detail": "members=2 otherAttendees=0"
@@ -117,7 +157,7 @@
     {
       "step": "到场时间记录了",
       "ok": true,
-      "detail": "2026-10-15T12:46:16.169Z"
+      "detail": "2026-10-15T13:26:55.993Z"
     },
     {
       "step": "导出里没有 token、票据、手机号和邮箱",
@@ -145,7 +185,7 @@
       "detail": "403 ORIGIN_NOT_ALLOWED"
     },
     {
-      "step": "服务日志里没有 token 和票据",
+      "step": "服务日志里没有 token、票据和手机号",
       "ok": true,
       "detail": "1 行日志"
     }

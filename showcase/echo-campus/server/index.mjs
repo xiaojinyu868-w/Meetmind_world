@@ -42,13 +42,13 @@ function notModified(req, etag, mtime) {
   const since = Date.parse(req.headers["if-modified-since"] || "");
   return Number.isFinite(since) && Math.floor(mtime / 1000) * 1000 <= since;
 }
-async function readBody(req) {
+async function readBody(req, limit = 8192) {
   if (!String(req.headers["content-type"] || "").toLowerCase().startsWith("application/json")) fail(415, "JSON_REQUIRED", "请使用 JSON 提交资料");
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > 8192) fail(413, "BODY_TOO_LARGE", "提交内容过大");
+    if (size > limit) fail(413, "BODY_TOO_LARGE", "提交内容过大");
     chunks.push(chunk);
   }
   try {
@@ -262,6 +262,8 @@ export function createEventServer({
             const result = store.partnerConnect(partnerSource, await readBody(req));
             return json(res, result.idempotent ? 200 : 201, result);
           }
+          // A full batch of members is far larger than any guest's request; only the authenticated partner gets here.
+          if (req.method === "POST" && url.pathname === "/api/partner/members") return json(res, 200, store.syncPartnerMembers(partnerSource, await readBody(req, 1 << 20)));
           if (req.method === "GET" && url.pathname === "/api/partner/export") return json(res, 200, store.partnerExport(partnerSource));
         }
         if (url.pathname === "/api/live") fail(426, "WEBSOCKET_REQUIRED", "请使用 WebSocket 连接");

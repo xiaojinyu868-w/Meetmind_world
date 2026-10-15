@@ -15,6 +15,9 @@ const TICKET_TTL_MS = 30 * 60 * 1000;
 const MAX_TICKETS = 20000;
 const TICKET_SHAPE = /^[A-Za-z0-9_-]{20,80}$/;
 const PARTNER_UID = /^[A-Za-z0-9_-]{1,64}$/;
+const MEMBER_BATCH = 200;
+const MAX_PARTNER_MEMBERS = 20000;
+const MEMBER_EXTRA_BYTES = 4096;
 // Versions a reconnecting or polling phone can catch up on without a full snapshot.
 const HISTORY_LIMIT = 2000;
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -45,6 +48,21 @@ function partnerUid(value, field = "uid") {
   if (!PARTNER_UID.test(uid)) fail(400, "INVALID_UID", field + " 需要 1–64 位字母、数字、_ 或 -");
   return uid;
 }
+/** ISO 8601, or a timestamp in milliseconds or seconds; anything else is empty. */
+function partnerTime(value) {
+  const time = typeof value === "number" ? (Math.abs(value) < 1e11 ? value * 1000 : value) : typeof value === "string" && value ? Date.parse(value) : NaN;
+  return Number.isFinite(time) && Math.abs(time) <= 8.64e15 ? new Date(time).toISOString() : "";
+}
+function partnerPhone(value) {
+  const phone = typeof value === "string" || Number.isSafeInteger(value) ? String(value).replace(/[\s()-]/g, "") : "";
+  return /^\+?\d{5,20}$/.test(phone) ? phone : "";
+}
+const MEMBER_FIELDS = Object.freeze({
+  nickname: v => partnerText(v, 24), avatarUrl: v => httpsUrl(v), realName: v => partnerText(v, 40), phone: partnerPhone, wechat: v => partnerText(v, 40),
+  role: v => partnerText(v, 60), organization: v => partnerText(v, 80), bio: v => partnerText(v, 160), offer: v => partnerText(v, 160), need: v => partnerText(v, 160),
+  category: v => partnerText(v, 40), tags: v => Array.isArray(v) ? [...new Set(v.map(tag => partnerText(tag, 20)).filter(Boolean))].slice(0, 20) : [],
+  registeredAt: partnerTime, checkedInAt: partnerTime,
+});
 
 export class HttpError extends Error {
   constructor(status, code, message) {
@@ -93,6 +111,7 @@ export class EventStore {
       this.state = JSON.parse(readFileSync(file, "utf8"));
       if (this.state.schema !== "echo-campus-store.v1") throw new Error("Unsupported demo store schema");
       this.state.checkins ||= [];
+      this.state.partnerMembers ||= {};
       this.state.event = this.composeEvent(this.state.event, eventConfig);
       if (this.migrate() || !this.state.event.activityMode) this.persist();
     } else {
@@ -104,15 +123,20 @@ export class EventStore {
         schema: "echo-campus-store.v1", version: 1, event,
         attendees: demo ? seedAttendees(date) : [], encounters: demo ? seedConnections(date) : [], sessions: [], checkins: [],
         badges: demo ? demoBadges().map(b => ({ badgeId: b.badgeId, activationHash: hashSecret(b.activationCode), attendeeId: null })) : [],
-        nextSerial: 16,
+        nextSerial: 16, partnerMembers: {},
       };
       this.persist();
     }
     this.indexSessions();
     this.indexPartners();
+    this.indexPartnerMembers();
   }
   indexSessions() { this.sessionsByHash = new Map(this.state.sessions.map(s => [s.tokenHash, s])); }
   indexPartners() { this.partnerIndex = new Map(this.state.attendees.filter(a => a.partner?.source && a.partner?.uid).map(a => [a.partner.source + ":" + a.partner.uid, a.id])); }
+  indexPartnerMembers() {
+    this.memberIndex = new Map();
+    for (const [source, list] of Object.entries(this.state.partnerMembers)) for (const member of list) this.memberIndex.set(source + ":" + member.uid, member);
+  }
   composeEvent(persisted = {}, config = {}) {
     // Deployment config wins over persisted demo fields; persisted runtime
     // fields (e.g. a disabled demoMode) win over the built-in defaults.
@@ -501,6 +525,8 @@ export class EventStore {
       else if (!attendee.onsiteAt) { attendee.onsiteAt = new Date(this.now()).toISOString(); changed = true; status = "checked-in"; }
     }
     if (changed) this.changed(this.attendeeOps(attendee), [attendee.id]);
+    const sent = Object.fromEntries(["nickname", "avatarUrl", "role", "organization", "bio", "offer", "need", "category"].filter(key => profile[key]).map(key => [key, profile[key]]));
+    if (this.rememberPartnerMember(source, { uid: profile.uid, fields: sent }) !== "unchanged") this.schedulePersist();
     const moment = this.now();
     for (const [hash, entry] of this.tickets) if (entry.expiresAt <= moment) this.tickets.delete(hash);
     if (this.tickets.size >= MAX_TICKETS) this.tickets.delete(this.tickets.keys().next().value);
@@ -584,6 +610,65 @@ export class EventStore {
       event: { id: this.state.event.id, name: this.state.event.name }, version: this.state.version, generatedAt: new Date(this.now()).toISOString(),
       members, otherAttendees: this.state.attendees.filter(a => a.partner?.source !== source && a.source !== "curated-demo").length,
     };
+  }
+  /** One user as the partner keeps them. A field that is sent wins (empty clears it); one left out keeps what we have. */
+  partnerMember(body) {
+    if (!body || typeof body !== "object" || Array.isArray(body)) fail(400, "INVALID_INPUT", "每位用户需要是 JSON 对象");
+    const uid = partnerUid(body.uid);
+    if (body.deleted === true) return { uid, deleted: true };
+    if (body.consent !== true) fail(400, "CONSENT_REQUIRED", "需要用户同意提供这些资料（consent: true）");
+    const fields = {};
+    for (const [key, clean] of Object.entries(MEMBER_FIELDS)) if (Object.hasOwn(body, key)) fields[key] = clean(body[key]);
+    if (Object.hasOwn(body, "extra")) {
+      const extra = body.extra ?? {};
+      if (typeof extra !== "object" || Array.isArray(extra)) fail(400, "INVALID_INPUT", "extra 需要是 JSON 对象");
+      const json = JSON.stringify(extra);
+      if (Buffer.byteLength(json) > MEMBER_EXTRA_BYTES) fail(400, "INVALID_INPUT", "extra 不能超过 4KB");
+      fields.extra = JSON.parse(json);
+    }
+    return { uid, fields };
+  }
+  /**
+   * Server to server: the partner's users, kept on our side as the partner sent them — never on the map, the big
+   * screen or in any public data. Upsert by uid; `deleted: true` removes one. A bad entry rejects the whole batch.
+   */
+  syncPartnerMembers(source, body) {
+    const list = body && typeof body === "object" && Array.isArray(body.members) ? body.members : null;
+    if (!list?.length) fail(400, "INVALID_INPUT", "请提交 members 数组");
+    if (list.length > MEMBER_BATCH) fail(400, "TOO_MANY_MEMBERS", "每次最多 " + MEMBER_BATCH + " 位");
+    const records = list.map((item, index) => {
+      try { return this.partnerMember(item); } catch (error) {
+        if (error instanceof HttpError) fail(error.status, error.code, "members[" + index + "]：" + error.message);
+        throw error;
+      }
+    });
+    const fresh = new Set(records.filter(r => !r.deleted && !this.memberIndex.has(source + ":" + r.uid)).map(r => r.uid));
+    if ((this.state.partnerMembers[source]?.length || 0) + fresh.size > MAX_PARTNER_MEMBERS) fail(409, "MEMBER_CAPACITY", "同步的用户数已达上限（" + MAX_PARTNER_MEMBERS + "）");
+    const result = { received: records.length, created: 0, updated: 0, unchanged: 0, deleted: 0 };
+    for (const record of records) result[this.rememberPartnerMember(source, record)]++;
+    if (result.created || result.updated || result.deleted) this.schedulePersist();
+    return result;
+  }
+  /** created / updated / unchanged / deleted; the caller persists. */
+  rememberPartnerMember(source, { uid, fields = {}, deleted = false }) {
+    const key = source + ":" + uid, list = (this.state.partnerMembers[source] ||= []), existing = this.memberIndex.get(key);
+    const at = new Date(this.now()).toISOString();
+    if (deleted) {
+      if (!existing) return "unchanged";
+      list.splice(list.indexOf(existing), 1);
+      this.memberIndex.delete(key);
+      return "deleted";
+    }
+    if (!existing) {
+      if (list.length >= MAX_PARTNER_MEMBERS) return "unchanged";
+      const member = { uid, ...fields, firstSyncedAt: at, syncedAt: at };
+      list.push(member);
+      this.memberIndex.set(key, member);
+      return "created";
+    }
+    if (Object.keys(fields).every(field => JSON.stringify(existing[field]) === JSON.stringify(fields[field]))) return "unchanged";
+    Object.assign(existing, fields, { syncedAt: at });
+    return "updated";
   }
   me(token) {
     const attendee = this.authenticate(token);

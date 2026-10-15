@@ -3,13 +3,14 @@
 // attendee on every device. Check-ins, met-in-the-app connections and the export.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { once } from "node:events";
 import { WebSocket } from "ws";
 import { createEventServer } from "../server/index.mjs";
 import { validateEventConfig } from "../server/event-config.mjs";
+import { EventStore } from "../server/store.mjs";
 
 const PARTNER_TOKEN = "dm-test-token-0123456789abcdefghijklmnop";
 const EVENT = { demoMode: false, demoContent: false, openJoin: true, taps: "open" };
@@ -243,6 +244,69 @@ test("the export gives the partner its users' looks, arrivals and connections, w
   assert.ok(first.personaName);
   assert.ok(!JSON.stringify(exported.data).includes("wx-secret-id"), "contacts never leave the map");
   assert.equal((await request("/api/partner/export", { token: claimed.data.token })).status, 401, "a guest session is not the partner");
+});
+
+test("the partner's users are kept on our side only: sent, updated, removed", async t => {
+  const { app, partner, request } = await fixture(t);
+  const sent = await partner("members", { members: [
+    user("dm_m1", { realName: "李明", phone: "138 0013 8000", wechat: "liming_dev", tags: ["AI", "AI", "出海"], registeredAt: "2026-10-20T12:00:00+08:00", checkedInAt: 1792900800, extra: { city: "南京" } }),
+    user("dm_m2", { nickname: "小王" }),
+  ] });
+  assert.equal(sent.status, 200);
+  assert.deepEqual(sent.data, { received: 2, created: 2, updated: 0, unchanged: 0, deleted: 0 });
+  const m1 = app.store.memberIndex.get("daimao:dm_m1");
+  assert.equal(m1.phone, "13800138000");
+  assert.deepEqual(m1.tags, ["AI", "出海"]);
+  assert.equal(m1.registeredAt, "2026-10-20T04:00:00.000Z");
+  assert.equal(m1.checkedInAt, new Date(1792900800 * 1000).toISOString(), "a timestamp in seconds is understood");
+  assert.deepEqual(m1.extra, { city: "南京" });
+  const open = await request("/api/event");
+  assert.equal(open.data.attendees.length, 0, "nobody is put on the map");
+  assert.ok(!/dm_m1|13800138000|李明|liming_dev/.test(JSON.stringify(open.data)), "nothing of it is public");
+
+  const again = await partner("members", { members: [{ uid: "dm_m1", consent: true, nickname: "李明明", wechat: "" }, user("dm_m2", { nickname: "小王" })] });
+  assert.deepEqual(again.data, { received: 2, created: 0, updated: 1, unchanged: 1, deleted: 0 });
+  assert.equal(m1.nickname, "李明明");
+  assert.equal(m1.phone, "13800138000", "a field left out keeps its value");
+  assert.equal(m1.wechat, "", "an empty one clears it");
+
+  assert.equal((await partner("members", { members: [{ uid: "dm_m2", deleted: true }] })).data.deleted, 1);
+  assert.deepEqual(app.store.state.partnerMembers.daimao.map(m => m.uid), ["dm_m1"]);
+  app.store.flush();
+  assert.equal(JSON.parse(readFileSync(app.store.file, "utf8")).partnerMembers.daimao[0].phone, "13800138000");
+  assert.equal(new EventStore({ file: app.store.file, eventConfig: EVENT }).memberIndex.get("daimao:dm_m1").realName, "李明", "and it survives a restart");
+});
+
+test("everyone who comes in by a ticket is kept on our side too", async t => {
+  const { app, partner } = await fixture(t);
+  await partner("tickets", user("dm_t1", { organization: "呆猫" }));
+  const member = app.store.memberIndex.get("daimao:dm_t1");
+  assert.equal(member.nickname, "小李");
+  assert.equal(member.organization, "呆猫");
+  await partner("members", { members: [{ uid: "dm_t1", consent: true, phone: "13900139000" }] });
+  assert.equal(member.phone, "13900139000");
+  assert.equal(member.organization, "呆猫", "a push adds to what the ticket brought");
+  assert.equal(app.store.state.partnerMembers.daimao.length, 1);
+});
+
+test("member pushes need consent and a usable uid; a bad entry rejects the whole batch", async t => {
+  const { app, partner, request } = await fixture(t);
+  const noConsent = await partner("members", { members: [user("dm_a"), { uid: "dm_b", nickname: "x" }] });
+  assert.equal(noConsent.status, 400);
+  assert.equal(noConsent.data.error.code, "CONSENT_REQUIRED");
+  assert.match(noConsent.data.error.message, /members\[1\]/);
+  assert.equal(app.store.memberIndex.size, 0, "nothing of a rejected batch is kept");
+  assert.equal((await partner("members", { members: [user("has space")] })).data.error.code, "INVALID_UID");
+  assert.equal((await partner("members", { members: [] })).data.error.code, "INVALID_INPUT");
+  assert.equal((await partner("members", { members: Array.from({ length: 201 }, (_, i) => user("dm_" + i)) })).data.error.code, "TOO_MANY_MEMBERS");
+  assert.equal((await partner("members", { members: [user("dm_x", { extra: { blob: "x".repeat(5000) } })] })).data.error.code, "INVALID_INPUT");
+  const full = await partner("members", { members: Array.from({ length: 200 }, (_, i) => user("dm_" + i, { bio: "一".repeat(160), extra: { note: "x".repeat(2000) } })) });
+  assert.equal(full.status, 200, "a full batch fits in one request");
+  assert.equal(full.data.created, 200);
+  await partner("members", { members: [user("dm_odd", { phone: "call me", registeredAt: "soon", avatarUrl: "http://x.example/a.png", tags: "AI", nickname: "<b>小李</b>" })] });
+  const odd = app.store.memberIndex.get("daimao:dm_odd");
+  assert.deepEqual([odd.phone, odd.registeredAt, odd.avatarUrl, odd.tags, odd.nickname], ["", "", "", [], "b小李/b"]);
+  assert.equal((await request("/api/partner/members", { body: { members: [user("dm_y")] } })).status, 401, "only the partner may push");
 });
 
 test("a partner's burst of sign-ins has its own allowance, not a phone's", async t => {
