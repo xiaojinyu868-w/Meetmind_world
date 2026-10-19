@@ -42,3 +42,15 @@ test("the dock puts recommended people first with their reason, and every intent
   for (const [, topic] of INTENTS) assert.ok(topicsIn(topic).has(topic), topic);
   assert.equal((intentView().match(/name="intent"/g) || []).length, INTENTS.length);
 });
+
+test("a greeting waits on a card with its answer one tap away; an accepted one becomes a moment on both phones", async () => {
+  const { greetingCardView, metView } = await import("../src/ui/CourtViews.js");
+  const card = greetingCardView({ encounter: { id: "e1", fromId: "p1", note: "想交换个微信", peer: { id: "p1", name: "顾言", role: "天使投资人" } }, more: 2 });
+  assert.match(card, /顾言 想认识你/);
+  assert.match(card, /“想交换个微信”/);
+  assert.match(card, /data-action="confirm" data-id="e1"/);
+  assert.match(card, /data-action="greeting-later"/);
+  assert.match(card, /还有 2 位/);
+  assert.match(metView({ me: { name: "王悦" }, peer: { name: "顾言" }, contact: "guyan_vc" }), /你和 顾言 相遇了[\s\S]*guyan_vc/);
+  assert.match(metView({ peer: { name: "顾言" } }), /已存进「相遇」/);
+});

@@ -156,6 +156,28 @@ export function intentView() {
   </form>`;
 }
 
+/** Someone wants to meet this guest: who, what they said, and the answer one tap away. */
+export function greetingCardView({ encounter, more = 0, reason = "" }) {
+  const peer = encounter.peer || {};
+  const line = encounter.note ? `“${encounter.note}”` : shortReason(reason) || peer.role || "";
+  return `<div class="court-greeting-card" role="alertdialog" aria-label="${esc(peer.name || "有人")}想认识你">
+    <button type="button" class="court-greeting-who" data-action="greeting-locate" data-id="${esc(encounter.fromId)}">${avatar(peer, { size: 44, photo: true })}<span><strong>${esc(peer.name || "一位来宾")} 想认识你</strong>${line ? `<small>${esc(line)}</small>` : ""}</span></button>
+    <div class="court-greeting-actions"><button type="button" class="court-btn court-btn-accent" data-action="confirm" data-id="${esc(encounter.id)}">${icon("heart")}<span>接受</span></button><button type="button" class="court-btn court-btn-soft" data-action="greeting-later" data-id="${esc(encounter.id)}">稍后</button></div>
+    ${more > 0 ? `<span class="court-greeting-more">还有 ${more} 位</span>` : ""}
+  </div>`;
+}
+
+/** The moment a greeting is accepted, on both phones. */
+export function metView({ me = {}, peer = {}, contact = "", eventName = "相遇之庭" } = {}) {
+  return `<div class="court-met-card" role="dialog" aria-label="你们相遇了">
+    <div class="court-met-pair">${avatar(me, { size: 64, photo: true })}<i>${icon("heart")}</i>${avatar(peer, { size: 64, photo: true })}</div>
+    <p class="court-met-kicker">${esc(eventName)}</p>
+    <h2>你和 ${esc(peer.name || "TA")} 相遇了</h2>
+    ${contact ? `<button type="button" class="court-contact-pill" data-action="copy-contact" data-value="${esc(contact)}">${icon("copy")}<span>${esc(contact)}</span></button>` : '<p class="court-met-sub">已存进「相遇」</p>'}
+    <button type="button" class="court-btn court-btn-primary court-btn-block" data-action="met-close">好</button>
+  </div>`;
+}
+
 /** A recommendation reason short enough for a tag: "能帮你 · 融资", "投资人". */
 export function shortReason(reason = "") {
   const text = String(reason || "");

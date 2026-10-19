@@ -4,7 +4,7 @@ import { listSceneDefinitions } from "../runtime/SceneRegistry.js";
 import { VENUE_CANDIDATES, venueById, venueUrl } from "../runtime/VenueCatalog.js";
 import { PERSONAS, personaById, serialLabel } from "../shared/personas.mjs";
 import { findPerson } from "../shared/changes.mjs";
-import { avatar, arrivalView, dockView, inboxView, intentView, matchesView, passportView, personView, personaCard, personaPickerView, profileFormView, stageView, stageWelcomeView } from "./CourtViews.js";
+import { avatar, arrivalView, dockView, greetingCardView, inboxView, intentView, matchesView, metView, passportView, personView, personaCard, personaPickerView, profileFormView, stageView, stageWelcomeView } from "./CourtViews.js";
 import { splitChips } from "../shared/topics.mjs";
 import "./style.css";
 import "./court.css";
@@ -47,6 +47,10 @@ export class AppUI {
     this.snapshot = null; this.me = null; this.activity = null; this.online = false; this.panel = null;
     this.selectedPerson = null; this.soundEnabled = false; this.selectedCamera = "overview";
     this.picks = []; this.pickIds = new Set(); this.picksAt = 0;
+    this.greetDismissed = new Set();
+    // Back from another app or a locked screen: anything that arrived meanwhile shows at once.
+    this.visibilityHandler = () => { if (this.root.ownerDocument.visibilityState === "visible" && this.me?.attendee) this.client.refreshMe?.().then(() => { if (!this.disposed && this.client.me) this.setMe(this.client.me); }).catch(() => {}); };
+    this.root.ownerDocument.addEventListener("visibilitychange", this.visibilityHandler);
     this.sceneId = "campus"; this.sceneLabel = "白庭校园"; this.sceneFile = null;
     const query = new URL(location.href).searchParams;
     this.stage = query.get("mode") === "stage";
@@ -108,6 +112,7 @@ export class AppUI {
             <button type="button" class="court-icon-btn court-partner-toggle" data-action="partner" aria-label="展示控制台" aria-pressed="${this.partnerOpen}">${icon("sliders")}</button>
           </div>
         </div>
+        <div class="court-greeting" data-greeting hidden></div>
         <div class="court-hud-bottom">
           <button type="button" class="court-me" data-action="join"><span class="court-me-avatar" data-me-avatar>${icon("nfc")}</span><span><strong data-entry-label>领取我的分身</strong><small data-me-sub>碰一下，或点这里进入</small></span></button>
           <div class="court-dock" data-dock aria-label="为你推荐的人"></div>
@@ -139,6 +144,7 @@ export class AppUI {
       ${this.stage ? '<div class="court-stage" data-stage></div><div class="court-stage-welcome" data-stage-welcome hidden></div>' : ""}
     </div>
     <div class="court-arrival" data-arrival hidden></div>
+    <div class="court-met" data-met hidden></div>
     <div class="ec-panel-layer" hidden><button class="ec-panel-scrim" aria-label="关闭面板" data-action="close" tabindex="-1"></button><section class="ec-panel" role="dialog" aria-modal="true" aria-labelledby="ec-panel-title" tabindex="-1"></section></div>
     <div class="ec-toast-stack" aria-live="polite" aria-atomic="true"></div>
     <div class="ec-busy" role="status" hidden><span class="ec-spinner"></span><span data-busy-label></span></div>`;
@@ -205,8 +211,11 @@ export class AppUI {
     const before = new Set((previous?.encounters || []).filter(c => c.status === "confirmed").map(c => c.id));
     const fresh = previous?.attendee?.id === data?.attendee?.id ? (data?.encounters || []).filter(c => c.status === "confirmed" && !before.has(c.id)) : [];
     for (const encounter of fresh) this.toast(`你和 ${encounter.peer?.name || "一位来客"} 的相遇已点亮${encounter.peerContact ? " · 已交换联系方式" : ""}`);
+    if (fresh.length) { this.buzz([30, 50, 30, 50, 90]); this.showMet(fresh[0]); this.social(fresh.map(c => c.peer?.id).filter(Boolean), true); }
     const incoming = (data?.encounters || []).filter(c => c.canConfirm && !(previous?.encounters || []).some(p => p.id === c.id));
     if (previous?.attendee && incoming.length) this.toast(`${incoming[0].peer?.name || "有人"} 想认识你${incoming[0].note ? "：“" + incoming[0].note + "”" : ""}`);
+    if (previous?.attendee && incoming.length) { this.buzz([40, 70, 40]); this.social(incoming.map(c => c.fromId), false); }
+    this.renderGreeting();
     if (data?.attendee || previous?.attendee) this.refreshPicks(!previous?.attendee);
   }
   setOnline(value) { this.online = !!value; this.syncChrome(); }
@@ -384,6 +393,13 @@ export class AppUI {
       if (input) input.value = button.dataset.value || "";
       return;
     }
+    if (action === "greeting-later") { this.greetDismissed.add(id); return this.renderGreeting(); }
+    if (action === "greeting-locate") {
+      const person = findPerson(this.snapshot, id) || this.me?.encounters?.find(c => c.fromId === id)?.peer;
+      if (person) { this.setSelectedPerson(person); return this.run("onSelectPerson", person); }
+      return;
+    }
+    if (action === "met-close") { const layer = this.root.querySelector("[data-met]"); if (layer) layer.hidden = true; return; }
     if (action === "note-own") {
       const input = this.root.querySelector('[data-form="compose"] [name="note"]');
       if (input) { input.hidden = false; requestAnimationFrame(() => input.focus({ preventScroll: true })); }
@@ -617,6 +633,7 @@ export class AppUI {
       const result = await this.client.encounter(peerId, note);
       this.setMe(this.client.me);
       this.toast(result.encounter.status === "confirmed" ? "你们已经确认相遇" : "招呼已送达，等 TA 回应");
+      this.buzz(20);
       if (this.selectedPerson && this.panel === "person") this.renderPerson(this.selectedPerson);
       if (this.panel === "matches") this.openMatches();
       this.refreshPicks();
@@ -728,6 +745,31 @@ export class AppUI {
       this.setMe(this.client.me);
       this.openMatches();
     } catch (error) { this.toast(error.message); }
+  }
+  /** A short vibration where the phone allows it (Android; iOS web views have none). */
+  buzz(pattern) { try { if (!this.stage) this.root.ownerDocument.defaultView?.navigator?.vibrate?.(pattern); } catch {} }
+  /** Tells the court who is greeting (or has just met) this guest, so they wave there. */
+  social(ids, met) { try { if (ids.length) this.root.dispatchEvent(new CustomEvent("court-social", { detail: { ids, met } })); } catch {} }
+  /** The first greeting still waiting for an answer, as a card that stays until it is answered or put off. */
+  renderGreeting() {
+    const slot = this.root.querySelector("[data-greeting]");
+    if (!slot) return;
+    const waiting = (this.me?.encounters || []).filter(c => c.canConfirm && !this.greetDismissed.has(c.id));
+    const first = waiting[0];
+    if (!first || this.stage) { slot.hidden = true; slot.innerHTML = ""; slot.dataset.id = ""; return; }
+    const key = first.id + ":" + waiting.length;
+    if (slot.dataset.id === key && !slot.hidden) return;
+    slot.dataset.id = key;
+    slot.innerHTML = greetingCardView({ encounter: first, more: waiting.length - 1, reason: this.picks.find(m => m.attendee.id === first.fromId)?.reasons?.[0] || "" });
+    slot.hidden = false;
+  }
+  showMet(encounter) {
+    const layer = this.root.querySelector("[data-met]");
+    if (!layer || this.stage) return;
+    layer.innerHTML = metView({ me: this.me?.attendee || {}, peer: encounter.peer || {}, contact: encounter.peerContact || "", eventName: this.eventName() });
+    layer.hidden = false;
+    clearTimeout(this.metTimer);
+    this.metTimer = setTimeout(() => { if (!this.disposed) layer.hidden = true; }, 12000);
   }
   /** The guest's current card as a join body, with `changes` on top: one field updated, the rest kept. */
   profileBody(me, changes = {}) {
@@ -1048,7 +1090,7 @@ export class AppUI {
     } catch (error) { this.sceneError(error.message || "场景加载未完成"); }
     finally { this.importPending = false; this.setBusy(null); button.disabled = false; }
   }
-  dispose() { this.disposed = true; clearTimeout(this.entryTimer); clearTimeout(this.picksTimer); clearTimeout(this.intentTimer); this.root.ownerDocument.removeEventListener("keydown", this.keyHandler); }
+  dispose() { this.disposed = true; clearTimeout(this.entryTimer); clearTimeout(this.picksTimer); clearTimeout(this.intentTimer); clearTimeout(this.metTimer); this.root.ownerDocument.removeEventListener("visibilitychange", this.visibilityHandler); this.root.ownerDocument.removeEventListener("keydown", this.keyHandler); }
 }
 
 export { personaCard };

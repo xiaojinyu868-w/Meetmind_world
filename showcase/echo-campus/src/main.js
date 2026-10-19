@@ -496,6 +496,8 @@ function welcomeArrival(attendee){
   setTimeout(settle,3400);
  },180);
 }
+// Someone greets this guest, or a greeting is accepted: the people involved wave in the court.
+document.getElementById("ui").addEventListener("court-social",e=>{const {ids=[],met=false}=e.detail||{};for(const id of ids){const p=people.get(id);if(!p)continue;p.reaction={state:"wave",until:time+(met?6:8)};if(met)arrivals.spawn(p.root.position,personaById(p.person?.persona)?.color,{scale:1.1,duration:2.4});}});
 // After the arrival close-up: back off behind the guest, facing the crowd, so they see who is here and themselves among them.
 function hereShot(id,duration=2200){
  const p=people.get(id);if(!p||!currentScene)return;
