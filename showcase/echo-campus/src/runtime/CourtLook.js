@@ -51,6 +51,16 @@ export const COURT_SHOTS = Object.freeze({
   close: Object.freeze({ tilt: 0.9, band: 0.16, focus: 0.5, lift: 2.0 }),
 });
 
+/**
+ * The same shots on a portrait screen. Its lower half is the ground nearest the camera, where the closest guests
+ * stand, so walking stays sharp and a close-up only softens the edges; the lighter lift keeps it from going hazy.
+ */
+export const COURT_SHOTS_PORTRAIT = Object.freeze({
+  walk: Object.freeze({ tilt: 0, band: 0.3, focus: 0.5, lift: 0 }),
+  stage: Object.freeze({ tilt: 0.2, band: 0.28, focus: 0.45, lift: 0 }),
+  close: Object.freeze({ tilt: 0.3, band: 0.26, focus: 0.5, lift: 0.6 }),
+});
+
 /** Where the fill goes for a sun at `sunOffset` from `center`: mirrored across the vertical, raised to `elevation`. */
 export function fillPosition(center, sunOffset, { elevation = COURT_LIGHT.fill.elevation, distance = 60 } = {}) {
   const flat = Math.hypot(sunOffset.x, sunOffset.z) || 1, e = THREE.MathUtils.degToRad(elevation);
@@ -78,14 +88,14 @@ const FinishShader = {
   uniforms: {
     tDiffuse: { value: null }, uTime: { value: 0 }, uAspect: { value: 16 / 9 }, uTexel: { value: new THREE.Vector2(1 / 1920, 1 / 1080) },
     uSat: { value: 1 }, uVibrance: { value: 0 }, uContrast: { value: 1 }, uWarm: { value: 0 }, uVignette: { value: 0 }, uGrain: { value: 0 },
-    uTilt: { value: 0 }, uFocus: { value: 0.5 }, uBand: { value: 0.22 }, uFxaa: { value: 0 },
+    uTilt: { value: 0 }, uFocus: { value: 0.5 }, uBand: { value: 0.22 }, uFxaa: { value: 0 }, uBlurPx: { value: 14 }, uBlurMaxPx: { value: 5 },
     // A THREE.Color whose linear components act on display values: at 0.6 black
     // rises to about #080608 and mid-tones barely move.
     uLift: { value: 0 }, uLiftTint: { value: new THREE.Color(COURT_PALETTE.plum) },
   },
   vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
   fragmentShader: `
-    uniform sampler2D tDiffuse; uniform float uTime, uAspect, uSat, uVibrance, uContrast, uWarm, uVignette, uGrain, uTilt, uFocus, uBand, uFxaa, uLift;
+    uniform sampler2D tDiffuse; uniform float uTime, uAspect, uSat, uVibrance, uContrast, uWarm, uVignette, uGrain, uTilt, uFocus, uBand, uFxaa, uLift, uBlurPx, uBlurMaxPx;
     uniform vec2 uTexel; uniform vec3 uLiftTint; varying vec2 vUv;
     float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233)) + uTime * 7.13) * 43758.5453); }
     vec3 fxaa(vec2 uv){
@@ -108,10 +118,14 @@ const FinishShader = {
       if (uTilt > 0.001) {
         float b = uTilt * smoothstep(uBand, uBand + 0.34, abs(vUv.y - uFocus));
         if (b > 0.001) {
+          // A round disc in pixels, capped: sixteen taps spread wider than a few pixels print sixteen ghost copies of
+          // every edge. Each pixel turns the disc by its own angle, so what is left of the pattern reads as fine grain.
+          float px = min(b * uBlurPx, uBlurMaxPx);
+          float spin = 6.2831853 * fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
           vec3 acc = c.rgb;
           for (int i = 0; i < 16; i++) {
-            float fi = float(i), r = sqrt((fi + 0.5) / 16.0) * b * 0.013, a = fi * 2.39996;
-            acc += texture2D(tDiffuse, vUv + vec2(cos(a) * r / uAspect * 1.6, sin(a) * r)).rgb;
+            float fi = float(i), r = sqrt((fi + 0.5) / 16.0) * px, a = fi * 2.39996 + spin;
+            acc += texture2D(tDiffuse, vUv + vec2(cos(a), sin(a)) * r * uTexel).rgb;
           }
           c.rgb = acc / 17.0;
         }
@@ -160,7 +174,8 @@ export function addCourtFinish(composer, { quality = "balanced", bloom: withBloo
   const u = finish.uniforms;
   let name = "neutral", baseLift = 0, wanted = { shot: "walk", focus: null };
   const goal = () => {
-    const preset = COURT_SHOTS[wanted.shot] || COURT_SHOTS.walk, on = name !== "neutral";
+    const shots = u.uAspect.value < 0.9 ? COURT_SHOTS_PORTRAIT : COURT_SHOTS;
+    const preset = shots[wanted.shot] || shots.walk, on = name !== "neutral";
     return { tilt: on ? preset.tilt : 0, band: preset.band, focus: wanted.focus ?? preset.focus, lift: baseLift + (on ? preset.lift : 0) };
   };
   const settle = () => { const g = goal(); u.uTilt.value = g.tilt; u.uBand.value = g.band; u.uFocus.value = g.focus; u.uLift.value = g.lift; };
@@ -200,6 +215,8 @@ export function addCourtFinish(composer, { quality = "balanced", bloom: withBloo
     resize(w, h, pixelRatio = 1) {
       u.uAspect.value = w / Math.max(1, h);
       u.uTexel.value.set(1 / Math.max(1, w * pixelRatio), 1 / Math.max(1, h * pixelRatio));
+      u.uBlurPx.value = 0.013 * h * pixelRatio;
+      u.uBlurMaxPx.value = 5 * pixelRatio;
     },
     dispose() { for (const pass of passes) pass.dispose?.(); },
   };

@@ -7,7 +7,8 @@ import * as THREE from "three";
 export function profileCameraPreset({ position, yaw = 0, aspect = 1, panelFraction = 0, sheetFraction = 0, neighbors = [] }) {
   const sheet = Math.min(0.75, Math.max(0, sheetFraction));
   const candidates = [0.55, -0.55, 1.05, -1.05, 0].map((angle, index) => {
-  const heading = yaw + angle, fov = sheet ? 40 : 43, distance = sheet ? 3.2 : 3.4;
+  // Above a phone's sheet only the top of the frame is left: step back so the whole head clears its top edge.
+  const heading = yaw + angle, fov = sheet ? 40 : 43, distance = sheet ? (aspect < 0.8 ? 4.4 : 3.2) : 3.4;
   const forward = new THREE.Vector3(Math.sin(heading), 0, Math.cos(heading));
   const right = new THREE.Vector3(forward.z, 0, -forward.x);
   const eye = new THREE.Vector3(position.x, position.y + (sheet ? 1.34 : 1.03), position.z);

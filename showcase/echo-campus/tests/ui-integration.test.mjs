@@ -180,7 +180,7 @@ test("profile refresh uses new own name and avoids stale selected-person DTO",as
   a.ui.setSelectedPerson(a.client.me.attendee);
   const updated={...a.client.me,attendee:{...a.client.me.attendee,name:"更新后的林予"},version:a.client.me.version+1};
   a.ui.setMe(updated);
-  assert.equal(a.ui.root.querySelector(".ec-person-header h2").textContent,"更新后的林予");
+  assert.equal(a.ui.root.querySelector("#ec-panel-title").textContent,"更新后的林予");
 });
 
 test("scene import failure preserves panel, clears busy state and does not issue a success toast",async t=>{
@@ -459,11 +459,9 @@ test("greeting note, decline and a mutual yes that reveals WeChat only to each o
   activate(c.win); await c.client.join({ consent: true });
   activate(a.win); a.ui.setSnapshot(await a.client.request("event"));
   a.ui.setSelectedPerson(b.client.me.attendee);
-  await a.ui.onClick({ target: a.ui.root.querySelector('[data-action="compose"]') });
   const compose = a.ui.root.querySelector('[data-form="compose"]');
-  assert.equal(compose.hidden, false);
-  await a.ui.onClick({ target: compose.querySelector('[data-action="note-preset"]') });
-  assert.equal(compose.elements.note.value, "你好，想认识你");
+  assert.equal(compose.hidden, false, "the greeting is on the card, no extra step");
+  assert.equal(compose.querySelector('input[name="preset"]:checked').value, "你好，想认识你", "a line is already chosen");
   await a.ui.requestEncounter(b.client.me.attendee.id, compose.querySelector('[data-action="encounter"]'));
   assert.ok(a.ui.root.textContent.includes("等待对方确认"));
   activate(c.win); c.ui.setSnapshot(await c.client.request("event"));

@@ -127,9 +127,9 @@ test("public offer/need matching is deterministic, bidirectional, and cites its 
   const a = store.join(ALICE), b = store.join(BOB);
   const first = store.matches(a.token), second = store.matches(a.token);
   assert.deepEqual(first, second);
-  assert.equal(first.algorithm, "authorized-tags-v1");
+  assert.equal(first.algorithm, "authorized-tags-v2");
   assert.ok(first.explanation.includes("未使用大模型"));
-  assert.ok(first.matches.length <= 3);
+  assert.ok(first.matches.length <= 8);
   const match = first.matches.find(m => m.attendee.id === b.attendee.id);
   assert.ok(match);
   assert.ok(match.evidence.some(e => e.direction === "they-help-you" && e.yourText === ALICE.need && e.peerText === BOB.offer));
@@ -338,4 +338,20 @@ test("HTTP guest entry needs consent but no personal profile and remains usable"
   const confirmed = await request("/api/encounters/" + invitation.data.encounter.id + "/confirm", { token: peer.data.token, body: {} });
   assert.equal(confirmed.status, 200);
   assert.equal(confirmed.data.encounter.status, "confirmed");
+});
+
+test("roles that came for each other are recommended without shared topics; someone already met drops out", () => {
+  const store = new EventStore({ eventConfig: { demoMode: false, demoContent: false, openJoin: true } });
+  const investor = store.join({ consent: true, name: "顾言", role: "天使投资人", category: "investor" });
+  const founder = store.join({ consent: true, name: "王悦", role: "AI 硬件创业者", category: "founder", need: "找天使投资" });
+  const viewer = store.join({ consent: true, name: "观众甲", category: "audience" });
+  const forFounder = store.matches(founder.token).matches;
+  assert.equal(forFounder[0].attendee.id, investor.attendee.id);
+  assert.deepEqual(forFounder[0].reasons, ["TA 是投资人"]);
+  assert.equal(forFounder.some(m => m.attendee.id === viewer.attendee.id), false, "no reason, no recommendation");
+  assert.deepEqual(store.matches(investor.token).matches.map(m => m.reasons[0]), ["TA 在创业"]);
+  const { encounter } = store.requestEncounter(founder.token, { peerId: investor.attendee.id });
+  assert.equal(store.matches(founder.token).matches[0].pending, true, "a greeting on its way is marked");
+  store.confirmEncounter(investor.token, encounter.id);
+  assert.equal(store.matches(founder.token).matches.some(m => m.attendee.id === investor.attendee.id), false);
 });

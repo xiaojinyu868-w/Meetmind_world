@@ -25,6 +25,13 @@ const CONTACT_VISIBILITY = new Set(["hidden", "connections", "public"]);
 // Public snapshot never carries the tap registry: tag ids are not credentials,
 // but listing every wristband id would make forging unsigned demo taps trivial.
 const PRIVATE_EVENT_FIELDS = new Set(["tags"]);
+// Roles that came to meet each other; the line is shown to the guest as the reason.
+const COMPLEMENTS = Object.freeze({
+  investor: Object.freeze({ founder: "TA 在创业" }),
+  founder: Object.freeze({ investor: "TA 是投资人", platform: "TA 是平台伙伴，手上有资源", media: "TA 是媒体，可以聊聊曝光", founder: "你们都在创业，可以交流" }),
+  platform: Object.freeze({ founder: "TA 在创业，可能用得上你的资源" }),
+  media: Object.freeze({ founder: "TA 在创业，有故事可以聊" }),
+});
 
 function inferCategory(attendee) {
   const text = `${attendee?.role || ""} ${attendee?.offer || ""} ${attendee?.need || ""}`.toLowerCase();
@@ -806,28 +813,36 @@ export class EventStore {
     if (attendee && resolved.kind === "checkpoint") result.checkin = this.checkin(token, resolved.checkpoint, { viaTap: true });
     return result;
   }
+  /**
+   * Who to meet: public offers and needs that meet first, then roles that came for each other, someone at the venue
+   * ahead of someone who is not. A person one has already met drops out. Every reason is read off the two public cards.
+   */
   matches(token) {
     const self = this.authenticate(token);
     const offers = topicsIn(self.offer), needs = topicsIn(self.need);
-    const matches = this.state.attendees.filter(a => a.id !== self.id && a.consent && a.listed !== false).map(peer => {
+    const known = new Map();
+    for (const c of this.state.encounters) if (c.fromId === self.id || c.toId === self.id) known.set(c.fromId === self.id ? c.toId : c.fromId, c.status);
+    const matches = this.state.attendees.filter(a => a.id !== self.id && a.consent && a.listed !== false && known.get(a.id) !== "confirmed").map(peer => {
       const helpsYou = common(needs, topicsIn(peer.offer));
       const youHelp = common(offers, topicsIn(peer.need));
+      const pair = COMPLEMENTS[self.category]?.[peer.category] || "";
       const evidence = [
         ...helpsYou.map(topic => ({ direction: "they-help-you", topic, yourField: "need", yourText: self.need, peerField: "offer", peerText: peer.offer })),
         ...youHelp.map(topic => ({ direction: "you-help-them", topic, yourField: "offer", yourText: self.offer, peerField: "need", peerText: peer.need })),
       ];
-      const score = helpsYou.length * 3 + youHelp.length * 2 + (helpsYou.length && youHelp.length ? 2 : 0);
+      const score = helpsYou.length * 3 + youHelp.length * 2 + (helpsYou.length && youHelp.length ? 2 : 0) + (pair ? 1.5 : 0) + (peer.onsiteAt ? 0.5 : 0) - (known.has(peer.id) ? 1 : 0);
       return {
-        attendee: this.publicAttendee(peer), score, evidence,
+        attendee: this.publicAttendee(peer), score, evidence, onsite: !!peer.onsiteAt, pending: known.has(peer.id),
         reasons: [
-          ...(helpsYou.length ? ["TA 可提供你在寻找的 " + helpsYou.join("、")] : []),
-          ...(youHelp.length ? ["你可提供 TA 在寻找的 " + youHelp.join("、")] : []),
+          ...(helpsYou.length ? ["TA 能提供你在找的：" + helpsYou.join("、")] : []),
+          ...(youHelp.length ? ["你能提供 TA 在找的：" + youHelp.join("、")] : []),
+          ...(pair ? [pair] : []),
         ],
       };
-    }).filter(m => m.score > 0).sort((a,b) => b.score - a.score || a.attendee.id.localeCompare(b.attendee.id)).slice(0, 3);
+    }).filter(m => m.reasons.length).sort((a, b) => b.score - a.score || a.attendee.id.localeCompare(b.attendee.id)).slice(0, 8);
     return {
-      algorithm: "authorized-tags-v1",
-      explanation: "根据双方主动公开的供给与需求进行固定词表匹配。分数表示主题重合，不代表合作概率；当前未使用大模型或读取私人资料。",
+      algorithm: "authorized-tags-v2",
+      explanation: "根据双方主动公开的供给与需求进行固定词表匹配，再看参会身份是否互补、是否已在现场。分数表示重合程度，不代表合作概率；当前未使用大模型或读取私人资料。",
       version: this.state.version,
       matches,
     };

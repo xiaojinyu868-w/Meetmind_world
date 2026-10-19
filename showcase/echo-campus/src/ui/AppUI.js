@@ -4,7 +4,8 @@ import { listSceneDefinitions } from "../runtime/SceneRegistry.js";
 import { VENUE_CANDIDATES, venueById, venueUrl } from "../runtime/VenueCatalog.js";
 import { PERSONAS, personaById, serialLabel } from "../shared/personas.mjs";
 import { findPerson } from "../shared/changes.mjs";
-import { avatar, arrivalView, inboxView, matchesView, passportView, personView, personaCard, personaPickerView, profileFormView, stageView, stageWelcomeView } from "./CourtViews.js";
+import { avatar, arrivalView, dockView, inboxView, intentView, matchesView, passportView, personView, personaCard, personaPickerView, profileFormView, stageView, stageWelcomeView } from "./CourtViews.js";
+import { splitChips } from "../shared/topics.mjs";
 import "./style.css";
 import "./court.css";
 
@@ -36,6 +37,8 @@ const INITIAL = { name: "", role: "", offer: "", need: "", category: "guest", bi
 const CAMERA_LABELS = { overview: "全景", arrival: "入口", courtyard: "庭院", aerial: "俯瞰" };
 const THEME_VARS = { ink: "--court-ink", paper: "--court-paper", accent: "--court-accent", glow: "--court-glow", sage: "--court-sage" };
 
+const NOTE_DEFAULT = "你好，想认识你";
+
 export class AppUI {
   constructor({ client, onCamera = () => {}, onScene = () => {}, onImport = () => {}, onTour = () => {}, onSelectPerson = () => {}, onActivityCheckpoint = () => {}, onSound = () => {}, onShowcase = () => {}, onVenue = () => {}, onView = () => {}, onArrive = () => {}, onPartner = () => {}, onPersonaPreview = () => {} }) {
     this.client = client;
@@ -43,6 +46,7 @@ export class AppUI {
     this.root = document.getElementById("ui");
     this.snapshot = null; this.me = null; this.activity = null; this.online = false; this.panel = null;
     this.selectedPerson = null; this.soundEnabled = false; this.selectedCamera = "overview";
+    this.picks = []; this.pickIds = new Set(); this.picksAt = 0;
     this.sceneId = "campus"; this.sceneLabel = "白庭校园"; this.sceneFile = null;
     const query = new URL(location.href).searchParams;
     this.stage = query.get("mode") === "stage";
@@ -99,13 +103,14 @@ export class AppUI {
             <span><strong data-event-name>相遇之庭</strong><small data-world-count>正在连接活动</small></span>
           </button>
           <div class="court-hud-actions">
-            <button type="button" class="court-icon-btn" data-action="inbox" aria-label="我的相遇">${icon("heart")}<span class="court-badge" data-inbox-count hidden>0</span></button>
-            <button type="button" class="court-icon-btn" data-action="activity" aria-label="相遇护照与积分">${icon("stamp")}<span class="court-badge court-badge-soft" data-activity-points hidden>0</span></button>
+            <button type="button" class="court-icon-btn court-labeled" data-action="inbox" aria-label="我的相遇">${icon("heart")}<span class="court-btn-text">相遇</span><span class="court-badge" data-inbox-count hidden>0</span></button>
+            <button type="button" class="court-icon-btn court-labeled" data-action="activity" aria-label="相遇护照与积分">${icon("stamp")}<span class="court-btn-text">护照</span><span class="court-badge court-badge-soft" data-activity-points hidden>0</span></button>
             <button type="button" class="court-icon-btn court-partner-toggle" data-action="partner" aria-label="展示控制台" aria-pressed="${this.partnerOpen}">${icon("sliders")}</button>
           </div>
         </div>
         <div class="court-hud-bottom">
           <button type="button" class="court-me" data-action="join"><span class="court-me-avatar" data-me-avatar>${icon("nfc")}</span><span><strong data-entry-label>领取我的分身</strong><small data-me-sub>碰一下，或点这里进入</small></span></button>
+          <div class="court-dock" data-dock aria-label="为你推荐的人"></div>
           <button type="button" class="court-discover" data-action="matches">${icon("spark")}<span>认识新朋友</span></button>
         </div>
       </div>
@@ -163,6 +168,7 @@ export class AppUI {
     if (sub) sub.textContent = attendee ? `我的名片 · NO.${serialLabel(attendee.serial)}` : (this.entryNfc ? "一下就好，不用填写" : "碰一下，或点这里进入");
     if (face) face.innerHTML = attendee ? avatar(attendee, { size: 40 }) : icon("nfc");
     this.root.querySelector(".court-me")?.classList.toggle("is-signed-in", !!attendee);
+    this.root.classList.toggle("court-has-dock", !!attendee && !this.stage);
     const pending = this.me?.encounters?.filter(c => c.canConfirm).length || 0;
     const badge = this.root.querySelector("[data-inbox-count]");
     if (badge) { badge.textContent = pending; badge.hidden = !pending; }
@@ -170,6 +176,7 @@ export class AppUI {
     if (sceneName) sceneName.textContent = this.sceneLabel;
     const partner = this.root.querySelector(".court-partner-toggle");
     if (partner) partner.setAttribute("aria-pressed", String(this.partnerOpen));
+    this.renderDock();
   }
   setSnapshot(snapshot) {
     const previous = this.snapshot;
@@ -186,6 +193,7 @@ export class AppUI {
     if (this.panel === "inbox") this.renderInbox();
     if (this.stage) this.renderStage();
     if (this.arrivalOpen && !this.arrivalBusy) this.updateArrivalCount();
+    if (this.me?.attendee && Date.now() - this.picksAt > 45000) this.refreshPicks();
   }
   setMe(data) {
     const previous = this.me;
@@ -199,6 +207,7 @@ export class AppUI {
     for (const encounter of fresh) this.toast(`你和 ${encounter.peer?.name || "一位来客"} 的相遇已点亮${encounter.peerContact ? " · 已交换联系方式" : ""}`);
     const incoming = (data?.encounters || []).filter(c => c.canConfirm && !(previous?.encounters || []).some(p => p.id === c.id));
     if (previous?.attendee && incoming.length) this.toast(`${incoming[0].peer?.name || "有人"} 想认识你${incoming[0].note ? "：“" + incoming[0].note + "”" : ""}`);
+    if (data?.attendee || previous?.attendee) this.refreshPicks(!previous?.attendee);
   }
   setOnline(value) { this.online = !!value; this.syncChrome(); }
   setSceneLabel(name, id = null) {
@@ -375,6 +384,12 @@ export class AppUI {
       if (input) input.value = button.dataset.value || "";
       return;
     }
+    if (action === "greet") return this.requestEncounter(id, button, NOTE_DEFAULT);
+    if (action === "intent-skip") {
+      try { sessionStorage.setItem("echo-campus-intent-skipped", "1"); } catch {}
+      this.closePanel();
+      return this.toast("随时可以在「我的名片」里写上想认识的人");
+    }
     if (action === "encounter") return this.requestEncounter(id, button);
     if (action === "confirm") return this.confirmEncounter(id, button);
     if (action === "decline") return this.declineEncounter(id, button);
@@ -525,7 +540,9 @@ export class AppUI {
       await new Promise(resolve => setTimeout(resolve, 900));
       this.closeArrival();
       await this.run("onArrive", result.attendee);
-      this.toast(`欢迎，${result.attendee.name}。点一点身边的人，看看 TA 是谁`);
+      this.toast(`欢迎，${result.attendee.name}。下方是为你推荐的人，点一下就能认识`);
+      this.refreshPicks(true);
+      if (!result.attendee.need && !this.intentSkipped()) this.intentTimer = setTimeout(() => { if (!this.disposed && !this.panel && this.me?.attendee && !this.me.attendee.need) this.openIntent(); }, 4400);
       if (this.tapInfo?.tag?.kind === "checkpoint") await this.handleTap(true);
     } catch (error) {
       this.arrivalError = error?.message || "进入暂未完成，请重试";
@@ -579,20 +596,24 @@ export class AppUI {
   renderPerson(person) {
     const own = this.me?.attendee?.id === person.id;
     const encounter = this.me?.encounters?.find(c => c.attendeeIds?.includes(person.id) || c.fromId === person.id || c.toId === person.id);
-    const persona = personaById(person.persona) || PERSONAS[0];
-    this.render(this.panelHeader(own ? "MY CARD · 我的名片" : `${persona.latin} · ${persona.codename}`, own ? "这是你" : "看看 TA 是谁") +
-      personView({ person, me: this.me?.attendee, encounter, categoryLabel: this.categoryLabel(person.category), own, curated: person.source === "curated-demo", eventName: this.eventName() }), false);
+    const curated = person.source === "curated-demo";
+    const reasons = this.picks.find(m => m.attendee.id === person.id)?.reasons || [];
+    this.render(this.panelHeader(own ? "MY CARD · 我的名片" : `${curated ? "演示人物" : this.categoryLabel(person.category)}${person.remote ? "" : " · NO." + serialLabel(person.serial)}`, person.name || (own ? "我的名片" : "一位来宾")) +
+      personView({ person, me: this.me?.attendee, encounter, categoryLabel: this.categoryLabel(person.category), own, curated, eventName: this.eventName(), reasons }), false);
   }
-  async requestEncounter(peerId, button) {
+  async requestEncounter(peerId, button, presetNote = null) {
     if (this.encounterPending) return;
     if (!this.me?.attendee) { this.toast("先领取你的分身，再打招呼"); return this.openArrival(); }
     this.encounterPending = true; button.disabled = true;
-    const note = this.root.querySelector('[data-form="compose"] [name="note"]')?.value?.trim() || "";
+    const form = this.root.querySelector('[data-form="compose"]');
+    const note = presetNote ?? (form?.elements.note?.value?.trim() || form?.querySelector('input[name="preset"]:checked')?.value || "");
     try {
       const result = await this.client.encounter(peerId, note);
       this.setMe(this.client.me);
       this.toast(result.encounter.status === "confirmed" ? "你们已经确认相遇" : "招呼已送达，等 TA 回应");
       if (this.selectedPerson && this.panel === "person") this.renderPerson(this.selectedPerson);
+      if (this.panel === "matches") this.openMatches();
+      this.refreshPicks();
     } catch (error) { this.toast(error.message); } finally { this.encounterPending = false; button.disabled = false; }
   }
   async confirmEncounter(id, button) {
@@ -656,6 +677,7 @@ export class AppUI {
   async onSubmit(event) {
     const form = event.target;
     if (form.matches?.('[data-form="quick-topics"]')) return this.submitQuickTopics(event);
+    if (form.matches?.('[data-form="intent"]')) return this.submitIntent(event);
     if (form.matches?.('[data-form="compose"]')) { event.preventDefault(); return; }
     if (!form.matches('[data-form="join"]')) return;
     event.preventDefault();
@@ -696,10 +718,69 @@ export class AppUI {
     const need = form.querySelector('input[type="hidden"][name="need"]').value;
     if (!need) return this.toast("先选一两个方向吧");
     try {
-      await this.client.join({ consent: true, persona: me.persona, name: this.me.profile?.customName === false ? "" : me.name, role: me.role === "来宾" ? "" : me.role, offer: me.offer, need, category: me.category, bio: me.bio || undefined, organization: me.organization || undefined, contact: this.me.profile?.contact || "", contactVisibility: this.me.profile?.contact ? this.me.profile.contactVisibility : "hidden", listed: this.me.profile?.listed !== false, avatarColor: me.avatarColor });
+      await this.client.join(this.profileBody(me, { need }));
       this.setMe(this.client.me);
       this.openMatches();
     } catch (error) { this.toast(error.message); }
+  }
+  /** The guest's current card as a join body, with `changes` on top: one field updated, the rest kept. */
+  profileBody(me, changes = {}) {
+    const profile = this.me?.profile || {};
+    return { consent: true, persona: me.persona, name: profile.customName === false ? "" : me.name, role: me.role === "来宾" ? "" : me.role, offer: me.offer, need: me.need, category: me.category, bio: me.bio || undefined, organization: me.organization || undefined, contact: profile.contact || "", contactVisibility: profile.contact ? profile.contactVisibility : "hidden", listed: profile.listed !== false, avatarColor: me.avatarColor, ...changes };
+  }
+  intentSkipped() { try { return sessionStorage.getItem("echo-campus-intent-skipped") === "1"; } catch { return false; } }
+  openIntent() {
+    const me = this.me?.attendee;
+    if (!me) return;
+    this.openPanel("intent");
+    this.render(this.panelHeader("TODAY · 今天", "今天想认识谁？") + intentView({ name: me.name }));
+  }
+  async submitIntent(event) {
+    event.preventDefault();
+    const me = this.me?.attendee;
+    if (!me) return this.openArrival();
+    const picked = [...event.target.querySelectorAll('input[name="intent"]:checked')].map(input => input.value);
+    if (!picked.length) return this.toast("先选一两个方向吧");
+    const need = [...new Set([...splitChips(me.need, 12), ...picked])].join("、").slice(0, 160);
+    try {
+      await this.client.join(this.profileBody(me, { need }));
+      this.setMe(this.client.me);
+      this.closePanel();
+      this.refreshPicks(true);
+      this.toast("已为你挑出同路人，看看下方");
+    } catch (error) { this.toast(error.message); }
+  }
+  /** Who to meet first, for the dock and the name tags; one request at a time, coalesced. */
+  refreshPicks(soon = false) {
+    clearTimeout(this.picksTimer);
+    if (this.disposed) return;
+    if (!this.me?.attendee) {
+      if (this.picks.length) { this.picks = []; this.pickIds = new Set(); this.renderDock(); }
+      return;
+    }
+    this.picksTimer = setTimeout(async () => {
+      try {
+        const result = await this.client.matches();
+        if (this.disposed) return;
+        const self = this.me?.attendee?.id;
+        this.picks = (result?.matches || []).filter(m => m.attendee?.id && m.attendee.id !== self);
+        this.pickIds = new Set(this.picks.map(m => m.attendee.id));
+        this.picksAt = Date.now();
+        this.renderDock();
+      } catch {}
+    }, soon ? 0 : 1500);
+  }
+  renderDock() {
+    const dock = this.root.querySelector("[data-dock]");
+    const me = this.me?.attendee;
+    if (!dock) return;
+    if (!me || this.stage) { if (dock.dataset.sig) { dock.innerHTML = ""; dock.dataset.sig = ""; } return; }
+    const others = (this.snapshot?.attendees || []).filter(p => p.id !== me.id && !this.pickIds.has(p.id))
+      .sort((a, b) => !!b.onsiteAt - !!a.onsiteAt || (a.source === "curated-demo") - (b.source === "curated-demo") || (b.serial || 0) - (a.serial || 0)).slice(0, 10);
+    const sig = this.picks.map(m => m.attendee.id + m.attendee.name + (m.reasons[0] || "")).join("|") + "#" + others.map(p => p.id + p.name + p.role + !!p.onsiteAt).join("|");
+    if (dock.dataset.sig === sig) return;
+    dock.dataset.sig = sig;
+    dock.innerHTML = dockView({ picks: this.picks, others });
   }
   async leave(button) {
     if (!button.dataset.armed) { button.dataset.armed = "1"; button.lastChild.textContent = "再点一次，确认删除全部资料"; setTimeout(() => { if (button.isConnected) { delete button.dataset.armed; button.lastChild.textContent = "删除我在本活动的全部资料"; } }, 4000); return; }
@@ -713,7 +794,7 @@ export class AppUI {
     if (!this.me?.attendee) return this.openArrival();
     this.openPanel("matches");
     const revision = this.panelRevision = (this.panelRevision || 0) + 1;
-    const header = this.panelHeader("FELLOW TRAVELERS", "认识新朋友", "从你们主动公开的供给与需求出发。");
+    const header = this.panelHeader("FELLOW TRAVELERS", "为你推荐", "按你们公开的方向和参会身份，先认识这几位。");
     this.render(header + '<div class="ec-panel-loading court-loading"><span class="ec-spinner"></span>正在整理相遇线索</div>');
     try {
       const result = await this.client.matches();
@@ -961,7 +1042,7 @@ export class AppUI {
     } catch (error) { this.sceneError(error.message || "场景加载未完成"); }
     finally { this.importPending = false; this.setBusy(null); button.disabled = false; }
   }
-  dispose() { this.disposed = true; clearTimeout(this.entryTimer); this.root.ownerDocument.removeEventListener("keydown", this.keyHandler); }
+  dispose() { this.disposed = true; clearTimeout(this.entryTimer); clearTimeout(this.picksTimer); clearTimeout(this.intentTimer); this.root.ownerDocument.removeEventListener("keydown", this.keyHandler); }
 }
 
 export { personaCard };

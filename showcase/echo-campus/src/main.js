@@ -110,7 +110,9 @@ let fpsFrames=0,fpsStart=performance.now(),fps=0,hasConnected=false,knownAttende
 const pendingArrivals=new Set();
 let audioContext=null,soundEnabled=false,activeVenue=null,venueView="event",venueEventReady=false,venuePresentationBounds=null;
 const arrivals=createArrivalEffects(scene,{reducedMotion:reduced});
-const labels=createWorldLabels({budget:mobile?7:params.get("mode")==="stage"?18:12});
+const labels=createWorldLabels({budget:mobile?7:params.get("mode")==="stage"?18:12,onSelect:id=>focusPerson(id)});
+let labelSets={me:null,pending:new Set(),met:new Set()};
+function socialSets(){const me=client.me;if(labelSets.me!==me){const self=me?.attendee?.id,list=me?.encounters||[];labelSets={me,pending:new Set(list.filter(c=>c.canConfirm).map(c=>c.fromId)),met:new Set(list.filter(c=>c.status==="confirmed").map(c=>c.fromId===self?c.toId:c.fromId))};}return labelSets;}
 if(params.get("mode")==="stage")labels.layer.classList.add("court-stage-labels");
 const LINK_VERTEX="varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}";
 const LINK_FRAGMENT="uniform vec3 color;uniform float time;uniform float strength;uniform float burst;varying vec2 vUv;void main(){float flow=fract(vUv.x*2.6-time*0.42);float pulse=smoothstep(0.0,0.07,flow)*(1.0-smoothstep(0.1,0.4,flow));float ends=smoothstep(0.0,0.05,vUv.x)*(1.0-smoothstep(0.95,1.0,vUv.x));float d=(vUv.x-burst)*7.0;float wave=burst>=0.0?exp(-d*d)*1.6:0.0;float a=clamp((0.32+pulse*0.85+wave)*ends*strength,0.0,1.0);gl_FragColor=vec4(color*(0.85+pulse*0.7+wave),a);}";
@@ -450,7 +452,7 @@ function focusActivityCheckpoint(id){
 }
 function framePerson(position,yaw,{exclude=null,duration=1200,sheet=true}={}){
  const panelWidth=innerWidth>760?(document.querySelector(".ec-panel")?.getBoundingClientRect().width||420)+44:0;
- const sheetFraction=innerWidth<=760&&sheet?Math.min(.68,(Math.min(innerHeight*.66,620)+10)/innerHeight):0;
+ const sheetFraction=innerWidth<=760&&sheet?Math.min(.62,(Math.min(innerHeight*.6,560)+10)/innerHeight):0;
  const preset=profileCameraPreset({position,yaw,aspect:camera.aspect,panelFraction:panelWidth/innerWidth,sheetFraction,neighbors:[...people.values()].filter(other=>other!==exclude).map(other=>other.root.position)});
  cameraTo(preset.position,preset.target,preset.fov,duration);
  renderFinish.look.setShot("close",{focus:sheetFraction+(1-sheetFraction)*.5});
@@ -488,7 +490,18 @@ function welcomeArrival(attendee){
   framePerson(current?.root.position||center,current?.root.rotation.y??0,{exclude:current,duration:2600,sheet:false});
   if(p&&!p.arrival)arrivals.spawn(p.root.position,personaById(attendee.persona)?.color,{scale:1.3,duration:3});
   showStamp({date:`${stampDate()}\n${client.snapshot?.event?.name||"相遇之庭"}  NO.${serialLabel(attendee.serial)}`});
+  setTimeout(()=>{if(selectedId===attendee.id&&!UI.panel&&!cameraMove)hereShot(attendee.id);},3400);
  },180);
+}
+// After the arrival close-up: back off behind the guest, facing the crowd, so they see who is here and themselves among them.
+function hereShot(id,duration=2200){
+ const p=people.get(id);if(!p||!currentScene)return;
+ const me=p.root.position,others=[...people.values()].filter(o=>o!==p&&o.root.visible);
+ const crowd=others.length?others.reduce((sum,o)=>sum.add(o.root.position),new THREE.Vector3()).multiplyScalar(1/others.length):new THREE.Vector3(currentScene.spawn.x,me.y,currentScene.spawn.z);
+ const dir=crowd.sub(me);dir.y=0;if(dir.lengthSq()<1)dir.set(0,0,-1);dir.normalize();
+ const target=me.clone().addScaledVector(dir,3.4).add(new THREE.Vector3(0,.8,0)),position=me.clone().addScaledVector(dir,-5.8).add(new THREE.Vector3(0,4.6,0));
+ cameraTo(position.toArray(),target.toArray(),50,duration);
+ renderFinish.look.setShot("walk");
 }
 // Big screen: a slow orbit over the courtyard so every arrival and lit
 // connection stays in frame without an operator.
@@ -604,7 +617,7 @@ function tick(now){
  }
  const showLabels=actors.visible&&!UI.root.classList.contains("ec-cinema-mode")&&!(activeVenue&&venueView!=="event");
  labels.setHidden(!showLabels);
- if(showLabels)labels.update(camera,people,{selfId:client.me?.attendee?.id,selectedId,pendingIds:new Set((client.me?.encounters||[]).filter(c=>c.canConfirm).map(c=>c.fromId))});
+ if(showLabels){const sets=socialSets();labels.update(camera,people,{selfId:client.me?.attendee?.id,selectedId,pendingIds:sets.pending,metIds:sets.met,pickIds:UI.pickIds});}
  renderFinish.render();fpsFrames++;if(now-fpsStart>1000){fps=Math.round(fpsFrames*1000/(now-fpsStart));fpsFrames=0;fpsStart=now;}
 }
 requestAnimationFrame(tick);

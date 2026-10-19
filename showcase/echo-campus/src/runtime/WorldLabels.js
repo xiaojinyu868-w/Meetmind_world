@@ -2,19 +2,21 @@ import * as THREE from "three";
 
 const projected = new THREE.Vector3();
 const toCamera = new THREE.Vector3();
+const shortRole = role => { const text = String(role || "").trim(); return !text || text === "来宾" ? "" : [...text].length > 8 ? [...text].slice(0, 7).join("") + "…" : text; };
 
 /** Pick which people get a floating name: self and the selected person always,
  * then the nearest on-screen guests whose tag would not collide with one
  * already placed, nor cover a `clear` screen rect (a framed person), up to
  * the budget. Pure for testing. */
-export function chooseLabels(entries, { selfId = null, selectedId = null, budget = 10, maxDistance = 34, width = Infinity, clear = [] } = {}) {
+export function chooseLabels(entries, { selfId = null, selectedId = null, budget = 10, maxDistance = 34, width = Infinity, clear = [], priority = new Set() } = {}) {
   const pinned = [], rest = [];
   for (const entry of entries) {
     if (!entry.onScreen) continue;
     if (entry.id === selfId || entry.id === selectedId) pinned.push(entry);
     else if (entry.distance <= maxDistance) rest.push(entry);
   }
-  rest.sort((a, b) => a.distance - b.distance);
+  // People recommended to this guest claim their places before nearer strangers.
+  rest.sort((a, b) => (priority.has(b.id) - priority.has(a.id)) || a.distance - b.distance);
   const placed = [], boxes = [];
   const box = entry => { const w = entry.width || 90, x = Math.min(Math.max(entry.x, w / 2 + 6), width - w / 2 - 6); return { x0: x - w / 2, x1: x + w / 2, y0: entry.y - 30, y1: entry.y }; };
   const hits = (b, list) => list.some(o => b.x0 < o.x1 && b.x1 > o.x0 && b.y0 < o.y1 && b.y1 > o.y0);
@@ -27,27 +29,33 @@ export function chooseLabels(entries, { selfId = null, selectedId = null, budget
   return placed;
 }
 
-export function createWorldLabels({ container = document.body, budget = 10 } = {}) {
+/** `onSelect(id)`: a tap on a name tag, a target far larger than a figure a few pixels wide on a phone. */
+export function createWorldLabels({ container = document.body, budget = 10, onSelect = null } = {}) {
   const layer = document.createElement("div");
   layer.className = "court-labels";
   layer.setAttribute("aria-hidden", "true");
   container.append(layer);
   const nodes = new Map();
   let hidden = false;
+  if (onSelect) {
+    layer.classList.add("is-tappable");
+    layer.addEventListener("click", event => { const id = event.target.closest?.(".court-label")?.dataset.id; if (id) onSelect(id); });
+  }
 
   function node(id) {
     let element = nodes.get(id);
     if (!element) {
       element = document.createElement("span");
       element.className = "court-label";
-      element.innerHTML = "<i></i><b></b><em></em>";
+      element.dataset.id = id;
+      element.innerHTML = "<i></i><b></b><small></small><em></em>";
       layer.append(element);
       nodes.set(id, element);
     }
     return element;
   }
 
-  function update(camera, people, { selfId = null, selectedId = null, pendingIds = new Set(), width = innerWidth, height = innerHeight } = {}) {
+  function update(camera, people, { selfId = null, selectedId = null, pendingIds = new Set(), metIds = new Set(), pickIds = new Set(), width = innerWidth, height = innerHeight } = {}) {
     if (hidden) return;
     const entries = [];
     for (const [id, value] of people) {
@@ -59,8 +67,9 @@ export function createWorldLabels({ container = document.body, budget = 10 } = {
       const distance = toCamera.length();
       projected.project(camera);
       const onScreen = projected.z > -1 && projected.z < 1 && Math.abs(projected.x) < 1.05 && projected.y > -1.05 && projected.y < 1.1;
-      const text = id === selfId ? `你 · ${value.person?.name || ""}` : value.person?.name || "";
-      entries.push({ id, value, distance, onScreen, x: (projected.x + 1) / 2 * width, y: (1 - projected.y) / 2 * height, width: 34 + [...text].reduce((sum, char) => sum + (char.charCodeAt(0) > 255 ? 12.5 : 7), 0) });
+      const role = pickIds.has(id) && id !== selfId ? shortRole(value.person?.role) : "";
+      const text = (id === selfId ? `你 · ${value.person?.name || ""}` : value.person?.name || "") + (role ? " " + role : "");
+      entries.push({ id, value, role, distance, onScreen, x: (projected.x + 1) / 2 * width, y: (1 - projected.y) / 2 * height, width: 34 + [...text].reduce((sum, char) => sum + (char.charCodeAt(0) > 255 ? 12.5 : 7), 0) });
     }
     // Keep a framed guest's body free of other people's tags.
     const clear = [];
@@ -75,12 +84,15 @@ export function createWorldLabels({ container = document.body, budget = 10 } = {
       if (projected.z < 1 && tall > 140) clear.push({ x0: center - tall * 0.24, x1: center + tall * 0.24, y0: top - 12, y1: foot });
     }
     const visible = new Set();
-    for (const entry of chooseLabels(entries, { selfId, selectedId, budget, width, clear })) {
+    for (const entry of chooseLabels(entries, { selfId, selectedId, budget, width, clear, priority: pickIds })) {
       entry.x = Math.min(Math.max(entry.x, entry.width / 2 + 6), width - entry.width / 2 - 6);
       const element = node(entry.id);
       const person = entry.value.person;
       const self = entry.id === selfId;
-      element.dataset.kind = self ? "self" : entry.id === selectedId ? "selected" : "guest";
+      element.dataset.kind = self ? "self" : entry.id === selectedId ? "selected" : metIds.has(entry.id) ? "met" : pickIds.has(entry.id) ? "pick" : "guest";
+      const small = element.querySelector("small");
+      if (small.textContent !== entry.role) small.textContent = entry.role;
+      small.hidden = !entry.role;
       element.style.setProperty("--c", entry.value.labelColor || "#7f9a7b");
       const label = self ? `你 · ${person.name}` : person.name;
       if (element.dataset.text !== label) { element.dataset.text = label; element.querySelector("b").textContent = label; }
