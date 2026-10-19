@@ -76,8 +76,8 @@ export function arrivalView({ event, persona, nextSerial, entry, tapInfo, busy =
     </div>
     <div class="court-form-error" role="alert" ${error ? "" : "hidden"}>${esc(error)}</div>
     <p class="court-fineprint">${greeting
-      ? "进入即表示同意以这个分身，以及你在小程序里的昵称和头像，出现在本活动的公共世界。不采集手机号或定位；名片和微信都由你决定是否填写，可随时隐身或删除。"
-      : "进入即表示同意以这个分身出现在本活动的公共世界。不采集照片、手机号或定位；名片和微信都由你决定是否填写，可随时隐身或删除。"}</p>
+      ? "进入即同意以分身和小程序里的昵称和头像出现在本活动，可随时隐身或删除。"
+      : "进入即同意以分身出现在本活动；不采集照片、手机号和定位，可随时隐身或删除。"}</p>
   </div>`;
 }
 
@@ -97,6 +97,8 @@ export function overlapLines(me, person) {
 }
 
 const NOTE_PRESETS = ["你好，想认识你", "想交换个微信", "聊聊合作机会", "对你的方向很感兴趣"];
+// What a chip says, and the line it sends.
+const NOTE_PICKS = [["想认识你", "你好，想认识你"], ["交换微信", "想交换个微信"], ["聊聊合作", "聊聊合作机会"]];
 
 /** `reasons`: why this guest was recommended (the server's lines); without them, the overlap read off both cards. */
 export function personView({ person, me, encounter, categoryLabel, own, curated, eventName = "相遇之庭", reasons = [] }) {
@@ -106,7 +108,7 @@ export function personView({ person, me, encounter, categoryLabel, own, curated,
   let action;
   if (own) {
     const thin = !person.need && !person.offer;
-    action = `${thin ? '<div class="court-why is-hint"><span>让推荐更准</span><p>写上你能提供什么、想认识谁，同路人会更快找到你。</p></div>' : ""}<div class="court-actions-row"><button type="button" class="court-btn court-btn-primary" data-action="edit-profile">${icon("edit")}<span>编辑我的名片</span></button><button type="button" class="court-btn court-btn-soft" data-action="matches">${icon("spark")}<span>为你推荐</span></button></div>`;
+    action = `${thin ? `<button type="button" class="court-why-line is-hint" data-action="edit-profile">${icon("spark")}<span>写上想认识谁，推荐更准</span></button>` : ""}<div class="court-actions-row"><button type="button" class="court-btn court-btn-primary" data-action="edit-profile">${icon("edit")}<span>编辑我的名片</span></button><button type="button" class="court-btn court-btn-soft" data-action="matches">${icon("spark")}<span>为你推荐</span></button></div>`;
   } else if (person.remote) {
     // A partner community's member on the map: not here in person, so no invitation from this card.
     action = `<p class="court-muted-line">TA 是${esc(person.partner || "合作社群")}的成员，这次在线上和大家一起出现在地图里，不在现场。</p>`;
@@ -122,26 +124,21 @@ export function personView({ person, me, encounter, categoryLabel, own, curated,
   } else {
     // One tap sends: a line is already chosen, and writing one's own is optional.
     action = `<form class="court-compose court-greet" data-form="compose">
-        <div class="court-note-picks" role="radiogroup" aria-label="打招呼说什么">${NOTE_PRESETS.map((text, i) => `<label><input type="radio" name="preset" value="${esc(text)}" ${i ? "" : "checked"}><span>${esc(text)}</span></label>`).join("")}</div>
-        <input name="note" maxlength="60" autocomplete="off" placeholder="或者自己写一句，TA 确认前只有你们看得到">
-        <button type="button" class="court-btn court-btn-accent court-btn-block" data-action="encounter" data-id="${esc(person.id)}">${icon("wave")}<span>打个招呼</span>${icon("arrow")}</button>
+        <div class="court-note-picks" role="radiogroup" aria-label="打招呼说什么">${NOTE_PICKS.map(([label, text], i) => `<label><input type="radio" name="preset" value="${esc(text)}" ${i ? "" : "checked"}><span>${esc(label)}</span></label>`).join("")}<button type="button" class="court-note-own" data-action="note-own">${icon("edit")}自己写</button></div>
+        <input name="note" maxlength="60" autocomplete="off" placeholder="写一句话，TA 确认前只有你们看得到" hidden>
+        <button type="button" class="court-btn court-btn-accent court-btn-block" data-action="encounter" data-id="${esc(person.id)}">${icon("wave")}<span>打招呼</span></button>
       </form>`;
   }
+  const offer = chips(person.offer, { limit: 4 }), need = chips(person.need, { tone: "is-need", limit: 4 });
+  const facts = offer || need ? `<dl class="court-facts">${offer ? `<div><dt>提供</dt><dd>${offer}</dd></div>` : ""}${need ? `<div><dt>在找</dt><dd>${need}</dd></div>` : ""}</dl>` : "";
   const tags = `<span class="court-category" style="--band:${color(person.wristbandColor)}"><i></i>${esc(categoryLabel)}</span>${person.onsiteAt ? '<span class="court-tag court-tag-live">在现场</span>' : ""}${curated ? '<span class="court-tag">演示人物</span>' : ""}${person.remote ? `<span class="court-tag">${esc(person.partner || "线上成员")}</span>` : ""}`;
   return `<div class="court-person court-person-v2" style="--persona:${persona.color}">
     <div class="court-person-head">${avatar(person, { size: 64, ring: person.wristbandColor, photo: true })}<div><p class="court-person-role">${esc(roleLine)}</p><div class="court-person-tags">${tags}</div></div></div>
-    ${why.length && !own ? `<div class="court-why"><span>${icon("spark")}为什么值得认识</span>${why.map(line => `<p>${esc(line)}</p>`).join("")}</div>` : ""}
+    ${why.length && !own ? why.slice(0, 2).map(line => `<p class="court-why-line">${icon("spark")}<span>${esc(line)}</span></p>`).join("") : ""}
     <div class="court-person-actions">${action}</div>
     ${person.bio ? `<p class="court-bio">${esc(person.bio)}</p>` : ""}
-    <div class="court-fields">
-      <section><h4>${own ? "我能提供" : "TA 能提供"}</h4>${chips(person.offer) || '<p class="court-empty-line">还没写</p>'}</section>
-      <section><h4>${own ? "我想认识" : "TA 想认识"}</h4>${chips(person.need, { tone: "is-need" }) || '<p class="court-empty-line">还没写</p>'}</section>
-    </div>
-    <div class="court-person-foot">
-      <p class="court-persona-line">${own ? "今天你的分身" : "今天 TA 的分身"}：${esc(persona.codename)} · ${esc(persona.signature)}${person.remote ? "" : ` · NO.${serialLabel(person.serial)}`}</p>
-      ${own ? "" : `<button type="button" class="court-text-btn" data-action="locate">${icon("pin")}在庭院中找到 TA</button>`}
-      ${curated && !own ? '<p class="court-muted-line">演示人物不会真实回应。可以用第二部手机领取分身，体验双方确认。</p>' : (own ? '<p class="court-muted-line">只有双方都确认后，相遇才会在世界里点亮；微信只对相遇的人可见。</p>' : "")}
-    </div>
+    ${facts}
+    ${own ? "" : `<button type="button" class="court-text-btn court-locate" data-action="locate">${icon("pin")}在庭院中找到 TA</button>`}
   </div>`;
 }
 
@@ -151,22 +148,33 @@ export const INTENTS = Object.freeze([
   ["供应链", "供应链"], ["政策与园区", "政策资源"], ["媒体曝光", "媒体曝光"], ["人才", "人才招聘"],
 ]);
 
-export function intentView({ name = "" } = {}) {
+export function intentView() {
   return `<form class="court-intent" data-form="intent">
-    <p class="court-intent-lead">${name ? esc(name) + "，" : ""}选一两个，马上为你找人</p>
     <div class="court-intent-picks">${INTENTS.map(([label, topic]) => `<label><input type="checkbox" name="intent" value="${esc(topic)}"><span>${esc(label)}</span></label>`).join("")}</div>
-    <button type="submit" class="court-btn court-btn-primary court-btn-block">${icon("spark")}<span>帮我找人</span>${icon("arrow")}</button>
-    <button type="button" class="court-text-btn court-intent-skip" data-action="intent-skip">先随便逛逛</button>
-    <p class="court-muted-line">选的方向会写在你的名片上，用来推荐；随时可以在「我的名片」里改。</p>
+    <button type="submit" class="court-btn court-btn-primary court-btn-block">${icon("spark")}<span>帮我找人</span></button>
+    <p class="court-intent-foot"><span>会写在你的名片上</span><button type="button" class="court-text-btn" data-action="intent-skip">先逛逛</button></p>
   </form>`;
 }
+
+/** A recommendation reason short enough for a tag: "能帮你 · 融资", "投资人". */
+export function shortReason(reason = "") {
+  const text = String(reason || "");
+  const helps = text.match(/^TA 能提供你在找的：(.+)$/);
+  if (helps) return "能帮你 · " + helps[1].split("、")[0];
+  const needs = text.match(/^你能提供 TA 在找的：(.+)$/);
+  if (needs) return "TA 在找 · " + needs[1].split("、")[0];
+  if (text.startsWith("TA 在创业")) return "创业者";
+  if (text.startsWith("你们都在创业")) return "同为创业者";
+  return text.replace(/^TA (是|在)/, "").split("，")[0];
+}
+const shortRole = role => { const text = String(role || "").trim(); return !text || text === "来宾" ? "" : [...text].length > 10 ? [...text].slice(0, 9).join("") + "…" : text; };
 
 /** The strip along the bottom of the court: who to meet first, each with the reason, then everyone else here. */
 export function dockView({ picks = [], others = [] } = {}) {
   const card = (person, line, pick) => `<button type="button" class="court-dock-card${pick ? " is-pick" : ""}" data-action="select-person" data-id="${esc(person.id)}">${avatar(person, { size: 40, ring: person.wristbandColor, photo: true })}<span><strong>${esc(person.name)}</strong><small>${esc(line)}</small></span></button>`;
   const items = [
-    ...picks.map(m => card(m.attendee, (m.reasons[0] || "").replace(/^TA /, "") || m.attendee.role || "来宾", true)),
-    ...others.map(p => card(p, p.role && p.role !== "来宾" ? p.role : p.onsiteAt ? "在现场" : "来宾", false)),
+    ...picks.map(m => card(m.attendee, shortReason(m.reasons[0]) || shortRole(m.attendee.role) || "来宾", true)),
+    ...others.map(p => card(p, shortRole(p.role) || (p.onsiteAt ? "在现场" : "来宾"), false)),
   ];
   return items.length ? items.join("") + `<button type="button" class="court-dock-more" data-action="matches">${icon("spark")}<span>全部</span></button>` : '<p class="court-dock-empty">庭院里的人会出现在这里</p>';
 }
@@ -237,22 +245,20 @@ export function inboxView({ me, people }) {
   const encounters = (me?.encounters || []).map(item => ({ ...item, selfId: me.attendee.id }));
   const incoming = encounters.filter(c => c.canConfirm), confirmed = encounters.filter(c => c.status === "confirmed"), outgoing = encounters.filter(c => c.status === "pending" && !c.canConfirm);
   const group = (title, list, kind) => list.length ? `<section><h2>${title}<span>${list.length}</span></h2>${list.map(item => encounterRow(item, kind, people)).join("")}</section>` : "";
-  return `<div class="ec-inbox-groups court-groups">${group("TA 们想认识你", incoming, "incoming")}${group("已相遇 · 已确认", confirmed, "confirmed")}${group("等待回应", outgoing, "outgoing")}${!encounters.length ? `<div class="ec-empty-state court-empty">${icon("heart")}<p>第一场相遇，正在等你开启。</p><span>点一点庭院里的人，或者看看为你推荐的同路人。</span></div>` : ""}</div>
-    <button type="button" class="court-btn court-btn-primary court-btn-block" data-action="matches">${icon("spark")}<span>看看为你推荐的人</span>${icon("arrow")}</button>
-    <p class="court-muted-line">待确认的招呼只有你们两人看得到。双方确认后，相遇会在公共世界里点亮。</p>`;
+  return `<div class="ec-inbox-groups court-groups">${group("TA 们想认识你", incoming, "incoming")}${group("已相遇 · 已确认", confirmed, "confirmed")}${group("等待回应", outgoing, "outgoing")}${!encounters.length ? `<div class="ec-empty-state court-empty">${icon("heart")}<p>还没有相遇</p></div>` : ""}</div>
+    <button type="button" class="court-btn court-btn-primary court-btn-block" data-action="matches">${icon("spark")}<span>看看为你推荐的人</span>${icon("arrow")}</button>`;
 }
 
 export function matchesView({ result, people, me, quickTopics = false }) {
   const list = result?.matches || [];
-  const cards = list.map((m, i) => `<article class="ec-match-card court-match"><div class="ec-match-top"><span class="ec-match-index">0${i + 1}</span><button type="button" data-action="select-person" data-id="${esc(m.attendee.id)}">${avatar(m.attendee, { size: 46 })}<span><strong>${esc(m.attendee.name)}</strong><small>${esc(m.attendee.role)}</small></span>${icon("arrow")}</button></div>
-    <div class="ec-match-reasons">${m.reasons.map(r => `<p>${icon("spark")}${esc(r)}</p>`).join("")}</div>
+  const cards = list.map((m, i) => `<article class="ec-match-card court-match"><div class="ec-match-top"><button type="button" data-action="select-person" data-id="${esc(m.attendee.id)}">${avatar(m.attendee, { size: 46 })}<span><strong>${esc(m.attendee.name)}</strong><small>${esc(m.attendee.role)}</small></span>${icon("arrow")}</button></div>
+    <p class="court-why-line">${icon("spark")}<span>${esc(m.reasons[0] || "")}</span></p>
     <div class="court-match-actions">${m.pending ? '<span class="court-tag">等待回应</span>' : `<button type="button" class="court-btn court-btn-small court-btn-accent" data-action="greet" data-id="${esc(m.attendee.id)}">${icon("wave")}<span>打个招呼</span></button>`}<button type="button" class="court-btn court-btn-small court-btn-soft" data-action="select-person" data-id="${esc(m.attendee.id)}">看名片</button></div>
     ${m.evidence?.length ? `<details class="ec-match-evidence"><summary>依据</summary>${m.evidence.map(e => `<p><b>${esc(e.topic)}</b><span>你的${e.yourField === "need" ? "需求" : "供给"}：${esc(e.yourText)}</span><span>TA 的${e.peerField === "offer" ? "供给" : "需求"}：${esc(e.peerText)}</span></p>`).join("")}</details>` : ""}</article>`).join("");
   const others = [...people.values()].filter(p => p.id !== me?.attendee?.id).sort((a, b) => (a.source === "curated-demo") - (b.source === "curated-demo") || (b.serial || 0) - (a.serial || 0)).slice(0, 18);
   const prompt = quickTopics ? `<form class="court-quick-topics" data-form="quick-topics"><p><strong>选几个你想认识的方向</strong>我们会按大家主动公开的供需，帮你找到同路人。</p>${topicPicker("need", me?.attendee?.need || "")}<label class="court-inline-consent"><input type="checkbox" name="consent" required><span>把所选方向公开在我的名片上</span></label><button type="submit" class="court-btn court-btn-primary court-btn-block">${icon("spark")}公开并推荐</button></form>` : "";
-  return `${prompt}<div class="ec-match-list court-matches">${cards || '<div class="ec-empty-state court-empty">暂时没有明确重合的供需。<br>补充名片后，新的同路人会出现在这里。</div>'}</div>
-    <section class="court-people"><h2>庭院里的人<span>${people.size}</span></h2><div class="court-people-grid">${others.map(p => `<button type="button" data-action="select-person" data-id="${esc(p.id)}">${avatar(p, { size: 52, ring: p.wristbandColor })}<strong>${esc(p.name)}</strong><small>${esc(p.role || "来宾")}</small></button>`).join("")}</div></section>
-    <div class="ec-notice ec-notice-soft court-notice">${icon("spark")}<span>推荐来自双方公开的供需标签，用固定词表匹配，没有使用大模型；理由可以逐条核对。</span></div>`;
+  return `${prompt}<div class="ec-match-list court-matches">${cards || '<div class="ec-empty-state court-empty">暂时没有推荐，补充名片后再来看看</div>'}</div>
+    <section class="court-people"><h2>庭院里的人<span>${people.size}</span></h2><div class="court-people-grid">${others.map(p => `<button type="button" data-action="select-person" data-id="${esc(p.id)}">${avatar(p, { size: 52, ring: p.wristbandColor })}<strong>${esc(p.name)}</strong><small>${esc(p.role || "来宾")}</small></button>`).join("")}</div></section>`;
 }
 
 /** `demo`: any stamp can be pressed; at a real event only a checkpoint marked manual has a button, the rest are stamped by touching their stand. */

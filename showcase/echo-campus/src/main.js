@@ -478,6 +478,7 @@ function welcomeArrival(attendee){
  if(!attendee)return;
  if(!currentScene||(activeVenue&&!venueEventReady)){pendingArrival=attendee;return;}
  pendingArrival=null;
+ const arrivedAt=performance.now();
  if(activeVenue&&venueView!=="event")setVenueView("event");
  requestPersona(attendee.persona,true);premiumLibrary?.upgradePersona(attendee.persona,{pin:true});
  const spawn=currentScene.spawn,center=new THREE.Vector3(spawn.x,spawn.y||0,spawn.z);
@@ -490,7 +491,9 @@ function welcomeArrival(attendee){
   framePerson(current?.root.position||center,current?.root.rotation.y??0,{exclude:current,duration:2600,sheet:false});
   if(p&&!p.arrival)arrivals.spawn(p.root.position,personaById(attendee.persona)?.color,{scale:1.3,duration:3});
   showStamp({date:`${stampDate()}\n${client.snapshot?.event?.name||"相遇之庭"}  NO.${serialLabel(attendee.serial)}`});
-  setTimeout(()=>{if(selectedId===attendee.id&&!UI.panel&&!cameraMove)hereShot(attendee.id);},3400);
+  // Once the descent has landed, unless the guest has taken the camera or opened something meanwhile.
+  const settle=(tries=0)=>{if(selectedId!==attendee.id||UI.panel||userMovedAt>arrivedAt)return;if(cameraMove&&tries<30)return setTimeout(()=>settle(tries+1),500);hereShot(attendee.id);};
+  setTimeout(settle,3400);
  },180);
 }
 // After the arrival close-up: back off behind the guest, facing the crowd, so they see who is here and themselves among them.
@@ -498,8 +501,14 @@ function hereShot(id,duration=2200){
  const p=people.get(id);if(!p||!currentScene)return;
  const me=p.root.position,others=[...people.values()].filter(o=>o!==p&&o.root.visible);
  const crowd=others.length?others.reduce((sum,o)=>sum.add(o.root.position),new THREE.Vector3()).multiplyScalar(1/others.length):new THREE.Vector3(currentScene.spawn.x,me.y,currentScene.spawn.z);
- const dir=crowd.sub(me);dir.y=0;if(dir.lengthSq()<1)dir.set(0,0,-1);dir.normalize();
- const target=me.clone().addScaledVector(dir,3.4).add(new THREE.Vector3(0,.8,0)),position=me.clone().addScaledVector(dir,-5.8).add(new THREE.Vector3(0,4.6,0));
+ const base=crowd.sub(me);base.y=0;if(base.lengthSq()<1)base.set(0,0,-1);base.normalize();
+ // The spawn sits by the check-in stand: turn until no sign stands between the camera and the guest.
+ const signs=activityMarkerRoot.children.map(o=>o.position),up=new THREE.Vector3(0,1,0);
+ const clear=cam=>signs.every(s=>{const ab=me.clone().sub(cam),t=Math.max(0,Math.min(1,s.clone().sub(cam).dot(ab)/ab.lengthSq()));const q=cam.clone().addScaledVector(ab,t);return Math.hypot(q.x-s.x,q.z-s.z)>1.4;});
+ let dir=base,position=null;
+ for(const turn of [0,.6,-.6,1.2,-1.2,Math.PI]){const d=base.clone().applyAxisAngle(up,turn),cam=me.clone().addScaledVector(d,-5.8).add(new THREE.Vector3(0,4.6,0));if(clear(cam)){dir=d;position=cam;break;}}
+ position??=me.clone().addScaledVector(base,-5.8).add(new THREE.Vector3(0,4.6,0));
+ const target=me.clone().addScaledVector(dir,3.4).add(new THREE.Vector3(0,.8,0));
  cameraTo(position.toArray(),target.toArray(),50,duration);
  renderFinish.look.setShot("walk");
 }
@@ -519,12 +528,12 @@ function updateStageCamera(dt){
  camera.position.set(center.x+Math.sin(angle)*radius,y+radius*.42,center.z+Math.cos(angle)*radius);
  controls.target.set(center.x,y+.8,center.z);
 }
-let controlsActive=false;
+let controlsActive=false,userMovedAt=0;
 function toggleTour(){
  UI.closePanel();cameraMove=null;if(tour){tour=null;UI.toast("已暂停园区导览");return;}
  tour={started:performance.now(),base:camera.position.clone(),target:controls.target.clone()};UI.toast("导览已开始，拖动画面即可暂停");
 }
-controls.addEventListener("start",()=>{cameraMove=null;tour=null;controlsActive=true;});
+controls.addEventListener("start",()=>{cameraMove=null;tour=null;controlsActive=true;userMovedAt=performance.now();});
 controls.addEventListener("end",()=>{controlsActive=false;});
 let downPoint=null;
 canvas.addEventListener("pointerdown",e=>{downPoint={x:e.clientX,y:e.clientY};});

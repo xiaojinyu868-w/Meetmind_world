@@ -384,11 +384,17 @@ export class AppUI {
       if (input) input.value = button.dataset.value || "";
       return;
     }
+    if (action === "note-own") {
+      const input = this.root.querySelector('[data-form="compose"] [name="note"]');
+      if (input) { input.hidden = false; requestAnimationFrame(() => input.focus({ preventScroll: true })); }
+      button.hidden = true;
+      return;
+    }
     if (action === "greet") return this.requestEncounter(id, button, NOTE_DEFAULT);
     if (action === "intent-skip") {
       try { sessionStorage.setItem("echo-campus-intent-skipped", "1"); } catch {}
       this.closePanel();
-      return this.toast("随时可以在「我的名片」里写上想认识的人");
+      return;
     }
     if (action === "encounter") return this.requestEncounter(id, button);
     if (action === "confirm") return this.confirmEncounter(id, button);
@@ -540,7 +546,7 @@ export class AppUI {
       await new Promise(resolve => setTimeout(resolve, 900));
       this.closeArrival();
       await this.run("onArrive", result.attendee);
-      this.toast(`欢迎，${result.attendee.name}。下方是为你推荐的人，点一下就能认识`);
+      this.toast(`欢迎，${result.attendee.name}`);
       this.refreshPicks(true);
       if (!result.attendee.need && !this.intentSkipped()) this.intentTimer = setTimeout(() => { if (!this.disposed && !this.panel && this.me?.attendee && !this.me.attendee.need) this.openIntent(); }, 4400);
       if (this.tapInfo?.tag?.kind === "checkpoint") await this.handleTap(true);
@@ -598,7 +604,7 @@ export class AppUI {
     const encounter = this.me?.encounters?.find(c => c.attendeeIds?.includes(person.id) || c.fromId === person.id || c.toId === person.id);
     const curated = person.source === "curated-demo";
     const reasons = this.picks.find(m => m.attendee.id === person.id)?.reasons || [];
-    this.render(this.panelHeader(own ? "MY CARD · 我的名片" : `${curated ? "演示人物" : this.categoryLabel(person.category)}${person.remote ? "" : " · NO." + serialLabel(person.serial)}`, person.name || (own ? "我的名片" : "一位来宾")) +
+    this.render(this.panelHeader(own ? "MY CARD" : person.remote ? "ONLINE" : "NO." + serialLabel(person.serial), person.name || (own ? "我的名片" : "一位来宾")) +
       personView({ person, me: this.me?.attendee, encounter, categoryLabel: this.categoryLabel(person.category), own, curated, eventName: this.eventName(), reasons }), false);
   }
   async requestEncounter(peerId, button, presetNote = null) {
@@ -733,7 +739,7 @@ export class AppUI {
     const me = this.me?.attendee;
     if (!me) return;
     this.openPanel("intent");
-    this.render(this.panelHeader("TODAY · 今天", "今天想认识谁？") + intentView({ name: me.name }));
+    this.render(this.panelHeader("TODAY", "今天想认识谁？") + intentView());
   }
   async submitIntent(event) {
     event.preventDefault();
@@ -747,7 +753,7 @@ export class AppUI {
       this.setMe(this.client.me);
       this.closePanel();
       this.refreshPicks(true);
-      this.toast("已为你挑出同路人，看看下方");
+      this.toast("已为你找到同路人");
     } catch (error) { this.toast(error.message); }
   }
   /** Who to meet first, for the dock and the name tags; one request at a time, coalesced. */
@@ -794,7 +800,7 @@ export class AppUI {
     if (!this.me?.attendee) return this.openArrival();
     this.openPanel("matches");
     const revision = this.panelRevision = (this.panelRevision || 0) + 1;
-    const header = this.panelHeader("FELLOW TRAVELERS", "为你推荐", "按你们公开的方向和参会身份，先认识这几位。");
+    const header = this.panelHeader("FOR YOU", "为你推荐");
     this.render(header + '<div class="ec-panel-loading court-loading"><span class="ec-spinner"></span>正在整理相遇线索</div>');
     try {
       const result = await this.client.matches();
@@ -814,7 +820,7 @@ export class AppUI {
   }
   renderInbox() {
     if (!this.me?.attendee) return;
-    this.render(this.panelHeader("OUR ENCOUNTERS", "我的相遇", "每一次相遇，都由两个人共同确认。") + inboxView({ me: this.me, people: this.peopleMap() }), false);
+    this.render(this.panelHeader("ENCOUNTERS", "我的相遇") + inboxView({ me: this.me, people: this.peopleMap() }), false);
   }
   async openActivity(focusId = null) {
     this.openPanel("activity");
@@ -822,7 +828,7 @@ export class AppUI {
     this.activity = this.snapshot?.activity || this.activity || { checkpoints: [] };
     const renderActivity = () => {
       const done = new Set((this.me?.activity?.checkins || []).map(item => item.checkpointId));
-      this.render(this.panelHeader("ENCOUNTER PASSPORT", "相遇护照", "把现场的每一站，变成一条看得见的路径。") + passportView({ checkpoints: this.activity?.checkpoints || [], done, points: this.me?.activity?.points || 0, signedIn: !!this.me?.attendee, demo: this.snapshot?.event?.demoMode !== false }));
+      this.render(this.panelHeader("ENCOUNTER PASSPORT", "相遇护照") + passportView({ checkpoints: this.activity?.checkpoints || [], done, points: this.me?.activity?.points || 0, signedIn: !!this.me?.attendee, demo: this.snapshot?.event?.demoMode !== false }));
       if (this.activityFocusId) requestAnimationFrame(() => { const card = this.root.querySelector(`[data-checkpoint-id="${String(this.activityFocusId).replace(/["\\]/g, "\\$&")}"]`); if (card) { card.classList.add("is-focus"); card.scrollIntoView({ block: "center", behavior: "smooth" }); setTimeout(() => card.classList.remove("is-focus"), 1800); } });
     };
     renderActivity();
