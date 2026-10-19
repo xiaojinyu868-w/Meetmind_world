@@ -2,7 +2,7 @@
 
 更新：2026-10-15
 
-**一句话**：我们这边能做的都做完了，接口在线上开着，呆猫会走的每一步都在同一份代码上演练通过。剩下的要等呆猫给校验文件、接后端和 web-view、推用户资料，以及活动方给正式活动信息。
+**一句话**：我们这边能做的都做完了，接口在线上开着，呆猫会走的每一步都在同一份代码上演练通过。呆猫后台 10-17 起已在调换票和用户资料接口，在微信开发者工具里整条链路走通；真机上打不开地图，是因为小程序业务域名还没配好。校验文件 10-19 已上线，等呆猫在小程序后台完成添加。另外还要等活动方给正式活动信息。
 
 ## 已完成
 
@@ -15,6 +15,7 @@
 | 10-15 | 完整演练，37/37 通过 | `scripts/partner-rehearsal.mjs`，报告 `qa/daimao-rehearsal-20261015.json` |
 | 10-15 | `/echo-campus/` 访问日志不再记入场票据 | `deploy/nginx-log-format.conf`，线上 `/etc/nginx/conf.d/00-echo-campus-log.conf` |
 | 10-15 | 业务域名校验文件的上线脚本，已在线上试过上线、重复上线、撤掉 | `scripts/place-verify-file.sh` |
+| 10-19 | 呆猫的业务域名校验文件上线：`https://capture.meetmind.online/i0YMrtBky7.txt`，原样返回、无跳转 | 文件在 `/var/www/echo-campus-verify/`，配置备份 `/etc/nginx/conf.d/capture.meetmind.online.conf.bak-20261019-163142-verify` |
 
 ## 演练覆盖了什么
 
@@ -35,7 +36,7 @@
 
 | 事项 | 收到后我们做什么 |
 | --- | --- |
-| 业务域名校验文件 | `sudo bash scripts/place-verify-file.sh <文件>`，脚本核对线上内容和原文件一致后，把链接回给呆猫 |
+| 小程序后台添加业务域名 | 校验文件 10-19 已上线；呆猫添加 `capture.meetmind.online` 并保存后，真机重新进入。成功时访问日志里会出现带 `miniProgram` 的页面请求和 `/api/partner/claim`。呆猫重新下载了校验文件的话，用 `sudo bash scripts/place-verify-file.sh <文件>` 换上 |
 | 后端换票、web-view | 他们拿到 token 先调一次 `ping`；第一位真实用户进来时看 `journalctl -u echo-campus-b2b` 和地图上的状态 |
 | 用户资料推送 | 他们推一位测试用户，返回 `created: 1`；之后随时 `sudo node scripts/export-partner-members.mjs /var/lib/echo-campus-b2b/event.json --out /root/daimao-members.csv` 导出表格看（含联系方式，只留在服务器上） |
 | 活动页小程序码（PNG） | 写进正式活动配置的 `entry.qrImage`（站内路径或 https 地址，见 `EVENT-PROFILE.md`），随活动配置一起上线；演示模式下大屏继续显示我们自己的二维码 |
