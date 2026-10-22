@@ -175,6 +175,8 @@ export class AppUI {
     if (face) face.innerHTML = attendee ? avatar(attendee, { size: 40 }) : icon("nfc");
     this.root.querySelector(".court-me")?.classList.toggle("is-signed-in", !!attendee);
     this.root.classList.toggle("court-has-dock", !!attendee && !this.stage);
+    const passport = this.root.querySelector('[data-action="activity"]');
+    if (passport && this.snapshot) passport.hidden = !this.snapshot.event?.checkpoints?.length;
     const pending = this.me?.encounters?.filter(c => c.canConfirm).length || 0;
     const badge = this.root.querySelector("[data-inbox-count]");
     if (badge) { badge.textContent = pending; badge.hidden = !pending; }

@@ -514,3 +514,6 @@
 @keyframes court-met-pop{from{transform:scale(.86);opacity:0}to{transform:none;opacity:1}}
 @keyframes court-greet-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.28)}}
 @media (prefers-reduced-motion:reduce){.court-greeting,.court-met,.court-met-card,.court-label em:not([hidden]){animation:none}}
+
+/* An event without checkpoints has no passport. */
+.court-hud-actions [hidden]{display:none!important}
