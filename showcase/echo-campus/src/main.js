@@ -502,7 +502,11 @@ document.getElementById("ui").addEventListener("court-social",e=>{const {ids=[],
 // wall between itself and what it looks at, and may come closer than the usual minimum while a wall is that near.
 let cameraDirty=false,lastCollide=0;const wallRay=new THREE.Raycaster();
 controls.addEventListener("change",()=>{cameraDirty=true;});
-function wallBetween(from,to){if(!currentScene?.root)return null;const dir=to.clone().sub(from),dist=dir.length();if(dist<.5)return null;wallRay.set(from,dir.multiplyScalar(1/dist));wallRay.far=dist;return wallRay.intersectObject(currentScene.root,true).find(h=>h.object.visible!==false)||null;}
+// Walls are the venue's meshes as boxes, gathered once per scene: a ray against every triangle of the venue stalls the
+// frame at some angles, against a few hundred boxes it costs nothing. Floors, site-wide meshes and small props are not walls.
+let wallBoxes=[],wallScene=null;const wallHit=new THREE.Vector3(),wallSize=new THREE.Vector3();
+function collectWalls(){wallScene=currentScene;wallBoxes=[];const root=currentScene?.root;if(!root)return;root.updateMatrixWorld(true);root.traverse(o=>{if(!o.isMesh||o.visible===false)return;const b=new THREE.Box3().setFromObject(o),s=b.getSize(wallSize);if(s.y>=1.2&&Math.max(s.x,s.z)>=1.5&&Math.max(s.x,s.z)<=120)wallBoxes.push(b);});}
+function wallBetween(from,to){if(!currentScene?.root)return null;if(wallScene!==currentScene)collectWalls();const dir=to.clone().sub(from),dist=dir.length();if(dist<.5)return null;wallRay.set(from,dir.multiplyScalar(1/dist));let best=null;for(const b of wallBoxes){if(b.containsPoint(from))continue;const p=wallRay.ray.intersectBox(b,wallHit);if(!p)continue;const d=p.distanceTo(from);if(d<dist&&(!best||d<best.distance))best={distance:d};}return best;}
 function keepCameraOutOfWalls(){const hit=wallBetween(controls.target,camera.position);if(!hit){if(controls.minDistance<6&&camera.position.distanceTo(controls.target)>=6)controls.minDistance=6;return;}const dir=camera.position.clone().sub(controls.target).normalize(),d=Math.max(1.5,hit.distance-.6);camera.position.copy(controls.target).addScaledVector(dir,d);controls.minDistance=Math.min(controls.minDistance,d);}
 // After the arrival close-up: back off behind the guest, facing the crowd, so they see who is here and themselves among them.
 function hereShot(id,duration=2200){
