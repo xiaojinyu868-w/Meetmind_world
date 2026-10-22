@@ -498,6 +498,12 @@ function welcomeArrival(attendee){
 }
 // Someone greets this guest, or a greeting is accepted: the people involved wave in the court.
 document.getElementById("ui").addEventListener("court-social",e=>{const {ids=[],met=false}=e.detail||{};for(const id of ids){const p=people.get(id);if(!p)continue;p.reaction={state:"wave",until:time+(met?6:8)};if(met)arrivals.spawn(p.root.position,personaById(p.person?.persona)?.color,{scale:1.1,duration:2.4});}});
+// Orbiting or pinching must never put the camera inside a building: like a spring arm, it stops in front of the first
+// wall between itself and what it looks at, and may come closer than the usual minimum while a wall is that near.
+let cameraDirty=false,lastCollide=0;const wallRay=new THREE.Raycaster();
+controls.addEventListener("change",()=>{cameraDirty=true;});
+function wallBetween(from,to){if(!currentScene?.root)return null;const dir=to.clone().sub(from),dist=dir.length();if(dist<.5)return null;wallRay.set(from,dir.multiplyScalar(1/dist));wallRay.far=dist;return wallRay.intersectObject(currentScene.root,true).find(h=>h.object.visible!==false)||null;}
+function keepCameraOutOfWalls(){const hit=wallBetween(controls.target,camera.position);if(!hit){if(controls.minDistance<6&&camera.position.distanceTo(controls.target)>=6)controls.minDistance=6;return;}const dir=camera.position.clone().sub(controls.target).normalize(),d=Math.max(1.5,hit.distance-.6);camera.position.copy(controls.target).addScaledVector(dir,d);controls.minDistance=Math.min(controls.minDistance,d);}
 // After the arrival close-up: back off behind the guest, facing the crowd, so they see who is here and themselves among them.
 function hereShot(id,duration=2200){
  const p=people.get(id);if(!p||!currentScene)return;
@@ -508,7 +514,7 @@ function hereShot(id,duration=2200){
  const signs=activityMarkerRoot.children.map(o=>o.position),up=new THREE.Vector3(0,1,0);
  const clear=cam=>signs.every(s=>{const ab=me.clone().sub(cam),t=Math.max(0,Math.min(1,s.clone().sub(cam).dot(ab)/ab.lengthSq()));const q=cam.clone().addScaledVector(ab,t);return Math.hypot(q.x-s.x,q.z-s.z)>1.4;});
  let dir=base,position=null;
- for(const turn of [0,.6,-.6,1.2,-1.2,Math.PI]){const d=base.clone().applyAxisAngle(up,turn),cam=me.clone().addScaledVector(d,-5.8).add(new THREE.Vector3(0,4.6,0));if(clear(cam)){dir=d;position=cam;break;}}
+ for(const turn of [0,.6,-.6,1.2,-1.2,Math.PI]){const d=base.clone().applyAxisAngle(up,turn),cam=me.clone().addScaledVector(d,-5.8).add(new THREE.Vector3(0,4.6,0));if(clear(cam)&&!wallBetween(me.clone().setY(me.y+1.2),cam)){dir=d;position=cam;break;}}
  position??=me.clone().addScaledVector(base,-5.8).add(new THREE.Vector3(0,4.6,0));
  const target=me.clone().addScaledVector(dir,3.4).add(new THREE.Vector3(0,.8,0));
  cameraTo(position.toArray(),target.toArray(),50,duration);
@@ -604,6 +610,7 @@ function tick(now){
  if(cameraMove){const p=Math.min(1,(now-cameraMove.start)/cameraMove.duration),e=p*p*(3-2*p);camera.position.lerpVectors(cameraMove.fromP,cameraMove.toP,e);controls.target.lerpVectors(cameraMove.fromT,cameraMove.toT,e);camera.fov=THREE.MathUtils.lerp(cameraMove.fromFov,cameraMove.toFov,e);camera.updateProjectionMatrix();if(p>=1)cameraMove=null;}
  if(tour&&!paused){const t=(now-tour.started)/1000,angle=t*.035;const offset=tour.base.clone().sub(tour.target).applyAxisAngle(new THREE.Vector3(0,1,0),angle);camera.position.copy(tour.target).add(offset);controls.target.copy(tour.target);}
  controls.update();
+ if(cameraDirty&&!cameraMove&&performance.now()-lastCollide>110){lastCollide=performance.now();cameraDirty=false;keepCameraOutOfWalls();}
  updateDepthRange();
  if(!paused){
   moveView(dt);
