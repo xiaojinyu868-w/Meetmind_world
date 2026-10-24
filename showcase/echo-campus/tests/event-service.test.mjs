@@ -355,3 +355,13 @@ test("roles that came for each other are recommended without shared topics; some
   store.confirmEncounter(investor.token, encounter.id);
   assert.equal(store.matches(founder.token).matches.some(m => m.attendee.id === investor.attendee.id), false);
 });
+
+test("the partner learns which of its users have greetings waiting, and nothing about who sent them", () => {
+  const store = new EventStore({ eventConfig: { demoMode: false, demoContent: false, openJoin: true } });
+  store.issuePartnerTicket("daimao", { uid: "dm_wait", consent: true, nickname: "小李", checkin: true });
+  const guest = store.join({ consent: true, name: "访客甲" });
+  store.requestEncounter(guest.token, { peerId: store.partnerAttendee("daimao:dm_wait").id, note: "你好，想认识你" });
+  const { members } = store.partnerPending("daimao");
+  assert.deepEqual(members.map(m => [m.uid, m.pending]), [["dm_wait", 1]]);
+  assert.ok(!/访客甲|你好/.test(JSON.stringify(members)), "neither the sender nor the note");
+});
