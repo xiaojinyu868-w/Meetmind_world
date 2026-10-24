@@ -265,6 +265,7 @@ export function createEventServer({
           // A full batch of members is far larger than any guest's request; only the authenticated partner gets here.
           if (req.method === "POST" && url.pathname === "/api/partner/members") return json(res, 200, store.syncPartnerMembers(partnerSource, await readBody(req, 1 << 20)));
           if (req.method === "GET" && url.pathname === "/api/partner/export") return json(res, 200, store.partnerExport(partnerSource));
+          if (req.method === "GET" && url.pathname === "/api/partner/pending") return json(res, 200, store.partnerPending(partnerSource));
         }
         if (url.pathname === "/api/live") fail(426, "WEBSOCKET_REQUIRED", "请使用 WebSocket 连接");
         fail(404, "NOT_FOUND", "接口不存在");

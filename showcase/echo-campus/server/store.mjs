@@ -618,6 +618,19 @@ export class EventStore {
       members, otherAttendees: this.state.attendees.filter(a => a.partner?.source !== source && a.source !== "curated-demo").length,
     };
   }
+  /** The partner's users with greetings still waiting for their answer: who to nudge, never who sent them or what was said. */
+  partnerPending(source) {
+    const members = new Map(this.state.attendees.filter(a => a.partner?.source === source).map(a => [a.id, a.partner.uid]));
+    const waiting = new Map();
+    for (const c of this.state.encounters) {
+      if (c.status !== "pending" || !members.has(c.toId)) continue;
+      const entry = waiting.get(c.toId) || { uid: members.get(c.toId), pending: 0, latestAt: null };
+      entry.pending++;
+      if (!entry.latestAt || c.createdAt > entry.latestAt) entry.latestAt = c.createdAt;
+      waiting.set(c.toId, entry);
+    }
+    return { event: { id: this.state.event.id, name: this.state.event.name }, generatedAt: new Date(this.now()).toISOString(), members: [...waiting.values()].sort((a, b) => b.pending - a.pending) };
+  }
   /** One user as the partner keeps them. A field that is sent wins (empty clears it); one left out keeps what we have. */
   partnerMember(body) {
     if (!body || typeof body !== "object" || Array.isArray(body)) fail(400, "INVALID_INPUT", "每位用户需要是 JSON 对象");
