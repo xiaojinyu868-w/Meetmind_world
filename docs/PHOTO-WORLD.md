@@ -34,9 +34,11 @@
 
 [苹果共享相簿](https://support.apple.com/en-us/108314) 说明受邀者可以协作添加照片。[Gather 的空间交互](https://support.gather.town/articles/4772337318-start-conversations-wave-ring-and-walk-over) 展示走近某人即可发起交流。两者检验了相邻交互任务；本产品的留存、付费和 3D 增益仍需要自己的用户证据。[OpenAI Docs 的视觉迭代说明](https://learn.chatgpt.com/guides/prompting-gpt-6-2-astra) 建议在目标尺寸渲染并操作，作为视觉验收依据。
 
+GUESTPIX 提供企业活动付费相册，公开称累计服务超过 15 万场活动，客人用二维码或私人链接共同上传照片和留言。Gather 在 Y Combinator 公司页披露 A、B 轮合计融资 7,700 万美元，任务是让人们在共享空间相遇。前者支持活动后的共同留存场景，后者提供空间社交的融资先例。两组数据均不能替代本产品的回访或付费实验。[GUESTPIX](https://guestpix.com/) · [企业方案](https://guestpix.com/business-pricing/) · [Gather 公司资料](https://www.ycombinator.com/companies/gather-2)
+
 ## 与原有系统的衔接
 
-`?world=hall`、`?world=cafe` 与原有个人岛、资料包、录制、回放入口继续提供以前的采集链路。新世界中的自述和互评使用房间级权限。当前版本尚未将私密房间成员和历史 Package 自动合并，已有个人岛和 Ring 生理聚合数据也不会从姓名或合照自动认领。原始照片、活动事件和个人材料的跨系统归属仍需要独立核验。
+`?world=hall`、`?world=cafe` 与原有个人岛、资料包、录制、回放入口继续提供以前的采集链路。新世界中的自述和互评使用房间级权限。在人物卡点击「找回我的现场记录」，登录后可手动关联自己已确认的历史 Package。打开的是原项目的事实、照片、录音、转写和推断视图。已有 Ring 聚合时展示该次会话佩戴者的记录与时间。映射仅对记录者本人可见，可随时解除；全组与大屏不会收到个人历史，系统也不会按姓名自动合并身份。
 
 ## 本地人脸定位
 

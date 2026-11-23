@@ -227,11 +227,43 @@ function person(seat){
   <h3>${seat===state.me?'我的自评与收到的印象':'我留给 TA 的印象'}</h3>
   ${entries.map(v=>`<blockquote>${enc(v.text)}<cite>${enc(state.people.find(w=>w.seat===v.author)?.name||'成员')} 写下的印象</cite></blockquote>`).join('')}
   <form id="impression-form" data-seat="${seat}"><label>${seat===state.me?'写给自己':'写给 '+enc(p.name)}<textarea name="text" required maxlength="300" rows="2"></textarea></label><small>只有作者和收件人可见。</small><button class="secondary">保存印象</button></form>`);
+  if(!sample&&!display)content.insertAdjacentHTML('beforeend',`<button class="secondary" data-archive="${seat}">找回我的现场记录 →</button>`);
   if(photo&&p.box){const b=p.box;$('#portrait').getContext('2d').drawImage(photo,b.x*photo.naturalWidth,b.y*photo.naturalHeight,b.width*photo.naturalWidth,b.height*photo.naturalHeight,0,0,160,160);}
 }
 function moments(){
   const records=place==='field'?state.moments.filter(m=>field?.moments.includes(m.id)):state.moments;
   openPanel(place==='field'?'两人的共同经历':'共同经历',`${records.length?'':'<p>这里会留下你们亲手记录的第一件事。</p>'}<div class="list">${records.slice().reverse().map(v=>`<button data-moment="${enc(v.id)}"><strong>${enc(v.title)}</strong><span>${enc(v.happened)} · ${kinds[v.kind]}</span></button>`).join('')}</div><button class="primary" data-act="add">＋ 留下经历</button>`);
+}
+let packagePanel=null;
+const archiveHeaders=()=>({'X-World-Seat':creds.member||''});
+async function archive(seat){
+  if(!loginToken())return pairLogin(()=>archive(seat));
+  const data=await request('/'+id+'/people/'+seat+'/archive',{secret:loginToken(),headers:archiveHeaders()});
+  const match=data.choices.find(p=>p.id===data.person);
+  const signal=data.signal;
+  openPanel('我记得的现场',`<p>只有你能看到这里。选择你亲自录入、确认过的资料包，与眼前这位朋友关联起来。</p>
+    ${match?`<button class="primary" data-package="${enc(match.id)}">打开 ${enc(match.name)} 的原始资料包 →</button>
+    ${signal&&Number.isFinite(signal.value)?`<h3>那次会话中佩戴者的心率</h3><p>${enc(signal.value)} bpm${Number.isFinite(signal.baseline)?' · 基线 '+enc(signal.baseline)+' bpm':''}</p><small>${enc(signal.at||'')} · 来自设备聚合记录</small>`:''}`:''}
+    ${data.choices.length?`<form id="archive-form" data-seat="${seat}"><label>我的现场资料<select name="person"><option value="">不关联</option>${data.choices.map(p=>`<option value="${enc(p.id)}" ${p.id===data.person?'selected':''}>${enc(p.name)} · ${enc(p.events)} 次相遇</option>`).join('')}</select></label><button class="secondary">保存关联</button></form>`:'<p>这个账号还没有已确认的现场资料包。</p>'}
+    <a class="under" href="${base}api/mobile/" target="_blank" rel="noopener">打开原有现场采集 →</a>`);
+}
+async function openOriginal(pid){
+  if(!packagePanel){
+    const {mountPackagePanel}=await import('../ui/package-panel/PackagePanel.js');
+    const {publicUrl}=await import('../runtime/WorldSpec.js');
+    packagePanel=mountPackagePanel(document.body,{
+      getPackage:async id=>{
+        const r=await fetch(base+'api/v0/packages/'+encodeURIComponent(id),{headers:{Authorization:'Bearer '+loginToken()},cache:'no-store'});
+        if(!r.ok)throw new Error('无法打开这份资料');return r.json();
+      },
+      resolveMediaUrl:ref=>{const path=String(ref||'');
+        if(/^(facts|derived)\//.test(path))return base+'api/v0/media/'+path.split('/').map(encodeURIComponent).join('/');
+        if(/^[a-z]+:|^\/\//i.test(path))return '';
+        return publicUrl(path);
+      }
+    });
+  }
+  close();await packagePanel.openPerson(pid,{refresh:true});
 }
 async function moment(mid){
   const v=state.moments.find(m=>m.id===mid);if(!v)return;
@@ -318,6 +350,8 @@ document.addEventListener('click',async e=>{
     if(el.dataset.source){const blob=await request('/'+id+'/sources/'+el.dataset.source,{blob:true});
       const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=el.dataset.source+'-原始照片';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),5000);return;}
     if(!state&&!home && ['fire','roster','add','moments','venue'].includes(el.dataset.act))return;
+    if(el.dataset.archive!==undefined)return await archive(Number(el.dataset.archive));
+    if(el.dataset.package)return await openOriginal(el.dataset.package);
     if(el.dataset.person!==undefined)return person(Number(el.dataset.person));
     if(el.dataset.moment)return await moment(el.dataset.moment);
     switch(el.dataset.act){
@@ -405,6 +439,11 @@ document.addEventListener('submit',async e=>{
       await request('/'+id+'/campfire',{method:'POST',body:{topic:fd.get('topic')}});
       await refresh();fireside();return;
     }
+    if(form.id==='archive-form'){
+      const seat=Number(form.dataset.seat);
+      await request('/'+id+'/people/'+seat+'/archive',{method:'PUT',secret:loginToken(),headers:archiveHeaders(),body:{person_id:fd.get('person')||null}});
+      return await archive(seat);
+    }
     if(form.id==='introduction-form'){
       await request('/'+id+'/me/introduction',{method:'PUT',body:{about:fd.get('about')}});
       await refresh();person(state.me);notice('自述已保存');return;
@@ -424,7 +463,7 @@ function pick(kind,item){if(display)return;
    const entry=field.scene.entities.find(e=>e.id===item);return openPanel(entry.label,`<p>${enc(entry.detail)}</p><small>根据你们的合照、双方印象和记录中提及彼此的经历布置。</small><div class="list">${state.moments.filter(m=>field.moments.includes(m.id)).map(m=>`<button data-moment="${enc(m.id)}">${enc(m.title)} →</button>`).join('')}</div>`);}
  if(kind==='photo')return roster();if(kind==='person')person(Number(item.slice(1)));else moment(item).catch(e=>notice(e.message));}
 document.addEventListener('keydown',e=>{
-  if(e.repeat||e.ctrlKey||e.metaKey||e.altKey||sheet.open||home||display||state?.me==null||place!=='hall'||!['e','f'].includes(e.key.toLowerCase()))return;
+  if(e.repeat||e.ctrlKey||e.metaKey||e.altKey||sheet.open||packagePanel?.isOpen||home||display||state?.me==null||place!=='hall'||!['e','f'].includes(e.key.toLowerCase()))return;
   const me=state.people.find(p=>p.seat===state.me);
   const slot=booths.findIndex(b=>Math.hypot(b.x-me.x,b.z-me.z)<3.6);
   if(slot!==-1){e.preventDefault();market(slot);}

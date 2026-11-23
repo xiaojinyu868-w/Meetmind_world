@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS moment_people(world TEXT,mid TEXT,seat INTEGER,PRIMAR
 CREATE TABLE IF NOT EXISTS sources(world TEXT,ref TEXT,digest TEXT,raw BLOB,PRIMARY KEY(world,ref));
 CREATE TABLE IF NOT EXISTS pair_consent(world TEXT,lo INTEGER,hi INTEGER,author INTEGER,PRIMARY KEY(world,lo,hi,author));
 CREATE TABLE IF NOT EXISTS pair_art(world TEXT,lo INTEGER,hi INTEGER,signature TEXT,overlay TEXT,model TEXT,created TEXT,PRIMARY KEY(world,lo,hi));
+CREATE TABLE IF NOT EXISTS archive_links(world TEXT,seat INTEGER,account TEXT,person TEXT,PRIMARY KEY(world,seat,account));
 CREATE TABLE IF NOT EXISTS seat_accounts(world TEXT, seat INTEGER, account TEXT, PRIMARY KEY(world,seat), UNIQUE(world,account));
 CREATE INDEX IF NOT EXISTS accounts_owner ON seat_accounts(account);
 CREATE TABLE IF NOT EXISTS room_invites(world TEXT,key TEXT, PRIMARY KEY(world,key));

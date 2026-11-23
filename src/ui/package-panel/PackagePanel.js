@@ -249,7 +249,7 @@ export function mountPackagePanel(container, api) {
       .filter(Boolean);
     const privacy = PRIVACY_LEVELS[encounter.privacy];
     const agentUsable = encounter.privacy === "agent-usable";
-    const canAuthorize = String(encounter.encounter_id ?? "").startsWith("enc_k3_");
+    const canAuthorize = typeof api?.setEncounterPrivacy === "function" && String(encounter.encounter_id ?? "").startsWith("enc_k3_");
     return `
       <article class="pp-encounter">
         <header class="pp-encounter-head">
@@ -647,14 +647,14 @@ export function mountPackagePanel(container, api) {
     body.querySelector(".pp-chat-form input")?.focus({ preventScroll: true });
   }
 
-  async function openPerson(personId, { focusChat = false } = {}) {
+  async function openPerson(personId, { focusChat = false, refresh = false } = {}) {
     activePersonId = personId;
     chatOpen = focusChat && chatSupported();
     deactivateArmed = false;
     deactivatePending = false;
     openPanel();
     const afterRender = chatOpen ? focusChatSection : null;
-    if (cache.has(personId)) {
+    if (!refresh && cache.has(personId)) {
       render(cache.get(personId));
       afterRender?.();
       return;

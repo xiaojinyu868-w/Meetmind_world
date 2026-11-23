@@ -249,3 +249,35 @@ def test_account_library_requires_both_proofs_and_preserves_visitor_separation(t
         c.delete(route+"/library",headers=bearer(token))
         assert c.get(route,headers=bearer(token)).status_code==404
         assert c.get(route,headers=bearer(key)).json()["me"]==0
+
+
+def test_history_and_ring_view_remain_private_to_the_recorder(tmp_path,monkeypatch):
+    from app.security.meetmind_jwt import sign_echo_token
+    from app.signals import PersonSignalProjector
+    monkeypatch.setenv("ECHO_DATA_DIR",str(tmp_path))
+    monkeypatch.setenv("JWT_SECRET","isolated-test-fixture-only")
+    monkeypatch.setattr(photo_worlds,"detect_local_faces",lambda *args:[])
+    monkeypatch.setattr(PersonSignalProjector,"load",lambda self,pkg:{
+        "capturedAt":"2026-08-04T09:00:00Z","heart":{"currentBpm":73},"sourceRefs":{"encounterId":"fixture-event"},
+        "samples":[1,2,3]})
+    with TestClient(create_app()) as c:
+        room=create_room(c);route=BASE+"/"+room["id"]
+        keys=["a"*48,"b"*48]
+        for i,key in enumerate(keys):
+            claim(c,route,room["invite"],key,.2+i*.45,"成员"+str(i))
+        store=c.app.state.store
+        pkg=store.create_draft_package("person_archived_fixture",{})
+        pkg["owner_id"]="fixture-archivist";pkg["identity"].update({"confirmed":True,"name":"过去的现场"})
+        store.save_package(pkg)
+        headers={**bearer(sign_echo_token("fixture-archivist","记录人")),"X-World-Seat":keys[0]}
+        other={**bearer(sign_echo_token("fixture-other","另一个账号")),"X-World-Seat":keys[1]}
+        url=route+"/people/1/archive"
+        assert c.get(url,headers=bearer(room["invite"])).status_code==401
+        assert c.put(url,headers=other,json={"person_id":pkg["person_id"]}).status_code==404
+        assert c.put(url,headers=headers,json={"person_id":pkg["person_id"]}).status_code==200
+        data=c.get(url,headers=headers).json()
+        assert data["signal"]["value"]==73 and data["signal"]["evidence"]=="fixture-event" and "samples" not in data["signal"]
+        assert c.get(url,headers=other).json()=={"choices":[],"person":None,"signal":None}
+        assert "过去的现场" not in str(c.get(route,headers=bearer(keys[1])).json())
+        c.put(url,headers=headers,json={"person_id":None})
+        assert c.get(url,headers=headers).json()["person"] is None
