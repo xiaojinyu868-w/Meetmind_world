@@ -38,3 +38,5 @@ html:has(.photo-world){background:var(--paper)}.photo-world{min-height:100svh}
 
 .sky[data-place=field]:not(.day){background:linear-gradient(155deg,var(--field-horizon,#ddbf9980),var(--field-sky,#7a93899a)),url('/photo-world/dusk.webp') center 53%/cover}
 .world-pin.booth{background:#f4dcc0ee!important;color:#544130}
+
+.account-qr{width:185px;height:185px;display:block;margin:16px auto}.account-qr[hidden]{display:none}

@@ -1,4 +1,5 @@
 import './world.css';
+import { createPairSession, LOGIN_TOKEN_KEY } from '../ui/pairLogin.js';
 import { booths, boothNumber, bulletinText, connectWorldStream, sampleWork } from './Market.js';
 import { icebreakerView } from './Icebreaker.js';
 import { downloadKeepsake } from './Keepsake.js';
@@ -28,7 +29,9 @@ function saveLibrary(){
   }
   catch {notice('浏览器没有保存访问凭证。请保留这个页面。');}
 }
-const creds = id&&!display ? (library[id] ||= {}) : {};
+const viaAccount=!!id&&!display&&params.get('account')==='1';
+const loginToken=()=>localStorage.getItem(LOGIN_TOKEN_KEY)||'';
+const creds = id&&!display&&!viaAccount ? (library[id] ||= {}) : {};
 const invite = new URLSearchParams(location.hash.slice(1)).get('join');
 if(id && invite){creds.invite=invite; saveLibrary();history.replaceState(null,'',location.pathname+location.search);}
 const enc = value => String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -45,10 +48,10 @@ if(sample){
 }
 let polling=false,moveSerial=Promise.resolve(),claimChoice=null,posting=false;
 const spriteUrls=new Map();
-const key = () => screenSecret || creds.member || creds.host || creds.invite || '';
+const key = () => screenSecret || (viaAccount?loginToken():creds.member || creds.host || creds.invite) || '';
 const newKey = () => [...crypto.getRandomValues(new Uint8Array(24))].map(v=>v.toString(16).padStart(2,'0')).join('');
-async function request(path='',{method='GET',body,secret=key(),blob=false}={}){
-  const headers=secret?{Authorization:'Bearer '+secret}:{};
+async function request(path='',{method='GET',body,secret=key(),blob=false,headers:extra={}}={}){
+  const headers={...extra};if(secret)headers.Authorization='Bearer '+secret;
   if(body && !(body instanceof FormData)){headers['Content-Type']='application/json';body=JSON.stringify(body);}
   const result=await fetch(api+path,{method,headers,body,cache:'no-store'});
   if(!result.ok){let m;try{m=(await result.json()).detail;}catch{}
@@ -61,7 +64,7 @@ const venues=`<details class="venues"><summary>其他场所 <span>⌄</span></su
 document.body.className='photo-world '+(home?'home':'inside');
 document.body.removeAttribute('data-view');
 document.body.dataset.place=place;
-document.body.innerHTML=`<header class="top">${brand}<nav><button data-act="library">我的世界</button>${venues}</nav></header>
+document.body.innerHTML=`<header class="top">${brand}<nav>${display?'':'<button data-act="library">我的世界</button>'}${venues}</nav></header>
 <main class="layout">
 ${home?`<article class="cover">
  <div class="pretitle"><span></span>一张合照 · 一个共同世界</div>
@@ -78,8 +81,11 @@ ${home?'':`<nav hidden class="dock" aria-label="世界操作"><button data-act="
 </main><footer class="colophon"><span>MeetMind World</span><span>${home?'从真实相遇开始':'点选人物或物件 · 点地面走过去'}</span></footer>
 <dialog id="sheet"><div class="sheet-top"><span class="sheet-brand">MeetMind World</span><button aria-label="关闭" data-act="close">×</button></div><div id="sheet-content"></div></dialog><div id="world-status" role="status" aria-live="polite"></div>`;
 const sheet=$('#sheet'),content=$('#sheet-content');
+let pairing=null;
+function endPairing(){pairing?.stop();pairing=null;}
+sheet.addEventListener('close',endPairing);
 function openPanel(title,html){
-  ++dialogVersion;posting=false;content.innerHTML=`<h2>${enc(title)}</h2>${html}<p class="form-error" role="alert"></p>`;
+  endPairing();++dialogVersion;posting=false;content.innerHTML=`<h2>${enc(title)}</h2>${html}<p class="form-error" role="alert"></p>`;
   if(!sheet.open)sheet.showModal();
   sheet.scrollTop=0;
 }
@@ -98,11 +104,43 @@ function createPanel(){
 }
 function myWorld(){
   if(home||state?.me==null)return savedWorlds();
-  openPanel('这个世界',`<p>${enc(state.title)} · ${state.people.length} 位成员 · ${state.moments.length} 段共同经历</p><div class="list"><button data-act="market">市集里的作品 <span>→</span></button><button data-act="bulletin">世界播报 <span>→</span></button><button data-act="souvenir">下载世界留影 <span>PNG ↧</span></button><button data-act="all-worlds">这台设备上的世界 <span>→</span></button></div>`);
+  openPanel('这个世界',`<p>${enc(state.title)} · ${state.people.length} 位成员 · ${state.moments.length} 段共同经历</p><div class="list"><button data-act="market">市集里的作品 <span>→</span></button><button data-act="bulletin">世界播报 <span>→</span></button><button data-act="souvenir">下载世界留影 <span>PNG ↧</span></button>${sample?'':`<button data-act="${viaAccount?'cloud-list':'bind-seat'}">${viaAccount?'账号里的世界':'把角色存到我的账号'} <span>→</span></button>`}<button data-act="all-worlds">我的其他世界 <span>→</span></button>${viaAccount?'<button data-act="unlink-seat">解除这个角色的账号关联 <span>→</span></button>':''}</div>`);
+}
+function pairLogin(next){
+  openPanel('用微信打开个人世界',`<p>用微信扫一扫，再在手机上确认。已保存到账号的合照世界，可以在新设备上用原来的角色回来。</p><img class="account-qr" alt="微信登录二维码" hidden><p id="pair-status" role="status">正在准备二维码…</p><a class="under" id="pair-mobile" hidden target="_blank" rel="noopener">用这台手机确认 →</a>`);
+  const version=dialogVersion;
+  pairing=createPairSession({
+    onChallenge(id){
+      if(version!==dialogVersion||!sheet.open)return;
+      const qr=$('.account-qr'),mobile=$('#pair-mobile');
+      qr.src=base+'api/mobile/qr.png?pair='+encodeURIComponent(id);qr.hidden=false;
+      mobile.href=base+'api/mobile/?pair='+encodeURIComponent(id);mobile.hidden=false;
+    },
+    onStatus(line){if(version===dialogVersion&&sheet.open)$('#pair-status').textContent=line;},
+    onAuthorized(token){
+      if(version!==dialogVersion||!sheet.open)return;
+      localStorage.setItem(LOGIN_TOKEN_KEY,token);next().catch(err=>errorLine(err.message));
+    }
+  });
+}
+async function cloudLibrary(){
+  if(!loginToken())return pairLogin(cloudLibrary);
+  const result=await request('/library/mine',{secret:loginToken()}).catch(()=>{
+    openPanel('账号暂时无法打开',`<p>请检查网络，或重新登录这个账号。</p><button class="secondary" data-act="relogin">重新登录</button>`);
+  });
+  if(!result)return;
+  const rows=result.worlds.map(w=>`<a href="?album=${encodeURIComponent(w.id)}&account=1"><strong>${enc(w.title)}</strong><span>以 ${enc(w.name)} 回访 →</span></a>`).join('');
+  openPanel('账号里的世界',`${rows?`<div class="list">${rows}</div>`:'<p>在认领过的世界里，打开「我的世界」，选择「把角色存到我的账号」。</p>'}<div class="list"><a href="${base}?world=hall">进入个人资料包与相遇采集 <span>→</span></a><a href="/me/">我的个人浮岛 <span>→</span></a></div>`);
+}
+async function bindSeat(){
+  if(!loginToken())return pairLogin(bindSeat);
+  await request('/'+id+'/library',{method:'PUT',secret:loginToken(),headers:{'X-World-Seat':creds.member}});
+  return cloudLibrary();
 }
 function savedWorlds(){
   const rows=Object.entries(library).filter(([,v])=>v.title);
   openPanel('我的世界',rows.length?`<p>在这台设备上认领或创建的世界。</p><div class="list">${rows.reverse().map(([i,v])=>`<a href="?album=${encodeURIComponent(i)}"><strong>${enc(v.title)}</strong><span>回到世界 →</span></a>`).join('')}</div>`:`<p>你在这台设备上还没有认领过世界。可以上传合照，或者打开朋友发来的邀请。</p><button class="primary" data-act="create">用合照创建世界</button>`);
+  content.insertAdjacentHTML('beforeend','<div class="list"><button data-act="cloud-list">从我的账号找回世界 <span>→</span></button></div>');
 }
 function update(){
   if(!state)return;
@@ -145,9 +183,10 @@ async function getPhoto(){
   photoUrl=sample||home?samplePhoto:URL.createObjectURL(await request('/'+id+'/photo',{blob:true}));
   const img=new Image();img.src=photoUrl;await img.decode();photo=img;update();
 }
-async function refresh(){state=await request('/'+id+(display?'/screen':''));if(!display&&creds.title!==state.title){creds.title=state.title;saveLibrary();}update();}
+async function refresh(){state=await request('/'+id+(display?'/screen':''));if(!display&&!viaAccount&&creds.title!==state.title){creds.title=state.title;saveLibrary();}update();}
 async function load(){
   if(!home&&!sample){
+    if(viaAccount&&!loginToken()){pairLogin(async()=>location.reload());return;}
     if(!key())throw new Error('这个世界需要朋友发来的完整邀请链接。');
     await refresh();
   }
@@ -241,9 +280,10 @@ function fireside(){
     ${sample?'<p>示例展示三个人的围坐位置。正式世界里，成员可以分别授权自己的自述。</p>':`<p>${state.people.filter(p=>p.agent_enabled).length} 位成员已开放自述。</p><button class="secondary" data-act="agent">${mine.agent_enabled?'收回我的圆桌授权':'允许主持人引用我的自述'}</button>
     <form id="campfire-form"><label>我们想一起聊什么<input name="topic" required minlength="2" maxlength="160" placeholder="比如，下次见面想一起做什么"></label><button class="primary">请主持人开场</button></form>`}${rows}`);
 }
-function share(){
+async function share(){
   if(sample)return openPanel('邀请照片里的朋友',`<p>你正在参观示例。用自己的合照创建世界后，就能把同一个广场发给照片里的人。</p><button class="primary" data-act="create">用合照创建世界</button>`);
-  const u=new URL(base,location.origin);u.searchParams.set('album',id);u.hash=new URLSearchParams({join:creds.invite}).toString();
+  const invite=creds.invite||(await request('/'+id+'/invitations',{method:'POST'})).invite;
+  const u=new URL(base,location.origin);u.searchParams.set('album',id);u.hash=new URLSearchParams({join:invite}).toString();
   openPanel('邀请照片里的朋友',`<p>把这个链接发给当时在场的人。打开就能看到合照，每个人各自认领自己的角色。</p><label>认领邀请<input readonly id="invite-link" value="${enc(u.href)}"></label><button class="primary" data-act="copy">复制邀请链接</button><details class="record"><summary>活动现场大屏</summary><p>展示称呼、位置、入场与圆桌等动态。照片、作品内容和私人印象仅在成员端展示。</p><button class="secondary" data-act="screen">生成只读大屏链接</button></details>`);
 }
 async function enterVenue(target){
@@ -282,6 +322,11 @@ document.addEventListener('click',async e=>{
     if(el.dataset.moment)return await moment(el.dataset.moment);
     switch(el.dataset.act){
       case 'screen-venue':location.assign(venueLink(place==='hall'?'cafe':'hall'));return;
+      case 'unlink-seat':return openPanel('解除账号关联？',`<p>这个账号将无法在新设备恢复此角色。最初认领的设备仍可用原凭证回访。</p><button class="secondary" data-act="close">保留关联</button> <button class="primary" data-act="unlink-confirm">解除关联</button>`);
+      case 'unlink-confirm':await request('/'+id+'/library',{method:'DELETE',secret:loginToken()});location.assign(base);return;
+      case 'cloud-list':return await cloudLibrary();
+      case 'bind-seat':return await bindSeat();
+      case 'relogin':return pairLogin(cloudLibrary);
       case 'bulletin':return bulletin();
       case 'market':return market();
       case 'exhibit':return addPanel('project');
@@ -304,7 +349,7 @@ document.addEventListener('click',async e=>{
       case 'confirm-draw':{el.disabled=true;try{await request('/'+id+'/portrait',{method:'POST',body:{consent:true}});await refresh();close();notice('已提交形象绘制');}finally{el.disabled=false;}return;}
       case 'venue':return await enterVenue(place==='hall'?'cafe':'hall');
       case 'overview':return plaza?.overview();case 'fire':plaza?.fire();if(state?.me!=null){await sit();fireside();}return;
-      case 'roster':return roster();case 'moments':return moments();case 'add':return addPanel();case 'invite':return share();
+      case 'roster':return roster();case 'moments':return moments();case 'add':return addPanel();case 'invite':return await share();
       case 'claim':return claimPanel();
       case 'copy':{const input=$('#invite-link');input.select();try{await navigator.clipboard.writeText(input.value);notice('邀请链接已复制');}catch{notice('链接已选中，可以手动复制');}return;}
     }

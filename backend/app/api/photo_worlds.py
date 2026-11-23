@@ -17,7 +17,9 @@ from PIL import Image, ImageStat
 from pydantic import BaseModel, Field
 
 from app.api.v1.workflows import MAX_GROUP_PHOTO_BYTES, _normalize_group_photo
-from app.pipelines.group_onboarding.detect import GroupFaceDetector, _detect_faces_opencv
+from app.pipelines.group_onboarding.detect import GroupFaceDetector
+from app.pipelines.group_onboarding.local_faces import detect_local_faces
+from app.security.meetmind_jwt import verify_meetmind_token
 
 router = APIRouter(prefix="/api/v1/photo-worlds", tags=["photo-worlds"])
 DDL = """
@@ -35,6 +37,9 @@ CREATE TABLE IF NOT EXISTS moment_people(world TEXT,mid TEXT,seat INTEGER,PRIMAR
 CREATE TABLE IF NOT EXISTS sources(world TEXT,ref TEXT,digest TEXT,raw BLOB,PRIMARY KEY(world,ref));
 CREATE TABLE IF NOT EXISTS pair_consent(world TEXT,lo INTEGER,hi INTEGER,author INTEGER,PRIMARY KEY(world,lo,hi,author));
 CREATE TABLE IF NOT EXISTS pair_art(world TEXT,lo INTEGER,hi INTEGER,signature TEXT,overlay TEXT,model TEXT,created TEXT,PRIMARY KEY(world,lo,hi));
+CREATE TABLE IF NOT EXISTS seat_accounts(world TEXT, seat INTEGER, account TEXT, PRIMARY KEY(world,seat), UNIQUE(world,account));
+CREATE INDEX IF NOT EXISTS accounts_owner ON seat_accounts(account);
+CREATE TABLE IF NOT EXISTS room_invites(world TEXT,key TEXT, PRIMARY KEY(world,key));
 CREATE TABLE IF NOT EXISTS screens(world TEXT,key TEXT,PRIMARY KEY(world,key));
 CREATE TABLE IF NOT EXISTS ice_cards(id TEXT PRIMARY KEY,world TEXT,author INTEGER,subject INTEGER,text TEXT,created TEXT);
 CREATE TABLE IF NOT EXISTS ice_votes(card TEXT,voter INTEGER,pick INTEGER,PRIMARY KEY(card,voter));
@@ -93,11 +98,29 @@ def token(request):
     return value if kind.lower() == "bearer" and value else ""
 
 
+def account_seat(conn,wid,raw):
+    if raw.count(".")!=2 or len(raw)>8192:
+        return None
+    login=verify_meetmind_token(raw)
+    if not login:
+        return None
+    return conn.execute(
+        "SELECT r.* FROM residents r JOIN seat_accounts a ON a.world=r.world AND a.seat=r.seat "
+        "WHERE a.world=? AND a.account=?", (wid,login["sub"])).fetchone()
+
+
+def invite_valid(conn, world, key):
+    return key in (world["host"],world["invite"]) or conn.execute(
+        "SELECT 1 FROM room_invites WHERE world=? AND key=?", (world["id"],key)).fetchone()
+
+
 def access(conn, request, wid, member=False):
     key = digest(token(request))
     world = conn.execute("SELECT id,title,host,invite,boxes,created FROM worlds WHERE id=?", (wid,)).fetchone()
     person = conn.execute("SELECT * FROM residents WHERE world=? AND key=?", (wid, key)).fetchone()
-    if not world or not (person or key in (world["host"], world["invite"])):
+    if world and not person:
+        person=account_seat(conn,wid,token(request))
+    if not world or not (person or invite_valid(conn,world,key)):
         raise HTTPException(404, "世界入口无效，请重新打开邀请链接")
     if member and not person:
         raise HTTPException(403, "请先认领你自己")
@@ -131,8 +154,8 @@ def create(request: Request, title: str = Form(max_length=64), photo: UploadFile
         faces, method = GroupFaceDetector().detect(data, "image/jpeg")
         boxes = [face["bbox"] for face in faces]
     else:
-        boxes = _detect_faces_opencv(data, .025, .002) or []
-        method = "opencv" if boxes else "manual"
+        boxes = detect_local_faces(data)
+        method = "yunet" if boxes else "manual"
     wid, host = secrets.token_urlsafe(14), secrets.token_urlsafe(32)
     invite = invitation(host)
     with db(request, True) as conn:
@@ -200,7 +223,7 @@ class Claim(BaseModel):
 def claim(wid: str, data: Claim, request: Request):
     with db(request, True) as conn:
         world, _ = access(conn, request, wid)
-        if digest(token(request)) not in (world["host"], world["invite"]):
+        if not invite_valid(conn,world,digest(token(request))):
             raise HTTPException(403, "请使用认领邀请")
         key = digest(data.member_key)
         prior = conn.execute("SELECT seat FROM residents WHERE world=? AND key=?", (wid,key)).fetchone()

@@ -35,7 +35,7 @@ def claim(c,route,access,key,x,name):
 
 def test_claims_media_privacy_and_continuity(tmp_path,monkeypatch):
     monkeypatch.setenv("ECHO_DATA_DIR",str(tmp_path))
-    monkeypatch.setattr(photo_worlds,"_detect_faces_opencv",lambda *a:[])
+    monkeypatch.setattr(photo_worlds,"detect_local_faces",lambda *a:[])
     with TestClient(create_app()) as c:
         room=create_room(c)
         path=BASE+"/"+room["id"]
@@ -69,7 +69,7 @@ def test_claims_media_privacy_and_continuity(tmp_path,monkeypatch):
 
 def test_atomic_seat_game_screen_and_source_based_roundtable(tmp_path,monkeypatch):
     monkeypatch.setenv("ECHO_DATA_DIR",str(tmp_path))
-    monkeypatch.setattr(photo_worlds,"_detect_faces_opencv",lambda *a:[])
+    monkeypatch.setattr(photo_worlds,"detect_local_faces",lambda *a:[])
     with TestClient(create_app()) as c:
         room=create_room(c)
         route=BASE+"/"+room["id"]
@@ -107,7 +107,7 @@ def test_atomic_seat_game_screen_and_source_based_roundtable(tmp_path,monkeypatc
 
 def test_no_external_portrait_without_opt_in_and_unavailable_is_honest(tmp_path,monkeypatch):
     monkeypatch.setenv("ECHO_DATA_DIR",str(tmp_path))
-    monkeypatch.setattr(photo_worlds,"_detect_faces_opencv",lambda *a:[])
+    monkeypatch.setattr(photo_worlds,"detect_local_faces",lambda *a:[])
     monkeypatch.setattr(activities,"world_atlas",lambda *a,**kw: (_ for _ in ()).throw(RuntimeError("offline")))
     with TestClient(create_app()) as c:
         room=create_room(c);route=BASE+"/"+room["id"];a="a"*48
@@ -132,7 +132,7 @@ def test_model_prompt_turns_are_grounded_in_residents_own_words(monkeypatch):
 
 def test_five_seats_two_shared_venues_and_pair_scoped_memories(tmp_path,monkeypatch):
     monkeypatch.setenv("ECHO_DATA_DIR",str(tmp_path))
-    monkeypatch.setattr(photo_worlds,"_detect_faces_opencv",lambda *a:[])
+    monkeypatch.setattr(photo_worlds,"detect_local_faces",lambda *a:[])
     with TestClient(create_app()) as c:
         room=create_room(c);path=BASE+"/"+room["id"]
         keys=[str(i)*48 for i in range(5)]
@@ -175,7 +175,7 @@ def test_local_and_generated_looks_share_the_original_voxel_uv_contract():
 
 def test_room_stream_project_and_public_activity(tmp_path, monkeypatch):
     monkeypatch.setenv("ECHO_DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(photo_worlds, "_detect_faces_opencv", lambda *args: [])
+    monkeypatch.setattr(photo_worlds, "detect_local_faces", lambda *args: [])
     with TestClient(create_app()) as c:
         room = create_room(c)
         path = BASE + "/" + room["id"]
@@ -198,7 +198,7 @@ def test_room_stream_project_and_public_activity(tmp_path, monkeypatch):
 def test_ai_field_requires_both_people_and_keeps_only_current_sources(tmp_path,monkeypatch):
     from app.api import photo_world_field
     monkeypatch.setenv("ECHO_DATA_DIR",str(tmp_path))
-    monkeypatch.setattr(photo_worlds,"_detect_faces_opencv",lambda *args:[])
+    monkeypatch.setattr(photo_worlds,"detect_local_faces",lambda *args:[])
     calls=[]
     def design(provider,messages):
         calls.append(messages)
@@ -219,3 +219,33 @@ def test_ai_field_requires_both_people_and_keeps_only_current_sources(tmp_path,m
         assert c.get(one,headers=bearer(a)).json()["model"]=="relationship-field-rules.v1"
         c.put(two+"/consent",headers=bearer(b),json={"consent":False})
         assert c.post(one+"/interpret",headers=bearer(a)).status_code==409
+
+def test_default_detector_finds_the_three_people_in_the_repository_sample():
+    from pathlib import Path
+    from app.pipelines.group_onboarding.local_faces import detect_local_faces
+    photo = Path(__file__).resolve().parents[2] / "public" / "encounter" / "group.webp"
+    boxes = detect_local_faces(photo.read_bytes())
+    assert len(boxes) == 3
+    for box, expected_x in zip(boxes, (.24, .5, .76)):
+        assert box["x"] < expected_x < box["x"] + box["width"]
+
+
+def test_account_library_requires_both_proofs_and_preserves_visitor_separation(tmp_path,monkeypatch):
+    from app.security.meetmind_jwt import sign_echo_token
+    monkeypatch.setenv("ECHO_DATA_DIR",str(tmp_path))
+    monkeypatch.setenv("JWT_SECRET","isolated-test-fixture-only")
+    monkeypatch.setattr(photo_worlds,"detect_local_faces",lambda *args:[])
+    with TestClient(create_app()) as c:
+        room=create_room(c);route=BASE+"/"+room["id"];key="a"*48
+        claim(c,route,room["invite"],key,.20,"小禾")
+        token=sign_echo_token("fixture-account","测试用户")
+        assert c.put(route+"/library",headers=bearer(token)).status_code==403
+        assert c.put(route+"/library",headers={**bearer(token),"X-World-Seat":key}).status_code==200
+        assert c.get(BASE+"/library/mine",headers=bearer(token)).json()["worlds"][0]["seat"]==0
+        assert c.get(route,headers=bearer(token)).json()["me"]==0
+        invite=c.post(route+"/invitations",headers=bearer(token)).json()["invite"]
+        assert c.get(route,headers=bearer(invite)).json()["me"] is None
+        assert claim(c,route,invite,"b"*48,.62,"乙").status_code==200
+        c.delete(route+"/library",headers=bearer(token))
+        assert c.get(route,headers=bearer(token)).status_code==404
+        assert c.get(route,headers=bearer(key)).json()["me"]==0

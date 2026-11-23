@@ -7,7 +7,7 @@ from threading import Lock
 from fastapi import WebSocket, WebSocketDisconnect
 from starlette.concurrency import run_in_threadpool
 
-from app.api.photo_worlds import db, digest, router
+from app.api.photo_worlds import account_seat, db, digest, router
 
 _listeners = defaultdict(set)
 _lock = Lock()
@@ -41,15 +41,16 @@ def notify_world(world):
 
 
 def allowed(socket, world, raw):
-    if not isinstance(raw, str) or not 20 <= len(raw) <= 100:
+    if not isinstance(raw, str) or not 20 <= len(raw) <= 8192:
         return False
     key = digest(raw)
     with db(socket) as conn:
-        return bool(conn.execute(
+        return bool(account_seat(conn,world,raw) or conn.execute(
             "SELECT 1 FROM worlds WHERE id=? AND (host=? OR invite=?) "
             "UNION ALL SELECT 1 FROM residents WHERE world=? AND key=? "
-            "UNION ALL SELECT 1 FROM screens WHERE world=? AND key=? LIMIT 1",
-            (world, key, key, world, key, world, key),
+            "UNION ALL SELECT 1 FROM screens WHERE world=? AND key=? "
+            "UNION ALL SELECT 1 FROM room_invites WHERE world=? AND key=? LIMIT 1",
+            (world, key, key, world, key, world, key, world, key),
         ).fetchone())
 
 

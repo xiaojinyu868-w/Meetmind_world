@@ -10,3 +10,4 @@ jsonschema==4.26.0
 pillow==12.3.0
 pillow-heif==1.5.0
 segno==1.6.6
+opencv-python-headless==4.12.0.88
