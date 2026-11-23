@@ -191,3 +191,15 @@ examples/shared_experience/lab 提供 loopback-only Three.js 适配器和操作�
 共同经历内核新增经历更正和依据状态沿事件引用链传播；物件外观、行动依据会显示 changed/withdrawn，
 每位参与者可独立记录已核对当前依据，不改变其他人的选择或自报。配对 fixture 浏览器回归覆盖重复更正、刷新、
 撤回后本人撤回结果；仍是合成数据，没有真人收益或模型质量证据。见[内核验收](CORE-PACKAGE-VERIFICATION.md)。
+
+## 2026-11-21 相遇之庭引荐演示
+
+独立入口 `/echoworld/encounter.html`。三张虚构参会名片构成固定活动名册。示例合照或本机照片手选三个角色位置入场，浏览器裁取角色照片用于庭院席位。自然语言需求由 chat provider 对照公开供需研判，服务端核对候选及逐字引文，模型不可用时明确显示保守词表结果。一个创业者席发起、独立受邀席接受后，双方可下载同编号记录，独立大屏显示连线。角色链接只代表演示席位，演示记录可读取 24 小时。照片仅在导入设备上展示。
+
+## 2026-11-24 夜航群岛
+
+主入口将一次见面准备分到三处可点选的实时建筑。玻璃花房选择情境，灯塔圆桌里的虚构搭档最多回应三次，回声邮局从本人原话生成可编辑信笺。用户封存来信时，镜头跟随信封和纸船离岸。最近五封信映射到可点选的星光。完整日志、草稿及导出 PNG 均由浏览器管理。无法运行 WebGL 时使用同一场景的实拍图，三个场所仍可进入。
+
+用户点击发送后，服务端通过现有 chat provider 处理目标与有限历史。已实际验证百炼 deepseek-v4.1-flash 的三轮上下文，兼容层将该平台返回 404 的旧 flash 别名用于交互时映射至可用版本。服务不可用时显示「引导练习 · 预设回应」。场景和搭档均是虚构的，用户自行决定是否把来信发送给真人。
+
+Yoodli 的企业沟通演练与融资提供任务参照，Granola 的会谈跟进展示了从表达材料走向后续行动的用法。EchoWorld 的三维呈现、复用与付费效果需要通过自己的用户行为衡量。[Yoodli B 轮公告](https://yoodli.ai/blog/yoodli-raises-40-million-series-b-to-lead-the-future-of-experiential-learning) · [Granola 跟进信工作流](https://www.granola.ai/blog/follow-up-email-after-meeting-template)

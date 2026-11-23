@@ -3,6 +3,9 @@ import { defineConfig } from "vite";
 
 export default defineConfig(({ command }) => ({
   base: command === "build" ? "/echoworld/" : "/",
+  build: {
+    rollupOptions: { input: { index: "index.html", encounter: "encounter.html" } },
+  },
   server: {
     proxy: {
       "/api": {

@@ -42,6 +42,7 @@ from app.agents.tools import EventSummaryTool, MemoryQueryTool, ToolRegistry
 from app.application import CommandValidator
 from app.api import confirm as confirm_api
 from app.api import admin, agents as agents_api, auth as auth_api, dev_lab, experience, group, ingest, media, mobile, packages, physical_ai, pipeline, signals, search as search_api, wechat_auth
+from app.api import encounter_studio, night_atlas
 from app.api import events as events_api
 from app.api import world as world_api
 from app.events import EventCheckinStore
@@ -345,6 +346,8 @@ def create_app() -> FastAPI:
     app.include_router(mobile.router)
     # 活动模式：NFC/二维码碰卡 → 分身进入活动地图（event.html）
     app.include_router(events_api.router)
+    app.include_router(encounter_studio.router)
+    app.include_router(night_atlas.router)
     return app
 
 

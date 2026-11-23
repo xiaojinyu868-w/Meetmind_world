@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="no-referrer"><meta name="theme-color" content="#f5f2e8">
+<title>相遇之庭 · MeetMind World</title>
+</head>
+<body>
+<header class="mast"><a href="./encounter.html" aria-label="相遇之庭首页"><span class="mark" aria-hidden="true">◒</span> MeetMind World</a><span>相遇之庭</span></header>
+<main>
+<section id="welcome" hidden>
+<div class="spread"><div class="first-copy"><p class="eyebrow">产业对接会　/　演示场</p><h1>从一张合照，<br>找到值得见的人。</h1><p class="lede">三位来宾，一台硬件样机。走进他们的会场，帮创业者找到愿意接小批量试产的工厂。</p><button id="enter" class="primary">从合照入场 <span>↗</span></button><label class="file-link">换一张合照<input id="file" type="file" accept="image/jpeg,image/png,image/webp"></label></div>
+<figure class="photo-card"><div id="photo-wrap"><img id="group-photo" alt="演示场三位虚构来宾的示例合照"><div id="markers" aria-hidden="true"></div></div><figcaption><strong id="photo-caption">相遇之庭 · 来宾合照</strong><span id="photo-note">虚构演示人物</span></figcaption></figure></div>
+<div id="calibrate" hidden><p id="pick-hint"></p><button id="reset-photo" class="secondary">恢复示例合照</button></div>
+</section>
+<section id="studio" hidden><div id="room-grid" class="room-grid">
+<div id="stage-wrap"><div id="scene"></div><div class="scene-head"><p class="eyebrow">MEETMIND WORLD</p><h2>相遇之庭</h2></div><div id="labels"></div><span id="scene-caption" class="scene-caption">本场三位演示来宾</span></div>
+<aside id="panel" aria-live="polite"><div id="content"></div></aside>
+</div></section>
+<p id="notice" role="alert" hidden></p>
+</main>
+<script type="module" src="/src/encounter/main.js"></script>
+</body></html>
