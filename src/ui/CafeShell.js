@@ -506,9 +506,9 @@ export function createCafeShell({
       <section id="intro-view" class="cafe-view intro-view" aria-label="EchoWorld 首页">
         <div class="intro-tone" aria-hidden="true"></div>
         <header class="intro-bar">
-          <a class="cafe-brand light" href="${import.meta.env.BASE_URL}" aria-label="返回夜航群岛" style="text-decoration:none;color:inherit">
+          <a class="cafe-brand light" href="${import.meta.env.BASE_URL}" aria-label="回到合照世界" style="text-decoration:none;color:inherit">
             <span class="cafe-brand-mark">EW</span>
-            <span><strong>EchoWorld</strong><small>返回夜航群岛</small></span>
+            <span><strong>EchoWorld</strong><small>回到合照世界</small></span>
           </a>
           <div class="intro-actions">
             ${activeSceneVariant && activeCharacterVariant && world !== "field" ? variantControlsMarkup({

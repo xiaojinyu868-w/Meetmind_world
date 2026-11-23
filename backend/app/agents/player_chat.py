@@ -21,6 +21,8 @@
 from __future__ import annotations
 
 import json
+from app.agents.llm.interactive import interactive_json_chat, interactive_chat
+
 import logging
 import re
 import time
@@ -274,16 +276,16 @@ def _request_chat(chat_provider, messages: list):
     """单聊模型调用：json_object 约束优先；deepseek 该模式在多轮请求下偶发
     纯空白补全（finish_reason=stop），先加催促重试一次（改 prompt 破除病态
     缓存态），仍空白则放弃格式约束取散文回复（调用方按纯文本兜底解析）。"""
-    response = chat_provider.chat(messages, response_format={"type": "json_object"})
+    response = interactive_json_chat(chat_provider, messages)
     if response.mock or response.text.strip():
         return response
     logger.warning("单聊返回空白补全，加催促重试一次")
     nudged = [*messages, {"role": "user", "content": "请只输出一个 json 对象。"}]
-    response = chat_provider.chat(nudged, response_format={"type": "json_object"})
+    response = interactive_json_chat(chat_provider, nudged)
     if response.mock or response.text.strip():
         return response
     logger.warning("单聊空白补全复现，放弃 json 约束取散文回复")
-    return chat_provider.chat(messages)
+    return interactive_chat(chat_provider, messages)
 
 
 def chat_with_player(memory, store, chat_provider, person_id: str,

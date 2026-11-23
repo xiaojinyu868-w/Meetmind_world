@@ -1,0 +1,214 @@
+{
+  "1": {
+    "schema": "echo-field.v1",
+    "status": "ready",
+    "person_id": "sample-0-1",
+    "generated": true,
+    "regenerable": true,
+    "generated_from": [
+      "group"
+    ],
+    "model": "relationship-field-rules.v1",
+    "relation": {
+      "with": "陈禾",
+      "summary": "2026-08-04",
+      "shared_threads": [],
+      "first_impressions": []
+    },
+    "scene": {
+      "title": "你与陈禾 · 回声场域",
+      "summary": "这里不是 陈禾 的肖像，而是你们相处时留下的空间感：2026-08-04。沿着场域里的物件，可以回到 那天，在庭院，也可以继续展开 仍在形成的共同课题。",
+      "metaphor": "一条在黄昏里反复汇合的旧河道",
+      "parameters": {
+        "sky": "#8db4c7",
+        "horizon": "#ead6b7",
+        "ground": "#9a8266",
+        "accent": "#d9775d",
+        "fog": "#e6ddcf",
+        "openness": 0.82,
+        "warmth": 0.52,
+        "motion": 0.35,
+        "weather": "远处有缓慢移动的云"
+      },
+      "spawn": {
+        "x": 0.0,
+        "z": 6.2,
+        "yaw": 3.1416
+      },
+      "companion": {
+        "person_id": "sample-0-1",
+        "x": 0.0,
+        "z": -1.1,
+        "yaw": 0.0
+      },
+      "entities": [
+        {
+          "id": "threshold",
+          "type": "threshold",
+          "label": "关系入口",
+          "detail": "一条在黄昏里反复汇合的旧河道",
+          "position": {
+            "x": 0.0,
+            "z": 3.8
+          },
+          "interaction": {
+            "label": "听听这个场域为何出现",
+            "event_type": "field-entered"
+          }
+        },
+        {
+          "id": "first-encounter",
+          "type": "memory",
+          "label": "第一次相遇",
+          "detail": "那天，在庭院",
+          "position": {
+            "x": -2.5,
+            "z": 0.4
+          },
+          "interaction": {
+            "label": "调取这段共同记忆",
+            "event_type": "memory-recalled"
+          }
+        },
+        {
+          "id": "shared-thread",
+          "type": "thread",
+          "label": "共同课题",
+          "detail": "仍在形成的共同课题",
+          "position": {
+            "x": 2.4,
+            "z": -1.6
+          },
+          "interaction": {
+            "label": "继续这条共同线索",
+            "event_type": "thread-opened"
+          }
+        },
+        {
+          "id": "echo-well",
+          "type": "echo",
+          "label": "回声井",
+          "detail": "2026-08-04",
+          "position": {
+            "x": -1.1,
+            "z": -3.6
+          },
+          "interaction": {
+            "label": "留下此刻的回声",
+            "event_type": "echo-left"
+          }
+        }
+      ]
+    },
+    "moments": [
+      "first-meeting"
+    ]
+  },
+  "2": {
+    "schema": "echo-field.v1",
+    "status": "ready",
+    "person_id": "sample-0-2",
+    "generated": true,
+    "regenerable": true,
+    "generated_from": [
+      "group",
+      "summer-trip"
+    ],
+    "model": "relationship-field-rules.v1",
+    "relation": {
+      "with": "顾宁",
+      "summary": "2026-08-04",
+      "shared_threads": [],
+      "first_impressions": []
+    },
+    "scene": {
+      "title": "你与顾宁 · 回声场域",
+      "summary": "这里不是 顾宁 的肖像，而是你们相处时留下的空间感：2026-08-04。沿着场域里的物件，可以回到 那天，在庭院，也可以继续展开 仍在形成的共同课题。",
+      "metaphor": "一座把零散念头编成路径的风丘",
+      "parameters": {
+        "sky": "#8fc9c3",
+        "horizon": "#d5e5d4",
+        "ground": "#8fa66d",
+        "accent": "#f0bd67",
+        "fog": "#dce8dc",
+        "openness": 0.55,
+        "warmth": 0.65,
+        "motion": 0.4,
+        "weather": "微风穿过草坡"
+      },
+      "spawn": {
+        "x": 0.0,
+        "z": 6.2,
+        "yaw": 3.1416
+      },
+      "companion": {
+        "person_id": "sample-0-2",
+        "x": 0.0,
+        "z": -1.1,
+        "yaw": 0.0
+      },
+      "entities": [
+        {
+          "id": "threshold",
+          "type": "threshold",
+          "label": "关系入口",
+          "detail": "一座把零散念头编成路径的风丘",
+          "position": {
+            "x": 0.0,
+            "z": 3.8
+          },
+          "interaction": {
+            "label": "听听这个场域为何出现",
+            "event_type": "field-entered"
+          }
+        },
+        {
+          "id": "first-encounter",
+          "type": "memory",
+          "label": "第一次相遇",
+          "detail": "那天，在庭院",
+          "position": {
+            "x": -2.5,
+            "z": 0.4
+          },
+          "interaction": {
+            "label": "调取这段共同记忆",
+            "event_type": "memory-recalled"
+          }
+        },
+        {
+          "id": "shared-thread",
+          "type": "thread",
+          "label": "共同课题",
+          "detail": "仍在形成的共同课题",
+          "position": {
+            "x": 2.4,
+            "z": -1.6
+          },
+          "interaction": {
+            "label": "继续这条共同线索",
+            "event_type": "thread-opened"
+          }
+        },
+        {
+          "id": "echo-well",
+          "type": "echo",
+          "label": "回声井",
+          "detail": "2026-08-04",
+          "position": {
+            "x": -1.1,
+            "z": -3.6
+          },
+          "interaction": {
+            "label": "留下此刻的回声",
+            "event_type": "echo-left"
+          }
+        }
+      ]
+    },
+    "moments": [
+      "first-meeting",
+      "summer-trip"
+    ]
+  }
+}

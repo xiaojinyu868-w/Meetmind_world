@@ -590,7 +590,6 @@ export function mountPackagePanel(container, api) {
             <span class="pp-badge ${confirmed ? "pp-badge-ok" : "pp-badge-warn"}">${confirmed ? "身份已确认" : "身份待确认"}</span>
           </div>
           <p class="pp-meta">${escapeHtml(meta)}</p>
-          ${confirmed && !identity.deactivated ? `<a class="pp-atlas-link" href="${import.meta.env.BASE_URL}#garden" data-pp-prepare="${escapeHtml(name)}">去夜航群岛准备下次见面</a>` : ""}
         </div>
       </header>
       <section class="pp-section" aria-label="相遇时间线">
@@ -678,12 +677,6 @@ export function mountPackagePanel(container, api) {
   }
 
   layer.addEventListener("click", (event) => {
-    const preparation = event.target.closest("[data-pp-prepare]");
-    if (preparation) {
-      try { sessionStorage.setItem("echo-atlas:meeting-name", preparation.dataset.ppPrepare); }
-      catch { /* The practice remains available without a prefilled name. */ }
-      return;
-    }
     if (event.target.closest("[data-pp-close]")) {
       close();
       return;

@@ -5,5 +5,5 @@ if (window.__ECHOWORLD_OPTIONS__ || legacy.some((key) => params.has(key))) {
   document.body.classList.add("legacy-world");
   import("./main.js");
 } else {
-  import("./atlas/Atlas.js");
+  import("./photo-world/World.js");
 }

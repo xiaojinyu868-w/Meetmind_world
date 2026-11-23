@@ -42,7 +42,8 @@ from app.agents.tools import EventSummaryTool, MemoryQueryTool, ToolRegistry
 from app.application import CommandValidator
 from app.api import confirm as confirm_api
 from app.api import admin, agents as agents_api, auth as auth_api, dev_lab, experience, group, ingest, media, mobile, packages, physical_ai, pipeline, signals, search as search_api, wechat_auth
-from app.api import encounter_studio, night_atlas
+from app.api import encounter_studio, night_atlas, photo_worlds
+from app.api import photo_world_activities, photo_world_game, photo_world_field, photo_world_stream  # Register resident actions on the photo-world router.
 from app.api import events as events_api
 from app.api import world as world_api
 from app.events import EventCheckinStore
@@ -348,6 +349,7 @@ def create_app() -> FastAPI:
     app.include_router(events_api.router)
     app.include_router(encounter_studio.router)
     app.include_router(night_atlas.router)
+    app.include_router(photo_worlds.router)
     return app
 
 

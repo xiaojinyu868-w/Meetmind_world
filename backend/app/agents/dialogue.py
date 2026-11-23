@@ -17,6 +17,8 @@
 """
 
 import json
+from app.agents.llm.interactive import interactive_json_chat
+
 import logging
 
 from app.agents.utils.jsonish import extract_json
@@ -193,7 +195,7 @@ def llm_meeting_turn(chat_provider, meeting_context: dict, max_lines: int = 2) -
         {"role": "user", "content": "会议上下文（≥ agent-usable）："
          + json.dumps(meeting_context, ensure_ascii=False)},
     ]
-    response = chat_provider.chat(messages, response_format={"type": "json_object"})
+    response = interactive_json_chat(chat_provider, messages)
     if response.mock:
         return None
     data = extract_json(response.text)

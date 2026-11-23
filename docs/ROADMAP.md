@@ -231,3 +231,10 @@
 - 2026-08-08 | 工作区大统一：唯一权威 checkout = `/root/meetmind_go`（main = GitHub = 线上，wt_main 已归档）；CD 自动化——服务器 cron 每分钟跑 scripts/deploy.sh，push 到 main 约 1–2 分钟上线（GitHub Actions CI 因账号 billing 被锁搁置）；合并 codex/roundtable-real-model-and-movement-fixes（圆桌真实模型 + 移动恢复）；微信自建 OAuth + 配对扫码登录 + 移动录入页上线；后端 310 tests 绿 | AI（实现）
 - 2026-08-09 | MVP 2.5 设立：双视角呈现（2.5.A.1/2.5.A.2 已上线，备份分支 backup/main-20260809-pre-2.5d）；画风决策转向拓麻歌子×星露谷（MC 保留为变体），确立"不换运行时、只换呈现层"技术路线与头身分离人脸→像素管线；Agent 行为智能化三路调研完成入储备（docs/AGENT-FRONTIER-RESEARCH.md），人决策暂不启动 | 人（决策）+ AI（实现）
 - 2026-09-15 | 活动模式启动（3.C.2）：MeetMind × 阿里巴巴联合活动策划定稿（docs/EVENT-MODE-PLAN.md：三档范围、L2 直接排期、手环即身份、两级分身）；后端活动签到事件流 `/api/v0/events`（幂等/分区槽位/皮肤 PNG/二维码，7 测试）落地 | 人（决策）+ AI（策划与实现）
+
+
+## 2026-11-24 主线组交付补记
+
+合照本人认领、邀请制持久世界、成员间印象、匿名印象速配、同世界咖啡厅、只读大屏和后续经历在正式入口贯通。各项来源与验收口径见 [合照世界](PHOTO-WORLD.md)。2.I.1 的五位真人现场计时仍需实际活动完成。
+
+- 同世界的作品摊位、WebSocket 状态通知、大屏事件和带来源的两人空间已进入主入口。图像服务实调、十分钟五人现场与回访分别验收。
