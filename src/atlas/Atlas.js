@@ -126,7 +126,7 @@ function renderForum(){
   return heading(places.forum.name)+`<div class="session-meta"><span>${ink(r.role)} · 模拟练习</span><strong>${count} / 3 轮</strong></div>
     <details class="goal-details"><summary>本次见面目标</summary><p>${ink(draft.goal)}</p></details>
     <div class="turns"><div class="turn partner"><small>练习开场</small><p>${ink(r.opener)}</p></div>${turnHTML}</div>
-    ${last?`<div class="coach"><small>表达提示</small><p>${ink(last.coach)}</p></div>`:""}
+    ${last?`<div class="coach"><small>表达提示</small>${last.sourceQuote?`<q>${ink(last.sourceQuote)}</q>`:""}<p>${ink(last.coach)}</p></div>`:""}
     ${count<3?`<form id="turn-form" class="space-form"><label for="said">你的回应</label>
       <textarea id="said" maxlength="360" rows="2" placeholder="像面对面一样，试着说一句……" required ${busy?"disabled":""}>${ink(draft.input)}</textarea>
       <button class="action-primary" type="submit" ${busy?"disabled":""}>${icon("send")}${busy?"正在等搭档回应…":"送出这句话"}</button>

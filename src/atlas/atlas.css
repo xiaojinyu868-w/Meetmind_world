@@ -177,3 +177,5 @@ body.sailing .sail-screen{display:block}
 .letter-stars button:hover{transform:scale(1.3)}
 body:is(.panel-open,.sailing,.panorama) .letter-stars{visibility:hidden}
 @media(max-width:720px){.letter-stars button{top:calc(var(--star-y) + 11%)}}
+
+.coach q{display:block;color:#766342;font:italic 14px/1.5 var(--serif);margin-top:4px}

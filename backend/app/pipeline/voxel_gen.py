@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import struct
 import subprocess
 import tempfile
@@ -157,7 +158,7 @@ def generate(textures, style: dict | None = None, out_path=None,
         portrait.parent.mkdir(parents=True, exist_ok=True)
 
     blender = blender_path or get_blender_path()
-    if not Path(blender).exists():
+    if not shutil.which(str(blender)):
         raise RuntimeError(f"Blender 二进制不存在：{blender}（BLENDER_PATH 可覆盖）")
 
     with tempfile.TemporaryDirectory(prefix="voxel_atlas_") as tmp:

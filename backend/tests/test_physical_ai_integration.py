@@ -1,4 +1,5 @@
 import hashlib
+import os
 from pathlib import Path
 
 import pytest
@@ -532,7 +533,7 @@ def test_physical_ai_rejects_header_mismatch_and_idempotency_conflict(client, mo
 
 def test_physical_ai_accepts_formal_k3_schema_and_metric_arrays(client, monkeypatch):
     schema = Path("/root/AVjoint/agent-ingest-bridge/contracts/agent-package.schema.json")
-    if not schema.is_file():
+    if not os.access(schema, os.R_OK) or not schema.is_file():
         pytest.skip("K3 formal contract workspace is not mounted")
     monkeypatch.setenv("PHYSICAL_AI_AGENT_TOKEN", TOKEN)
     monkeypatch.setenv("PHYSICAL_AI_PACKAGE_SCHEMA", str(schema))

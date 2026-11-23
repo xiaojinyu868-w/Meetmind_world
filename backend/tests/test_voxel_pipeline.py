@@ -8,6 +8,7 @@ import base64
 import hashlib
 import io
 import json
+import shutil
 from pathlib import Path
 
 import httpx
@@ -354,7 +355,7 @@ def test_validate_glb_rejects_non_glb(tmp_path):
     assert voxel_gen.validate_glb(tmp_path / "missing.glb")["ok"] is False
 
 
-@pytest.mark.skipif(not Path(get_blender_path()).exists(),
+@pytest.mark.skipif(not shutil.which(get_blender_path()),
                     reason="Blender 二进制不在场")
 def test_voxel_gen_real_blender_assembly(tmp_path):
     spec = texture_gen.normalize_character_spec(None, "blender_test")

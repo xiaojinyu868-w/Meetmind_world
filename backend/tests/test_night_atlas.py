@@ -21,10 +21,12 @@ def test_turn_modes_and_limits(monkeypatch):
     assert api.post(url, json={**body, "history": [{"said": "好", "reply": "好"}] * 3}).status_code == 422
 
     def chat(messages, response_format):
-        assert "纸模型" in messages[-1]["content"]
-        return SimpleNamespace(mock=False, text='{"reply":"多大？","coach":"说明尺寸","nextStep":"画草稿","message":"一起试做吗？"}')
+        assert messages[-1]["role"] == "user"
+        return SimpleNamespace(mock=False, text='{"reply":"多大？","coach":"说明尺寸","nextStep":"画草稿","message":"一起试做吗？","sourceQuote":"纸模型"}')
 
     monkeypatch.setattr(night_atlas, "get_provider", lambda role: SimpleNamespace(chat=chat))
-    assert api.post(url, json=body).json()["reply"] == "多大？"
+    output = api.post(url, json=body).json()
+    assert output["reply"] == "多大？" and output["sourceQuote"] == "纸模型"
+    assert "sourceQuote" not in api.post(url, json={**body, "said": "试灯吗？"}).json()
     monkeypatch.setattr(night_atlas, "take_slot", lambda: False)
     assert api.post(url, json=body).json() == {"mode": "guided"}

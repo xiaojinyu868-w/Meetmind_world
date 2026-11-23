@@ -187,10 +187,10 @@ import{$ as e,$t as t,A as n,At as r,B as i,C as a,Cn as o,Ct as s,Dt as c,E as 
       <section id="intro-view" class="cafe-view intro-view" aria-label="EchoWorld 首页">
         <div class="intro-tone" aria-hidden="true"></div>
         <header class="intro-bar">
-          <div class="cafe-brand light">
+          <a class="cafe-brand light" href="/echoworld/" aria-label="返回夜航群岛" style="text-decoration:none;color:inherit">
             <span class="cafe-brand-mark">EW</span>
-            <span><strong>EchoWorld</strong><small>AGENT RELATIONSHIP CAFE</small></span>
-          </div>
+            <span><strong>EchoWorld</strong><small>返回夜航群岛</small></span>
+          </a>
           <div class="intro-actions">
             ${a&&s&&_!==`field`?ru({sceneVariants:i,activeSceneVariant:a,characterVariants:o,activeCharacterVariant:s,context:`intro`}):``}
             <div class="intro-live"><span></span>${_===`field`?`关系场域已生成`:_===`cafe`?`熟人空间已开门`:`广场上的 TA 们正在生活`}</div>

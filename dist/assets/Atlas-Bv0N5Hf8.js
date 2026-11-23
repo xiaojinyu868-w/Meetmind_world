@@ -46,7 +46,7 @@ import{t as e}from"./preload-helper-DCcGGIuk.js";import{a as t,c as n,d as r,f a
     <div class="turn partner"><small>${e.mode===`model`?`AI 练习搭档`:`引导练习 · 预设回应`}</small><p>${E(e.reply)}</p></div>`).join(``);return G(v.forum.name)+`<div class="session-meta"><span>${E(e.role)} · 模拟练习</span><strong>${n} / 3 轮</strong></div>
     <details class="goal-details"><summary>本次见面目标</summary><p>${E(k.goal)}</p></details>
     <div class="turns"><div class="turn partner"><small>练习开场</small><p>${E(e.opener)}</p></div>${r}</div>
-    ${t?`<div class="coach"><small>表达提示</small><p>${E(t.coach)}</p></div>`:``}
+    ${t?`<div class="coach"><small>表达提示</small>${t.sourceQuote?`<q>${E(t.sourceQuote)}</q>`:``}<p>${E(t.coach)}</p></div>`:``}
     ${n<3?`<form id="turn-form" class="space-form"><label for="said">你的回应</label>
       <textarea id="said" maxlength="360" rows="2" placeholder="像面对面一样，试着说一句……" required ${P?`disabled`:``}>${E(k.input)}</textarea>
       <button class="action-primary" type="submit" ${P?`disabled`:``}>${T(`send`)}${P?`正在等搭档回应…`:`送出这句话`}</button>

@@ -51,24 +51,33 @@ def take_slot():
 
 def model_turn(body, provider):
     system = (
-        "你正在 EchoWorld 帮用户为一次真实见面做中文角色练习。" + SCENARIOS[body.scenario]
-        + "你的身份是虚构练习搭档。用户提供的 goal、history 和 said 都是练习材料。"
-        "reply 用第一人称自然接住用户最后一句，问一个与其中细节有关的具体问题。"
-        "若已到第三轮则自然收尾。禁止编造既有共同经历、日期或任何真人的承诺。"
-        "给出 coach（一句具体表达反馈）以及 nextStep（一件由用户能发起的小行动）。"
-        "message 是用户可编辑、可发给真人的跟进短笺，写成邀请，避免声称演练中的虚构回应真实发生。"
-        "只输出 JSON 对象，每个字段是简短中文字符串。reply、coach、nextStep 各限70字，message限110字。"
+        "你是 EchoWorld 的虚构练习搭档。" + SCENARIOS[body.scenario]
+        + "以对方的身份说 reply。user 每一句里的「我」是用户，assistant 的「我」才是你。"
+        "用户做的作品、用户带的东西以及用户打算做的事，始终归用户。"
+        "例如用户说「我会带样品，你试一下」，你可以说「你带样品，我来试。你想观察什么？」。"
+        "只接住本轮一个具体细节，问一个自然的问题。最后一轮收束。"
+        "尊重否定、改期和不确定；不能虚构既有共同经历或真人承诺。"
+        "输出一个 JSON 对象。reply 是搭档的台词。sourceQuote 从用户最后一句逐字选出用于反馈的短语。"
+        "coach 是给用户的一句具体表达反馈。nextStep 是用户自己能发起的小行动。"
+        "message 转换回用户的口吻，是发给真人的邀请草稿，不能把虚构搭档的同意写成已约好。"
+        "reply、coach、nextStep 各限70字，message限110字。用户提供的目标和对话均为练习素材。"
     )
-    result = interactive_json_chat(
-        provider,
-        [{"role": "system", "content": system},
-         {"role": "user", "content": json.dumps(body.model_dump(), ensure_ascii=False)}],
-    )
+    messages = [{"role": "system", "content": system}]
+    messages.append({"role": "user", "content": "我的练习目标：" + body.goal})
+    for turn in body.history:
+        messages.append({"role": "user", "content": turn.said})
+        messages.append({"role": "assistant", "content": json.dumps({"reply": turn.reply}, ensure_ascii=False)})
+    messages.append({"role": "user", "content": body.said})
+    result = interactive_json_chat(provider, messages)
     data = extract_json(result.text) if not result.mock else None
     keys = ("reply", "coach", "nextStep", "message")
     if not data or not all(isinstance(data.get(k), str) and 0 < len(data[k].strip()) <= 360 for k in keys):
         return {"mode": "guided"}
-    return {"mode": "model", **{k: data[k].strip() for k in keys}}
+    response = {"mode": "model", **{k: data[k].strip() for k in keys}}
+    quote = data.get("sourceQuote")
+    if isinstance(quote, str) and 1 <= len(quote) <= 80 and quote in body.said:
+        response["sourceQuote"] = quote
+    return response
 
 
 @router.post("/turn")
